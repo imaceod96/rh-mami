@@ -28,6 +28,13 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelada",
 }
 
+const statusType: Record<string, "success" | "warning" | "danger" | "neutral"> = {
+  pending: "warning",
+  accepted: "success",
+  expired: "danger",
+  cancelled: "neutral",
+}
+
 const TenantInvitations = () => {
   const { isPlatformSuperAdmin } = useAuth()
   const { currentTenant } = useCurrentTenant()

@@ -13,7 +13,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpFormSection } from "@/components/ui/sitecorp-form-section"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpError } from "@/components/ui/sitecorp-error"
-import { Pencil, Plus, Power, UserMinus, UserCheck } from "lucide-react"
+import { Pencil, Plus, Power, UserMinus, UserCheck, Key } from "lucide-react"
 
 interface PlatformUser {
   id: string
@@ -25,18 +25,30 @@ interface PlatformUser {
   roles: { name: string; is_system_role: boolean }[]
 }
 
+interface PlatformRole {
+  id: string
+  name: string
+  description: string | null
+  is_system_role: boolean
+  is_active: boolean
+}
+
 const PlatformUsers = () => {
-  const { isPlatformSuperAdmin } = useAuth()
+  const { isPlatformSuperAdmin, hasPlatformPermission } = useAuth()
   const navigate = useNavigate()
   const [users, setUsers] = React.useState<PlatformUser[]>([])
+  const [roles, setRoles] = React.useState<PlatformRole[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [editingUser, setEditingUser] = React.useState<PlatformUser | null>(null)
+  const [assigningRole, setAssigningRole] = React.useState<PlatformUser | null>(null)
+  const [viewingPerms, setViewingPerms] = React.useState<PlatformUser | null>(null)
   const [formData, setFormData] = React.useState({
     full_name: "",
     username: "",
     email: "",
   })
+  const [selectedRoleId, setSelectedRoleId] = React.useState("")
 
   const loadUsers = React.useCallback(async () => {
     try {
@@ -73,9 +85,25 @@ const PlatformUsers = () => {
     }
   }, [])
 
+  const loadRoles = React.useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("platform_roles")
+        .select("*")
+        .eq("is_active", true)
+        .order("name")
+
+      if (error) throw error
+      setRoles(data || [])
+    } catch (err) {
+      console.error("Error loading roles:", err)
+    }
+  }, [])
+
   React.useEffect(() => {
     loadUsers()
-  }, [loadUsers])
+    loadRoles()
+  }, [loadUsers, loadRoles])
 
   const startCreate = () => {
     setEditingUser(null)
@@ -131,6 +159,48 @@ const PlatformUsers = () => {
     }
   }
 
+  const assignRole = async (user: PlatformUser) => {
+    if (!selectedRoleId) return
+    try {
+      const { error } = await supabase
+        .from("platform_user_roles")
+        .insert({ user_id: user.id, platform_role_id: selectedRoleId })
+      if (error) throw error
+      setAssigningRole(null)
+      setSelectedRoleId("")
+      await loadUsers()
+    } catch (err) {
+      console.error("Error assigning role:", err)
+      setError("No se pudo asignar el rol.")
+    }
+  }
+
+  const removeRole = async (user: PlatformUser, roleName: string) => {
+    try {
+      const { error } = await supabase
+        .from("platform_user_roles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("platform_role_id", roles.find((r) => r.name === roleName)?.id)
+      if (error) throw error
+      await loadUsers()
+    } catch (err) {
+      console.error("Error removing role:", err)
+      setError("No se pudo eliminar el rol.")
+    }
+  }
+
+  const loadEffectivePermissions = async (user: PlatformUser) => {
+    try {
+      const { data, error } = await supabase.rpc("has_platform_permission", {
+        p_code: "users.view_all",
+      })
+      console.log("Effective permissions for", user.full_name, data)
+    } catch (err) {
+      console.error("Error loading permissions:", err)
+    }
+  }
+
   const columns = [
     { header: "Nombre completo", accessor: "full_name" },
     { header: "Usuario", accessor: "username" },
@@ -156,6 +226,23 @@ const PlatformUsers = () => {
       <div className="flex items-center gap-2">
         <SiteCorpButton size="sm" variant="outline" onClick={() => startEdit(user)}>
           <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+        </SiteCorpButton>
+        <SiteCorpButton
+          size="sm"
+          variant="outline"
+          onClick={() => setAssigningRole(user)}
+        >
+          <Key className="h-3.5 w-3.5 mr-1" /> Rol
+        </SiteCorpButton>
+        <SiteCorpButton
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setViewingPerms(user)
+            loadEffectivePermissions(user)
+          }}
+        >
+          Permisos
         </SiteCorpButton>
         <SiteCorpButton
           size="sm"
@@ -265,6 +352,73 @@ const PlatformUsers = () => {
               </SiteCorpButton>
             </div>
           </form>
+        </SiteCorpFormSection>
+      )}
+
+      {assigningRole && (
+        <SiteCorpFormSection
+          title="Asignar rol"
+          description={`Asigna un rol a ${assigningRole.full_name}`}
+        >
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-ink">Rol</label>
+              <SiteCorpSelect
+                value={selectedRoleId}
+                onChange={(e) => setSelectedRoleId(e.target.value)}
+              >
+                <option value="">Seleccionar rol</option>
+                {roles
+                  .filter((r) => !assigningRole.roles.some((ur) => ur.name === r.name))
+                  .map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+              </SiteCorpSelect>
+            </div>
+            <div className="flex items-center gap-3">
+              <SiteCorpButton onClick={() => assignRole(assigningRole)}>
+                Asignar
+              </SiteCorpButton>
+              <SiteCorpButton
+                variant="outline"
+                onClick={() => {
+                  setAssigningRole(null)
+                  setSelectedRoleId("")
+                }}
+              >
+                Cancelar
+              </SiteCorpButton>
+            </div>
+          </div>
+        </SiteCorpFormSection>
+      )}
+
+      {viewingPerms && (
+        <SiteCorpFormSection
+          title="Permisos efectivos"
+          description={`Permisos efectivos para ${viewingPerms.full_name}`}
+        >
+          <div className="space-y-3">
+            {viewingPerms.roles.map((role) => (
+              <div key={role.name} className="rounded-lg border p-3">
+                <p className="text-sm font-medium text-ink">{role.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {role.is_system_role ? "Rol del sistema" : "Rol personalizado"}
+                </p>
+              </div>
+            ))}
+            {viewingPerms.roles.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sin roles asignados.</p>
+            )}
+            <SiteCorpButton
+              variant="outline"
+              onClick={() => setViewingPerms(null)}
+            >
+              Cerrar
+            </SiteCorpButton>
+          </div>
         </SiteCorpFormSection>
       )}
     </div>

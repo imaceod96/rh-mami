@@ -11,6 +11,8 @@ interface AuthContextType {
   authLoading: boolean
   authReady: boolean
   logout: () => Promise<void>
+  hasPlatformPermission: (code: string) => Promise<boolean>
+  hasTenantPermission: (code: string) => Promise<boolean>
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined)
@@ -133,19 +135,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut()
   }
 
+  const hasPlatformPermission = async (code: string): Promise<boolean> => {
+    try {
+      if (isPlatformSuperAdmin) return true
+      const { data, error } = await supabase.rpc("has_platform_permission", { p_code: code })
+      if (error) return false
+      return !!data
+    } catch {
+      return false
+    }
+  }
+
+  const hasTenantPermission = async (code: string): Promise<boolean> => {
+      try {
+        if (isPlatformSuperAdmin) return true
+        if (!currentTenant) return false
+        const { data, error } = await supabase.rpc("has_tenant_permission", {
+          p_tenant_id: currentTenant.id,
+          p_code: code,
+        })
+        if (error) return false
+        return !!data
+      } catch {
+        return false
+      }
+    }
+
   return (
-      <AuthContext.Provider
-        value={{
-          user,
-          profile,
-          isPlatformSuperAdmin,
-          isProfileActive,
-          memberships,
-          authLoading,
-          authReady,
-          logout,
-        }}
-      >
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        isPlatformSuperAdmin,
+        isProfileActive,
+        memberships,
+        authLoading,
+        authReady,
+        logout,
+        hasPlatformPermission,
+        hasTenantPermission,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
