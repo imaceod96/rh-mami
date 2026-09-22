@@ -1,0 +1,146 @@
+import * as React from "react"
+import { supabase } from "@/lib/supabase"
+import type { User } from "@supabase/supabase-js"
+
+interface AuthContextType {
+  user: User | null
+  profile: Record<string, any> | null
+  isPlatformSuperAdmin: boolean
+  memberships: Record<string, any>[]
+  authLoading: boolean
+  authReady: boolean
+  logout: () => Promise<void>
+}
+
+const AuthContext = React.createContext<AuthContextType | undefined>(undefined)
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = React.useState<User | null>(null)
+  const [profile, setProfile] = React.useState<Record<string, any> | null>(null)
+  const [isPlatformSuperAdmin, setIsPlatformSuperAdmin] = React.useState(false)
+  const [memberships, setMemberships] = React.useState<Record<string, any>[]>([])
+  const [authLoading, setAuthLoading] = React.useState(true)
+  const [authReady, setAuthReady] = React.useState(false)
+
+  React.useEffect(() => {
+    let mounted = true
+
+    const loadAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!mounted) return
+
+        if (session?.user) {
+          setUser(session.user)
+
+          // Load profile
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single()
+
+          if (mounted) {
+            setProfile(profileData || null)
+          }
+
+          // Load SuperAdmin status
+          const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
+          if (mounted) {
+            setIsPlatformSuperAdmin(!!superAdminData)
+          }
+
+          // Load memberships
+          const { data: membershipsData } = await supabase
+            .from("tenant_memberships")
+            .select("*, tenant:tenants(*)")
+            .eq("user_id", session.user.id)
+            .eq("is_active", true)
+
+          if (mounted) {
+            setMemberships(membershipsData || [])
+          }
+        }
+      } catch (error) {
+        console.error("Auth loading error:", error)
+      } finally {
+        if (mounted) {
+          setAuthLoading(false)
+          setAuthReady(true)
+        }
+      }
+    }
+
+    loadAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return
+
+        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+          if (session?.user) {
+            setUser(session.user)
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", session.user.id)
+              .single()
+            setProfile(profileData || null)
+
+            const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
+            setIsPlatformSuperAdmin(!!superAdminData)
+
+            const { data: membershipsData } = await supabase
+              .from("tenant_memberships")
+              .select("*, tenant:tenants(*)")
+              .eq("user_id", session.user.id)
+              .eq("is_active", true)
+            setMemberships(membershipsData || [])
+          }
+        } else if (event === "SIGNED_OUT") {
+          setUser(null)
+          setProfile(null)
+          setIsPlatformSuperAdmin(false)
+          setMemberships([])
+          setAuthLoading(false)
+          setAuthReady(true)
+        }
+      }
+    )
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        isPlatformSuperAdmin,
+        memberships,
+        authLoading,
+        authReady,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = (): AuthContextType => {
+  const context = React.useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider")
+  }
+  return context
+}
+
+export { AuthContext }
