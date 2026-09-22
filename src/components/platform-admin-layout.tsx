@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   Building2,
+  Users,
+  Shield,
   User,
   LogOut,
   ArrowLeft,
@@ -66,6 +68,20 @@ const PlatformAdminLayout = React.forwardRef<
             >
               <Building2 className="h-5 w-5" />
               Empresas
+            </Link>
+            <Link
+              to="/admin/users"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
+            >
+              <Users className="h-5 w-5" />
+              Usuarios
+            </Link>
+            <Link
+              to="/admin/roles"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
+            >
+              <Shield className="h-5 w-5" />
+              Roles y permisos
             </Link>
             <Link
               to="/admin/account"

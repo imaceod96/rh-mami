@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null
   profile: Record<string, any> | null
   isPlatformSuperAdmin: boolean
+  isProfileActive: boolean
   memberships: Record<string, any>[]
   authLoading: boolean
   authReady: boolean
@@ -16,11 +17,12 @@ const AuthContext = React.createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = React.useState<User | null>(null)
-  const [profile, setProfile] = React.useState<Record<string, any> | null>(null)
-  const [isPlatformSuperAdmin, setIsPlatformSuperAdmin] = React.useState(false)
-  const [memberships, setMemberships] = React.useState<Record<string, any>[]>([])
-  const [authLoading, setAuthLoading] = React.useState(true)
-  const [authReady, setAuthReady] = React.useState(false)
+    const [profile, setProfile] = React.useState<Record<string, any> | null>(null)
+    const [isPlatformSuperAdmin, setIsPlatformSuperAdmin] = React.useState(false)
+    const [isProfileActive, setIsProfileActive] = React.useState(true)
+    const [memberships, setMemberships] = React.useState<Record<string, any>[]>([])
+    const [authLoading, setAuthLoading] = React.useState(true)
+    const [authReady, setAuthReady] = React.useState(false)
 
   React.useEffect(() => {
     let mounted = true
@@ -34,15 +36,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(session.user)
 
           // Load profile
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single()
-
-          if (mounted) {
-            setProfile(profileData || null)
-          }
+                    const { data: profileData } = await supabase
+                      .from("profiles")
+                      .select("*")
+                      .eq("id", session.user.id)
+                      .single()
+          
+                    if (mounted) {
+                      setProfile(profileData || null)
+                      const active = profileData?.is_active !== false
+                      setIsProfileActive(active)
+                      if (!active) {
+                        await supabase.auth.signOut()
+                        return
+                      }
+                    }
 
           // Load SuperAdmin status
           const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
@@ -78,16 +86,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!mounted) return
 
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-          if (session?.user) {
-            setUser(session.user)
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", session.user.id)
-              .single()
-            setProfile(profileData || null)
-
-            const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
+                    if (session?.user) {
+                      setUser(session.user)
+                      const { data: profileData } = await supabase
+                        .from("profiles")
+                        .select("*")
+                        .eq("id", session.user.id)
+                        .single()
+                      setProfile(profileData || null)
+                      const active = profileData?.is_active !== false
+                      setIsProfileActive(active)
+                      if (!active) {
+                        await supabase.auth.signOut()
+                        return
+                      }
+        
+                      const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
             setIsPlatformSuperAdmin(!!superAdminData)
 
             const { data: membershipsData } = await supabase
@@ -98,13 +112,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setMemberships(membershipsData || [])
           }
         } else if (event === "SIGNED_OUT") {
-          setUser(null)
-          setProfile(null)
-          setIsPlatformSuperAdmin(false)
-          setMemberships([])
-          setAuthLoading(false)
-          setAuthReady(true)
-        }
+                  setUser(null)
+                  setProfile(null)
+                  setIsPlatformSuperAdmin(false)
+                  setIsProfileActive(true)
+                  setMemberships([])
+                  setAuthLoading(false)
+                  setAuthReady(true)
+                }
       }
     )
 
@@ -119,17 +134,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        isPlatformSuperAdmin,
-        memberships,
-        authLoading,
-        authReady,
-        logout,
-      }}
-    >
+      <AuthContext.Provider
+        value={{
+          user,
+          profile,
+          isPlatformSuperAdmin,
+          isProfileActive,
+          memberships,
+          authLoading,
+          authReady,
+          logout,
+        }}
+      >
       {children}
     </AuthContext.Provider>
   )

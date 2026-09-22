@@ -16,6 +16,10 @@ import Hiring from "./pages/Hiring"
 import Admin from "./pages/Admin"
 import Account from "./pages/Account"
 import Companies from "./pages/Companies"
+import PlatformUsers from "./pages/PlatformUsers"
+import RolesPermissions from "./pages/RolesPermissions"
+import TenantUsers from "./pages/TenantUsers"
+import TenantInvitations from "./pages/TenantInvitations"
 import NotFound from "./pages/NotFound"
 
 const queryClient = new QueryClient()
@@ -34,7 +38,7 @@ const LoadingScreen = () => (
 
 // Main routing logic
 const AppRoutes = () => {
-  const { authLoading, authReady, user, isPlatformSuperAdmin } = useAuth()
+  const { authLoading, authReady, user, isPlatformSuperAdmin, isProfileActive } = useAuth()
   const { currentTenant } = useCurrentTenant()
 
   if (authLoading) {
@@ -45,7 +49,7 @@ const AppRoutes = () => {
     return <LoadingScreen />
   }
 
-  if (!user) {
+  if (!user || !isProfileActive) {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -55,18 +59,20 @@ const AppRoutes = () => {
   }
 
   // Platform SuperAdmin with no current tenant -> Platform Admin
-  if (isPlatformSuperAdmin && !currentTenant) {
-    return (
-      <Routes>
-        <Route element={<PlatformAdminLayout />}>
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/admin/companies" element={<Companies />} />
-          <Route path="/admin/account" element={<Account />} />
-          <Route path="*" element={<Navigate to="/admin" replace />} />
-        </Route>
-      </Routes>
-    )
-  }
+    if (isPlatformSuperAdmin && !currentTenant) {
+      return (
+        <Routes>
+          <Route element={<PlatformAdminLayout />}>
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin/companies" element={<Companies />} />
+            <Route path="/admin/users" element={<PlatformUsers />} />
+            <Route path="/admin/roles" element={<RolesPermissions />} />
+            <Route path="/admin/account" element={<Account />} />
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Route>
+        </Routes>
+      )
+    }
 
   // Tenant user -> Tenant Application
   return (
@@ -76,6 +82,8 @@ const AppRoutes = () => {
         <Route path="/organization" element={<Organization />} />
         <Route path="/candidates" element={<Candidates />} />
         <Route path="/hiring" element={<Hiring />} />
+        <Route path="/tenant/users" element={<TenantUsers />} />
+        <Route path="/tenant/invitations" element={<TenantInvitations />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

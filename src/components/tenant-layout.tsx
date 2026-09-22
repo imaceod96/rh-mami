@@ -8,6 +8,7 @@ import {
   Building2,
   Users,
   Briefcase,
+  Mail,
   ArrowLeft,
   LogOut,
 } from "lucide-react"
@@ -15,6 +16,8 @@ import {
 const tenantNavItems = [
   { label: "Panel", href: "/", icon: LayoutDashboard },
   { label: "Organización", href: "/organization", icon: Building2 },
+  { label: "Usuarios", href: "/tenant/users", icon: Users },
+  { label: "Invitaciones", href: "/tenant/invitations", icon: Mail },
   { label: "Candidatos", href: "/candidates", icon: Users },
   { label: "Contratación", href: "/hiring", icon: Briefcase },
 ]
