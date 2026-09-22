@@ -13,6 +13,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpFormSection } from "@/components/ui/sitecorp-form-section"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpError } from "@/components/ui/sitecorp-error"
+import { SelectItem } from "@/components/ui/select"
 import { Pencil, Plus, Power, UserMinus, UserCheck, Key } from "lucide-react"
 
 interface PlatformUser {
@@ -365,15 +366,14 @@ const PlatformUsers = () => {
               <label className="text-sm font-medium text-ink">Rol</label>
               <SiteCorpSelect
                 value={selectedRoleId}
-                onChange={(e) => setSelectedRoleId(e.target.value)}
+                onValueChange={setSelectedRoleId}
               >
-                <option value="">Seleccionar rol</option>
                 {roles
                   .filter((r) => !assigningRole.roles.some((ur) => ur.name === r.name))
                   .map((role) => (
-                    <option key={role.id} value={role.id}>
+                    <SelectItem key={role.id} value={role.id}>
                       {role.name}
-                    </option>
+                    </SelectItem>
                   ))}
               </SiteCorpSelect>
             </div>

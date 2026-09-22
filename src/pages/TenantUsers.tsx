@@ -50,22 +50,57 @@ const TenantUsers = () => {
 
       const { data: membersData, error: membersError } = await supabase
         .from("tenant_memberships")
-        .select("*, user:profiles(*), tenant_role:tenant_user_roles(tenant_role_id, tenant_roles(name))")
+        .select("id,user_id,tenant_id,is_active,created_at")
         .eq("tenant_id", currentTenant.id)
 
       if (membersError) throw membersError
 
-      const usersWithDetails = (membersData || []).map((m: any) => ({
-        id: m.user.id,
-        full_name: m.user.full_name,
-        username: m.user.username,
-        email: m.user.email,
-        is_active: m.is_active,
-        membership_status: m.is_active ? "active" : "inactive",
-        invitation_status: "none",
-        role_name: m.tenant_role?.[0]?.tenant_roles?.name || "Sin rol",
-        created_at: m.created_at,
-      }))
+      const memberRows = membersData || []
+      const userIds = memberRows.map((member: any) => member.user_id)
+      const membershipIds = memberRows.map((member: any) => member.id)
+
+      const [profilesResult, rolesResult] = await Promise.all([
+        userIds.length
+          ? supabase.from("profiles").select("id,full_name,username,is_active").in("id", userIds)
+          : Promise.resolve({ data: [], error: null }),
+        membershipIds.length
+          ? supabase
+              .from("tenant_user_roles")
+              .select("tenant_membership_id,tenant_role_id,tenant_roles(name)")
+              .in("tenant_membership_id", membershipIds)
+          : Promise.resolve({ data: [], error: null }),
+      ])
+
+      if (profilesResult.error) throw profilesResult.error
+      if (rolesResult.error) throw rolesResult.error
+
+      const profilesById = (profilesResult.data || []).reduce((map: Record<string, any>, profile: any) => {
+        map[profile.id] = profile
+        return map
+      }, {})
+      const rolesByMembership = (rolesResult.data || []).reduce(
+        (map: Record<string, any>, roleAssignment: any) => {
+          map[roleAssignment.tenant_membership_id] = roleAssignment.tenant_roles
+          return map
+        },
+        {}
+      )
+
+      const usersWithDetails = memberRows.map((member: any) => {
+        const profile = profilesById[member.user_id]
+
+        return {
+          id: member.user_id,
+          full_name: profile?.full_name || "Usuario",
+          username: profile?.username || "sin usuario",
+          email: profile?.username || "",
+          is_active: member.is_active,
+          membership_status: member.is_active ? "active" : "inactive",
+          invitation_status: "none",
+          role_name: rolesByMembership[member.id]?.name || "Sin rol",
+          created_at: member.created_at,
+        }
+      })
 
       setUsers(usersWithDetails)
     } catch (err) {

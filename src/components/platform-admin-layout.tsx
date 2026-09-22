@@ -67,7 +67,7 @@ const PlatformAdminLayout = React.forwardRef<
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
             >
               <Building2 className="h-5 w-5" />
-              Empresas
+              Clientes / Organizaciones
             </Link>
             <Link
               to="/admin/users"

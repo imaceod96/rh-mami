@@ -15,7 +15,7 @@ import Candidates from "./pages/Candidates"
 import Hiring from "./pages/Hiring"
 import Admin from "./pages/Admin"
 import Account from "./pages/Account"
-import Companies from "./pages/Companies"
+import Organizations from "./pages/Organizations"
 import PlatformUsers from "./pages/PlatformUsers"
 import RolesPermissions from "./pages/RolesPermissions"
 import TenantUsers from "./pages/TenantUsers"
@@ -106,7 +106,7 @@ const AppRoutes = () => {
         <Routes>
           <Route element={<PlatformAdminLayout />}>
             <Route path="/admin" element={<Admin />} />
-            <Route path="/admin/companies" element={<Companies />} />
+            <Route path="/admin/companies" element={<Organizations />} />
             <Route path="/admin/users" element={<PlatformUsers />} />
             <Route path="/admin/roles" element={<RolesPermissions />} />
             <Route path="/admin/account" element={<Account />} />

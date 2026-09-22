@@ -138,7 +138,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasPlatformPermission = async (code: string): Promise<boolean> => {
     try {
       if (isPlatformSuperAdmin) return true
-      const { data, error } = await supabase.rpc("has_platform_permission", { p_code: code })
+      const { data, error } = await supabase.rpc("has_platform_permission", {
+        permission_code: code,
+      })
       if (error) return false
       return !!data
     } catch {
@@ -147,19 +149,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const hasTenantPermission = async (code: string): Promise<boolean> => {
-      try {
-        if (isPlatformSuperAdmin) return true
-        if (!currentTenant) return false
-        const { data, error } = await supabase.rpc("has_tenant_permission", {
-          p_tenant_id: currentTenant.id,
-          p_code: code,
-        })
-        if (error) return false
-        return !!data
-      } catch {
-        return false
-      }
+    try {
+      if (isPlatformSuperAdmin) return true
+      const { data, error } = await supabase.rpc("has_tenant_permission", {
+        permission_code: code,
+      })
+      if (error) return false
+      return !!data
+    } catch {
+      return false
     }
+  }
 
   return (
     <AuthContext.Provider
