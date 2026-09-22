@@ -49,6 +49,16 @@
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* SiteCorp Design Tokens */
+    --sitecorp-primary: 198 65% 29%; /* #1A5F7A */
+    --sitecorp-primary-dark: 198 70% 21%; /* #10465C */
+    --sitecorp-secondary-orange: 31 89% 59%; /* #F49D37 */
+    --sitecorp-background: 210 8% 98%; /* #F8F9FA */
+    --sitecorp-success: 128 68% 49%; /* #2ECC40 */
+    --sitecorp-warning: 34 89% 51%; /* #F39C12 */
+    --sitecorp-danger: 8 77% 57%; /* #E74C3C */
+    --sitecorp-ink: 214 29% 24%; /* #2C3E50 */
   }
 
   .dark {
@@ -79,6 +89,7 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -87,6 +98,16 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* SiteCorp Design Tokens (Dark mode - same colors for consistency) */
+    --sitecorp-primary: 198 65% 29%; /* #1A5F7A */
+    --sitecorp-primary-dark: 198 70% 21%; /* #10465C */
+    --sitecorp-secondary-orange: 31 89% 59%; /* #F49D37 */
+    --sitecorp-background: 210 8% 98%; /* #F8F9FA */
+    --sitecorp-success: 128 68% 49%; /* #2ECC40 */
+    --sitecorp-warning: 34 89% 51%; /* #F39C12 */
+    --sitecorp-danger: 8 77% 57%; /* #E74C3C */
+    --sitecorp-ink: 214 29% 24%; /* #2C3E50 */
   }
 }
 
@@ -99,3 +120,5 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* SiteCorp colors are available via Tailwind config as bg-sitecorp-primary, text-sitecorp-primary, etc. */

@@ -62,6 +62,15 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // SiteCorp custom colors
+        "sitecorp-primary": "hsl(var(--sitecorp-primary))",
+        "sitecorp-primary-dark": "hsl(var(--sitecorp-primary-dark))",
+        "sitecorp-secondary-orange": "hsl(var(--sitecorp-secondary-orange))",
+        "sitecorp-background": "hsl(var(--sitecorp-background))",
+        "sitecorp-success": "hsl(var(--sitecorp-success))",
+        "sitecorp-warning": "hsl(var(--sitecorp-warning))",
+        "sitecorp-danger": "hsl(var(--sitecorp-danger))",
+        "sitecorp-ink": "hsl(var(--sitecorp-ink))",
       },
       borderRadius: {
         lg: "var(--radius)",
