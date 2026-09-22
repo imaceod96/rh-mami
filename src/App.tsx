@@ -24,6 +24,48 @@ import NotFound from "./pages/NotFound"
 
 const queryClient = new QueryClient()
 
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("SiteCorp render error:", error)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-sitecorp-background p-6">
+          <div className="w-full max-w-lg rounded-2xl border border-sitecorp-danger/30 bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold text-sitecorp-danger">Error de la aplicación</p>
+            <p className="mt-2 text-sm text-ink">
+              SiteCorp no pudo renderizar la interfaz. Recarga la página para continuar.
+            </p>
+            <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-sitecorp-background p-3 text-xs text-muted-foreground">
+              {this.state.error.message}
+            </pre>
+            <button
+              type="button"
+              className="mt-4 rounded-lg bg-sitecorp-primary px-4 py-2 text-sm font-medium text-white"
+              onClick={() => window.location.reload()}
+            >
+              Recargar
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
 // Loading screen component
 const LoadingScreen = () => (
   <div className="min-h-screen flex items-center justify-center bg-sitecorp-background">
@@ -91,19 +133,21 @@ const AppRoutes = () => {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <CurrentTenantProvider>
-            <AppRoutes />
-          </CurrentTenantProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <AppErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <CurrentTenantProvider>
+              <AppRoutes />
+            </CurrentTenantProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 )
 
 export default App
