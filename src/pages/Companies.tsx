@@ -1,5 +1,7 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
+import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -25,6 +27,8 @@ interface Tenant {
 
 const Companies = () => {
   const { isPlatformSuperAdmin } = useAuth()
+  const { setCurrentTenant } = useCurrentTenant()
+  const navigate = useNavigate()
   const [tenants, setTenants] = React.useState<Tenant[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -126,9 +130,9 @@ const Companies = () => {
   }
 
   const enterTenant = (tenant: Tenant) => {
-    // Placeholder: enter tenant action
-    console.log("Entering tenant:", tenant)
-  }
+      setCurrentTenant(tenant)
+      navigate("/")
+    }
 
   const columns = [
     { header: "Nombre", accessor: "name" },
