@@ -94,7 +94,7 @@ const TenantLayout = React.forwardRef<
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto bg-sitecorp-background">
+            <main className="flex-1 overflow-y-auto bg-sitecorp-background ml-64">
         <Outlet />
       </main>
     </div>

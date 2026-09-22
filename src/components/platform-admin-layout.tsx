@@ -90,7 +90,7 @@ const PlatformAdminLayout = React.forwardRef<
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto bg-sitecorp-background">
+      <main className="flex-1 overflow-y-auto bg-sitecorp-background ml-64">
         {currentTenant && (
           <div className="border-b border-border bg-muted/30 px-6 py-3">
             <div className="flex items-center gap-3">
