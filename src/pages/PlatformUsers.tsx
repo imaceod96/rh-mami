@@ -42,6 +42,7 @@ const PlatformUsers = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [editingUser, setEditingUser] = React.useState<PlatformUser | null>(null)
+  const [showCreateForm, setShowCreateForm] = React.useState(false)
   const [assigningRole, setAssigningRole] = React.useState<PlatformUser | null>(null)
   const [viewingPerms, setViewingPerms] = React.useState<PlatformUser | null>(null)
   const [formData, setFormData] = React.useState({
@@ -107,9 +108,10 @@ const PlatformUsers = () => {
   }, [loadUsers, loadRoles])
 
   const startCreate = () => {
-    setEditingUser(null)
-    setFormData({ full_name: "", username: "", email: "" })
-  }
+      setEditingUser(null)
+      setShowCreateForm(true)
+      setFormData({ full_name: "", username: "", email: "" })
+    }
 
   const startEdit = (user: PlatformUser) => {
     setEditingUser(user)
@@ -117,34 +119,35 @@ const PlatformUsers = () => {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      if (editingUser) {
-        const { error } = await supabase
-          .from("profiles")
-          .update({ full_name: formData.full_name, username: formData.username })
-          .eq("id", editingUser.id)
-        if (error) throw error
-      } else {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email: formData.email,
-          password: "temp1234!",
-          options: {
-            data: {
-              full_name: formData.full_name,
-              username: formData.username,
+      e.preventDefault()
+      try {
+        if (editingUser) {
+          const { error } = await supabase
+            .from("profiles")
+            .update({ full_name: formData.full_name, username: formData.username })
+            .eq("id", editingUser.id)
+          if (error) throw error
+        } else {
+          const { error: signUpError } = await supabase.auth.signUp({
+            email: formData.email,
+            password: "temp1234!",
+            options: {
+              data: {
+                full_name: formData.full_name,
+                username: formData.username,
+              },
             },
-          },
-        })
-        if (signUpError) throw signUpError
+          })
+          if (signUpError) throw signUpError
+        }
+        setEditingUser(null)
+        setShowCreateForm(false)
+        setFormData({ full_name: "", username: "", email: "" })
+        await loadUsers()
+      } catch (err) {
+        setError("No se pudo guardar el usuario.")
       }
-      setEditingUser(null)
-      setFormData({ full_name: "", username: "", email: "" })
-      await loadUsers()
-    } catch (err) {
-      setError("No se pudo guardar el usuario.")
     }
-  }
 
   const toggleActive = async (user: PlatformUser) => {
     try {
@@ -272,8 +275,8 @@ const PlatformUsers = () => {
         description="Gestión de administradores de plataforma"
         actions={
           <SiteCorpButton onClick={startCreate}>
-            <Plus className="h-4 w-4 mr-2" /> Agregar administrador
-          </SiteCorpButton>
+                      <Plus className="h-4 w-4 mr-2" /> Agregar usuario SiteCorp
+                    </SiteCorpButton>
         }
       />
 
@@ -301,15 +304,15 @@ const PlatformUsers = () => {
         )}
       </SiteCorpCard>
 
-      {editingUser && (
-        <SiteCorpFormSection
-          title={editingUser ? "Editar usuario" : "Crear administrador"}
-          description={
-            editingUser
-              ? "Actualiza los datos del administrador"
-              : "Registra un nuevo administrador de plataforma"
-          }
-        >
+      {(editingUser || showCreateForm) && (
+              <SiteCorpFormSection
+                title={editingUser ? "Editar usuario" : "Agregar usuario SiteCorp"}
+                description={
+                  editingUser
+                    ? "Actualiza los datos del administrador"
+                    : "Registra un nuevo administrador de plataforma"
+                }
+              >
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -346,9 +349,10 @@ const PlatformUsers = () => {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setEditingUser(null)
-                  setFormData({ full_name: "", username: "", email: "" })
-                }}
+                    setEditingUser(null)
+                    setShowCreateForm(false)
+                    setFormData({ full_name: "", username: "", email: "" })
+                  }}
               >
                 Cancelar
               </SiteCorpButton>

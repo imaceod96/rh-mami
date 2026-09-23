@@ -31,12 +31,12 @@ import {
   Factory,
   Landmark,
   Layers,
-  LogIn,
   Pencil,
   Plus,
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react"
 
@@ -89,7 +89,7 @@ const friendlyTenantError = (error: unknown) => {
 }
 
 const Organizations = () => {
-  const { isPlatformSuperAdmin } = useAuth()
+  const { isPlatformSuperAdmin, hasPlatformPermission } = useAuth()
   const { setCurrentTenant } = useCurrentTenant()
   const navigate = useNavigate()
   const [tenants, setTenants] = React.useState<Tenant[]>([])
@@ -114,8 +114,13 @@ const Organizations = () => {
   >("business_group")
 
   const [usersEntity, setUsersEntity] = React.useState<OrganizationEntity | null>(null)
-
-  const loadData = React.useCallback(async () => {
+  const [deleteEntity, setDeleteEntity] = React.useState<OrganizationEntity | null>(null)
+  const [deleteTenant, setDeleteTenant] = React.useState<Tenant | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
+  const [canDeleteEntities, setCanDeleteEntities] = React.useState(false)
+  const [canDeleteTenants, setCanDeleteTenants] = React.useState(false)
+  
+    const loadData = React.useCallback(async () => {
     try {
       setError(null)
       setLoading(true)
@@ -150,6 +155,20 @@ const Organizations = () => {
   React.useEffect(() => {
     loadData()
   }, [loadData])
+
+  React.useEffect(() => {
+    const checkDeletePermissions = async () => {
+      const [entitiesPermission, tenantsPermission] = await Promise.all([
+        hasPlatformPermission("organizations.delete"),
+        hasPlatformPermission("tenants.delete"),
+      ])
+
+      setCanDeleteEntities(entitiesPermission)
+      setCanDeleteTenants(tenantsPermission)
+    }
+
+    checkDeletePermissions()
+  }, [hasPlatformPermission])
 
   const childrenByParent = React.useMemo(() => {
     return entities.reduce<Record<string, OrganizationEntity[]>>((map, entity) => {
@@ -267,6 +286,34 @@ const Organizations = () => {
     setEntityDialogOpen(true)
   }
 
+  const deleteOrganizationEntity = async (entity: OrganizationEntity) => {
+    try {
+      setDeleting(true)
+      const response = await supabase.from("organization_entities").delete().eq("id", entity.id)
+      if (response.error) throw response.error
+      setDeleteEntity(null)
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar la organización.")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const deleteWorkspaceTenant = async (tenant: Tenant) => {
+    try {
+      setDeleting(true)
+      const response = await supabase.from("tenants").delete().eq("id", tenant.id)
+      if (response.error) throw response.error
+      setDeleteTenant(null)
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el workspace.")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const enterWorkspace = (tenant: Tenant) => {
     setCurrentTenant(tenant)
     navigate("/")
@@ -340,11 +387,20 @@ const Organizations = () => {
               </SiteCorpButton>
             )}
             <SiteCorpButton size="sm" variant="outline" onClick={() => openEditEntity(entity)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
-            </SiteCorpButton>
-            <SiteCorpButton size="sm" onClick={() => setUsersEntity(entity)}>
-              <Users className="mr-1 h-3.5 w-3.5" /> Usuarios
-            </SiteCorpButton>
+                          <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                        </SiteCorpButton>
+                        {canDeleteEntities && (
+                          <SiteCorpButton
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDeleteEntity(entity)}
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
+                          </SiteCorpButton>
+                        )}
+                        <SiteCorpButton size="sm" onClick={() => setUsersEntity(entity)}>
+                          <Users className="mr-1 h-3.5 w-3.5" /> Usuarios
+                        </SiteCorpButton>
           </div>
         </div>
 
@@ -468,9 +524,9 @@ const Organizations = () => {
                       <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateRootEntity(tenant.id)}>
                         <Plus className="mr-1 h-3.5 w-3.5" /> Grupo
                       </SiteCorpButton>
-                      {isPlatformSuperAdmin && (
-                        <SiteCorpButton size="sm" variant="outline" onClick={() => enterWorkspace(tenant)}>
-                          <LogIn className="mr-1 h-3.5 w-3.5" /> Abrir
+                      {canDeleteTenants && (
+                        <SiteCorpButton size="sm" variant="outline" onClick={() => setDeleteTenant(tenant)}>
+                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
                         </SiteCorpButton>
                       )}
                     </div>
@@ -587,12 +643,78 @@ const Organizations = () => {
       />
 
       <EntityUsersDialog
-        entity={usersEntity}
-        onClose={() => setUsersEntity(null)}
-        onAccessChanged={loadData}
-      />
-    </div>
-  )
-}
+              entity={usersEntity}
+              onClose={() => setUsersEntity(null)}
+              onAccessChanged={loadData}
+            />
 
-export default Organizations
+            <Dialog open={Boolean(deleteEntity)} onOpenChange={(open) => !open && setDeleteEntity(null)}>
+              <DialogContent className="max-w-md rounded-2xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-xl">
+                    <Trash2 className="h-5 w-5 text-destructive" />
+                    Eliminar entidad
+                  </DialogTitle>
+                  <DialogDescription>
+                    ¿Estás seguro de que deseas eliminar la entidad "{deleteEntity?.name}"?
+                    Esta acción no se puede deshacer.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <SiteCorpButton
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDeleteEntity(null)}
+                    disabled={deleting}
+                  >
+                    Cancelar
+                  </SiteCorpButton>
+                  <SiteCorpButton
+                    type="button"
+                    variant="destructive"
+                    onClick={() => deleteEntity && deleteOrganizationEntity(deleteEntity)}
+                    disabled={deleting}
+                  >
+                    {deleting ? "Eliminando..." : "Eliminar"}
+                  </SiteCorpButton>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={Boolean(deleteTenant)} onOpenChange={(open) => !open && setDeleteTenant(null)}>
+                          <DialogContent className="max-w-md rounded-2xl">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Trash2 className="h-5 w-5 text-destructive" />
+                                Eliminar workspace
+                              </DialogTitle>
+                              <DialogDescription>
+                                ¿Estás seguro de que deseas eliminar el workspace "{deleteTenant?.name}"?
+                                Esta acción no se puede deshacer.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                              <SiteCorpButton
+                                type="button"
+                                variant="outline"
+                                onClick={() => setDeleteTenant(null)}
+                                disabled={deleting}
+                              >
+                                Cancelar
+                              </SiteCorpButton>
+                              <SiteCorpButton
+                                type="button"
+                                variant="destructive"
+                                onClick={() => deleteTenant && deleteWorkspaceTenant(deleteTenant)}
+                                disabled={deleting}
+                              >
+                                {deleting ? "Eliminando..." : "Eliminar"}
+                              </SiteCorpButton>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                </div>
+              )
+            }
+            
+            export default Organizations
