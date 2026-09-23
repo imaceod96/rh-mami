@@ -20,6 +20,7 @@ import PlatformUsers from "./pages/PlatformUsers"
 import RolesPermissions from "./pages/RolesPermissions"
 import TenantUsers from "./pages/TenantUsers"
 import TenantInvitations from "./pages/TenantInvitations"
+import TenantRoles from "./pages/TenantRoles"
 import NotFound from "./pages/NotFound"
 
 const queryClient = new QueryClient()
@@ -125,6 +126,7 @@ const AppRoutes = () => {
         <Route path="/candidates" element={<Candidates />} />
         <Route path="/hiring" element={<Hiring />} />
         <Route path="/tenant/users" element={<TenantUsers />} />
+        <Route path="/tenant/roles" element={<TenantRoles />} />
         <Route path="/tenant/invitations" element={<TenantInvitations />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
