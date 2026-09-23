@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/contexts/AuthContext"
 import { CurrentTenantProvider, useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { CurrentEntityProvider, useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { PlatformAdminLayout } from "@/components/platform-admin-layout"
 import { TenantLayout } from "@/components/tenant-layout"
 import Login from "./pages/Login"
@@ -103,20 +104,21 @@ const AppRoutes = () => {
   }
 
   // Platform SuperAdmin with no current tenant -> Platform Admin
-    if (isPlatformSuperAdmin && !currentTenant) {
-      return (
-        <Routes>
-          <Route element={<PlatformAdminLayout />}>
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/admin/companies" element={<Organizations />} />
-            <Route path="/admin/users" element={<PlatformUsers />} />
-            <Route path="/admin/roles" element={<RolesPermissions />} />
-            <Route path="/admin/account" element={<Account />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
-          </Route>
-        </Routes>
-      )
-    }
+      if (isPlatformSuperAdmin && !currentTenant) {
+        return (
+          <Routes>
+            <Route element={<PlatformAdminLayout />}>
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/companies" element={<Organizations />} />
+              <Route path="/admin/users" element={<PlatformUsers />} />
+              <Route path="/admin/roles" element={<RolesPermissions />} />
+              <Route path="/admin/account" element={<Account />} />
+              <Route path="/organization/:entityId" element={<OrganizationDetail />} />
+              <Route path="*" element={<Navigate to="/admin" replace />} />
+            </Route>
+          </Routes>
+        )
+      }
 
   // Tenant user -> Tenant Application
     return (
@@ -145,7 +147,9 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <CurrentTenantProvider>
-              <AppRoutes />
+              <CurrentEntityProvider>
+                <AppRoutes />
+              </CurrentEntityProvider>
             </CurrentTenantProvider>
           </AuthProvider>
         </BrowserRouter>

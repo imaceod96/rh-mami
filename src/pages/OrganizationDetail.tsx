@@ -151,8 +151,12 @@ const OrganizationDetail = () => {
       
       // Check if entity belongs to current tenant
       if (currentTenant && entityData.tenant_id !== currentTenant.id) {
-        throw new Error("No tienes permiso para acceder a esta entidad")
-      }
+              throw new Error("No tienes permiso para acceder a esta entidad")
+            }
+      
+            if (!currentTenant && !isPlatformSuperAdmin) {
+              throw new Error("No tienes permiso para acceder a esta entidad")
+            }
       
       setEntity(entityData)
       

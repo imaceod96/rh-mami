@@ -40,6 +40,7 @@ import {
   ShieldCheck,
   Trash2,
   Users,
+  LogIn,
 } from "lucide-react"
 
 interface Tenant {
@@ -317,9 +318,13 @@ const Organizations = () => {
   }
 
   const enterWorkspace = (tenant: Tenant) => {
-    setCurrentTenant(tenant)
-    navigate("/")
-  }
+      setCurrentTenant(tenant)
+      navigate("/")
+    }
+  
+    const enterEntity = (entity: OrganizationEntity) => {
+      navigate(`/organization/${entity.id}`)
+    }
 
   const renderEntity = (entity: OrganizationEntity, depth: number): React.ReactNode => {
     if (normalizedSearch && !subtreeMatchesSearch(entity)) return null
@@ -379,16 +384,31 @@ const Organizations = () => {
 
           <div className="flex flex-wrap items-center gap-2">
             {entity.entity_type === "business_group" && (
-              <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Empresa
-              </SiteCorpButton>
-            )}
-            {entity.entity_type === "company" && (
-              <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> UEB
-              </SiteCorpButton>
-            )}
-            <SiteCorpButton size="sm" variant="outline" onClick={() => openEditEntity(entity)}>
+                          <>
+                            <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
+                              <Plus className="mr-1 h-3.5 w-3.5" /> Empresa
+                            </SiteCorpButton>
+                            <SiteCorpButton size="sm" variant="outline" onClick={() => enterEntity(entity)}>
+                              <LogIn className="mr-1 h-3.5 w-3.5" /> Entrar
+                            </SiteCorpButton>
+                          </>
+                        )}
+                        {entity.entity_type === "company" && (
+                          <>
+                            <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
+                              <Plus className="mr-1 h-3.5 w-3.5" /> UEB
+                            </SiteCorpButton>
+                            <SiteCorpButton size="sm" variant="outline" onClick={() => enterEntity(entity)}>
+                              <LogIn className="mr-1 h-3.5 w-3.5" /> Entrar
+                            </SiteCorpButton>
+                          </>
+                        )}
+                        {entity.entity_type === "ueb" && (
+                          <SiteCorpButton size="sm" variant="outline" onClick={() => enterEntity(entity)}>
+                            <LogIn className="mr-1 h-3.5 w-3.5" /> Entrar
+                          </SiteCorpButton>
+                        )}
+                        <SiteCorpButton size="sm" variant="outline" onClick={() => openEditEntity(entity)}>
                           <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                         </SiteCorpButton>
                         {canDeleteEntities && (
@@ -403,8 +423,8 @@ const Organizations = () => {
                         <SiteCorpButton size="sm" onClick={() => setUsersEntity(entity)}>
                           <Users className="mr-1 h-3.5 w-3.5" /> Usuarios
                         </SiteCorpButton>
-          </div>
-        </div>
+                      </div>
+                    </div>
 
         {hasChildren && isOpen && (
           <div className="mt-2 space-y-2">

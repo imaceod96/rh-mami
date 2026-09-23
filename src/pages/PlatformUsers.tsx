@@ -56,123 +56,124 @@ const PlatformUsers = () => {
   const [selectedRoleId, setSelectedRoleId] = React.useState("")
 
   const loadUsers = React.useCallback(async () => {
-      try {
-        setError(null)
-        setLoading(true)
-        const { data: profilesData, error: profilesError } = await supabase
-          .from("profiles")
-          .select("*")
-          .order("created_at", { ascending: false })
- 
-        if (profilesError) throw profilesError
- 
-        const usersWithRoles = await Promise.all(
-          (profilesData || []).map(async (profile: any) => {
-            const { data: roleData } = await supabase
-              .from("platform_user_roles")
-              .select("platform_role_id, platform_roles(name, is_system_role)")
-              .eq("user_id", profile.id)
- 
-            const roles = (roleData || []).map((r: any) => r.platform_roles)
-            return {
-              ...profile,
-              roles,
-            }
-          })
-        )
- 
-        setUsers(usersWithRoles)
-      } catch (err) {
-        console.error("Error loading users:", err)
-        setError("No se pudo cargar la lista de usuarios.")
-      } finally {
-        setLoading(false)
-      }
-    }, [])
- 
-    const loadRoles = React.useCallback(async () => {
-      try {
-        const { data, error } = await supabase
-          .from("platform_roles")
-          .select("*")
-          .eq("is_active", true)
-          .order("name")
- 
-        if (error) throw error
-        setRoles(data || [])
-      } catch (err) {
-        console.error("Error loading roles:", err)
-      }
-    }, [])
- 
-    React.useEffect(() => {
-      loadUsers()
-      loadRoles()
-    }, [loadUsers, loadRoles])
- 
-  const startCreate = () => {
-        setEditingUser(null)
-        setShowCreateForm(true)
-        setFormData({
-          full_name: "",
-          username: "",
-          email: "",
-          password: "temp1234!",
-          is_active: true,
+    try {
+      setError(null)
+      setLoading(true)
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (profilesError) throw profilesError
+
+      const usersWithRoles = await Promise.all(
+        (profilesData || []).map(async (profile: any) => {
+          const { data: roleData } = await supabase
+            .from("platform_user_roles")
+            .select("platform_role_id, platform_roles(name, is_system_role)")
+            .eq("user_id", profile.id)
+
+          const roles = (roleData || []).map((r: any) => r.platform_roles)
+          return {
+            ...profile,
+            roles,
+          }
         })
-        setSelectedRoleId("")
-      }
+      )
+
+      setUsers(usersWithRoles)
+    } catch (err) {
+      console.error("Error loading users:", err)
+      setError("No se pudo cargar la lista de usuarios.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadRoles = React.useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("platform_roles")
+        .select("*")
+        .eq("is_active", true)
+        .order("name")
+
+      if (error) throw error
+      setRoles(data || [])
+    } catch (err) {
+      console.error("Error loading roles:", err)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadUsers()
+    loadRoles()
+  }, [loadUsers, loadRoles])
+
+  const startCreate = () => {
+    setEditingUser(null)
+    setShowCreateForm(true)
+    setFormData({
+      full_name: "",
+      username: "",
+      email: "",
+      password: "temp1234!",
+      is_active: true,
+    })
+    setSelectedRoleId("")
+  }
 
   const startEdit = (user: PlatformUser) => {
-      setEditingUser(user)
-      setFormData({
-        full_name: user.full_name,
-        username: user.username,
-        email: user.email,
-        password: "",
-        is_active: user.is_active,
-      })
-    }
+    setEditingUser(user)
+    setFormData({
+      full_name: user.full_name,
+      username: user.username,
+      email: user.email,
+      password: "",
+      is_active: user.is_active,
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        try {
-          if (editingUser) {
-            const { error } = await supabase
-              .from("profiles")
-              .update({ full_name: formData.full_name, username: formData.username })
-              .eq("id", editingUser.id)
-            if (error) throw error
-          } else {
-            // Admin-provisioned users must go through the secure edge function
-            const { data, error } = await supabase.functions.invoke("create-sitecorp-user", {
-              body: {
-                full_name: formData.full_name,
-                username: formData.username,
-                email: formData.email,
-                password: formData.password,
-                is_active: formData.is_active,
-              },
-            })
- 
-            if (error) throw error
-            if (!data) throw new Error("Respuesta vacía del servidor")
-          }
-          setEditingUser(null)
-          setShowCreateForm(false)
-          setFormData({
-            full_name: "",
-            username: "",
-            email: "",
-            password: "temp1234!",
-            is_active: true,
-          })
-          setSelectedRoleId("")
-          await loadUsers()
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "No se pudo guardar el usuario.")
-        }
+    e.preventDefault()
+    try {
+      if (editingUser) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ full_name: formData.full_name, username: formData.username })
+          .eq("id", editingUser.id)
+        if (error) throw error
+      } else {
+        // Admin-provisioned users must go through the secure edge function
+        const { data, error } = await supabase.functions.invoke("create-sitecorp-user", {
+          body: {
+            full_name: formData.full_name,
+            username: formData.username,
+            email: formData.email,
+            password: formData.password,
+            is_active: formData.is_active,
+            platform_role_id: selectedRoleId || null,
+          },
+        })
+
+        if (error) throw error
+        if (!data) throw new Error("Respuesta vacía del servidor")
       }
+      setEditingUser(null)
+      setShowCreateForm(false)
+      setFormData({
+        full_name: "",
+        username: "",
+        email: "",
+        password: "temp1234!",
+        is_active: true,
+      })
+      setSelectedRoleId("")
+      await loadUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el usuario.")
+    }
+  }
 
   const toggleActive = async (user: PlatformUser) => {
     try {
@@ -235,7 +236,7 @@ const PlatformUsers = () => {
     { header: "Nombre completo", accessor: "full_name" },
     { header: "Usuario", accessor: "username" },
     { header: "Email", accessor: "email" },
-    { header: "Roles", accessor: "roles" },
+    { header: "Rol de plataforma", accessor: "roles" },
     { header: "Estado", accessor: "status" },
     { header: "Fecha de creación", accessor: "created_at" },
     { header: "Acciones", accessor: "actions" },
@@ -300,8 +301,8 @@ const PlatformUsers = () => {
         description="Gestión de administradores y operadores de SiteCorp (sin asignación organizacional)"
         actions={
           <SiteCorpButton onClick={startCreate}>
-                      <Plus className="h-4 w-4 mr-2" /> Agregar usuario de plataforma
-                    </SiteCorpButton>
+            <Plus className="h-4 w-4 mr-2" /> Agregar usuario de plataforma
+          </SiteCorpButton>
         }
       />
 
@@ -330,95 +331,113 @@ const PlatformUsers = () => {
       </SiteCorpCard>
 
       {(editingUser || showCreateForm) && (
-                    <SiteCorpFormSection
-                      title={editingUser ? "Editar usuario" : "Crear usuario de plataforma"}
-                      description={
-                        editingUser
-                          ? "Actualiza los datos del usuario de plataforma"
-                          : "Registra un nuevo usuario de SiteCorp (solo acceso a nivel de plataforma)"
+        <SiteCorpFormSection
+          title={editingUser ? "Editar usuario" : "Crear usuario de plataforma"}
+          description={
+            editingUser
+              ? "Actualiza los datos del usuario de plataforma"
+              : "Registra un nuevo usuario de SiteCorp (solo acceso a nivel de plataforma)"
+          }
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ink">Nombre completo *</label>
+                <SiteCorpInput
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ink">Usuario *</label>
+                <SiteCorpInput
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-ink">Email *</label>
+              <SiteCorpInput
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+              />
+            </div>
+
+            {/* Platform Role Selector for new user creation */}
+            {!editingUser && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-ink">Rol de plataforma *</label>
+                  <SiteCorpSelect
+                    value={selectedRoleId}
+                    onValueChange={setSelectedRoleId}
+                    required
+                  >
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                        {role.is_system_role && (
+                          <span className="text-xs text-muted-foreground block">(Sistema)</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SiteCorpSelect>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-ink">Contraseña temporal</label>
+                  <SiteCorpInput
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-ink">
+                    <Checkbox
+                      checked={formData.is_active}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, is_active: checked === true })
                       }
-                    >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-ink">Nombre completo</label>
-                      <SiteCorpInput
-                        value={formData.full_name}
-                        onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-ink">Usuario</label>
-                      <SiteCorpInput
-                        value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-ink">Email</label>
-                    <SiteCorpInput
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      required
                     />
-                  </div>
-                 
-                  {/* Form fields for new user creation */}
-                  {!editingUser && (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-ink">Contraseña temporal</label>
-                        <SiteCorpInput
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          placeholder="Mínimo 8 caracteres"
-                        />
-                      </div>
-                     
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm font-medium text-ink">
-                          <Checkbox
-                            checked={formData.is_active}
-                            onCheckedChange={(checked) =>
-                              setFormData({ ...formData, is_active: checked === true })
-                            }
-                          />
-                          Usuario activo
-                        </label>
-                      </div>
-                    </>
-                  )}
-                 
-                  <div className="flex items-center gap-3">
-                    <SiteCorpButton type="submit" className="w-full justify-center">
-                      {editingUser ? "Guardar cambios" : "Crear usuario de plataforma"}
-                    </SiteCorpButton>
-                    <SiteCorpButton
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                          setEditingUser(null)
-                          setShowCreateForm(false)
-                          setFormData({
-                            full_name: "",
-                            username: "",
-                            email: "",
-                            password: "temp1234!",
-                            is_active: true,
-                          })
-                          setSelectedRoleId("")
-                        }}
-                    >
-                      Cancelar
-                    </SiteCorpButton>
-                  </div>
-                </form>
-              </SiteCorpFormSection>
+                    Usuario activo
+                  </label>
+                </div>
+              </>
             )}
+
+            <div className="flex items-center gap-3">
+              <SiteCorpButton type="submit" className="w-full justify-center">
+                {editingUser ? "Guardar cambios" : "Crear usuario de plataforma"}
+              </SiteCorpButton>
+              <SiteCorpButton
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingUser(null)
+                  setShowCreateForm(false)
+                  setFormData({
+                    full_name: "",
+                    username: "",
+                    email: "",
+                    password: "temp1234!",
+                    is_active: true,
+                  })
+                  setSelectedRoleId("")
+                }}
+              >
+                Cancelar
+              </SiteCorpButton>
+            </div>
+          </form>
+        </SiteCorpFormSection>
+      )}
 
       {assigningRole && (
         <SiteCorpFormSection
@@ -437,7 +456,9 @@ const PlatformUsers = () => {
                   .map((role) => (
                     <SelectItem key={role.id} value={role.id}>
                       {role.name}
-                      {role.is_system_role && <span className="text-xs text-muted-foreground block">(Sistema)</span>}
+                      {role.is_system_role && (
+                        <span className="text-xs text-muted-foreground block">(Sistema)</span>
+                      )}
                     </SelectItem>
                   ))}
               </SiteCorpSelect>

@@ -11,10 +11,7 @@ interface CreateSitecorpUserRequest {
   username: string
   email: string
   password: string
-  tenant_id?: string
-  entity_id?: string
-  tenant_role_id?: string
-  access_scope?: "SELF" | "SELF_AND_DESCENDANTS"
+  platform_role_id?: string
   is_active?: boolean
 }
 
@@ -120,10 +117,7 @@ serve(async (req) => {
     const username = (body.username ?? "").trim()
     const email = (body.email ?? "").trim().toLowerCase()
     const password = (body.password ?? "temp1234!").trim()
-    const tenantId = (body.tenant_id ?? "").trim() || null
-    const entityId = (body.entity_id ?? "").trim() || null
-    const tenantRoleId = (body.tenant_role_id ?? "").trim() || null
-    const accessScope = body.access_scope ?? "SELF"
+    const platformRoleId = body.platform_role_id || null
     const isActive = body.is_active !== false
 
     // Validate required fields
@@ -137,7 +131,27 @@ serve(async (req) => {
       return json({ error: "Introduce un email válido." }, 400)
     }
 
-    // 5. Check username uniqueness
+    // Check if platform role exists and is active
+    if (!platformRoleId) {
+      return json({ error: "Rol de plataforma es requerido." }, 400)
+    }
+
+    const { data: roleData, error: roleError } = await adminClient
+      .from("platform_roles")
+      .select("id, name, is_active, is_system_role")
+      .eq("id", platformRoleId)
+      .single()
+
+    if (roleError || !roleData) {
+      console.error("[create-sitecorp-user] invalid platform role", { platformRoleId, error: roleError })
+      return json({ error: "Rol de plataforma inválido." }, 400)
+    }
+
+    if (!roleData.is_active) {
+      return json({ error: "El rol de plataforma seleccionado está inactivo." }, 400)
+    }
+
+    // Check if username already exists
     const { data: existingUsername, error: usernameError } = await adminClient
       .from("profiles")
       .select("id, username")
@@ -152,7 +166,7 @@ serve(async (req) => {
       return json({ error: "Ya existe un usuario con ese nombre." }, 409)
     }
 
-    // 6. Create auth user via Admin API with email_confirm: true for development
+    // Create auth user via Admin API with email_confirm: true for development
     // Duplicate email detection is handled by admin.createUser error response
     const { data: newUser, error: createUserError } = await adminClient.auth.admin.createUser({
       email,
@@ -176,163 +190,76 @@ serve(async (req) => {
 
     const userId = newUser.user.id
 
-    // 7. Create/update related SiteCorp records in a coordinated transaction
-    try {
-      // Create/update profile
-      const { error: profileError } = await adminClient.from("profiles").upsert(
-        {
-          id: userId,
-          full_name: fullName,
-          username,
-          is_active: isActive,
-        },
-        { onConflict: "id" }
-      )
-
-      if (profileError) {
-        throw { step: "profile", error: profileError }
-      }
-
-      let membershipId: string | null = null
-
-      // Create tenant membership if tenant_id provided
-      if (tenantId) {
-        const { data: existingMembership, error: membershipCheckError } = await adminClient
-          .from("tenant_memberships")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("user_id", userId)
-          .maybeSingle()
-
-        if (membershipCheckError) {
-          throw { step: "membership_check", error: membershipCheckError }
-        }
-
-        if (existingMembership) {
-          membershipId = existingMembership.id
-          const { error: updateError } = await adminClient
-            .from("tenant_memberships")
-            .update({ is_active: isActive })
-            .eq("id", membershipId)
-          if (updateError) {
-            throw { step: "membership_update", error: updateError }
-          }
-        } else {
-          const { data: newMembership, error: membershipError } = await adminClient
-            .from("tenant_memberships")
-            .insert({
-              tenant_id: tenantId,
-              user_id: userId,
-              is_active: isActive,
-            })
-            .select("id")
-            .single()
-
-          if (membershipError) {
-            throw { step: "membership_create", error: membershipError }
-          }
-          membershipId = newMembership.id
-        }
-      }
-
-      // Create entity user access if entity_id, tenant_role_id, and membership_id provided
-      if (entityId && tenantRoleId && membershipId) {
-        const { data: existingAccess, error: accessCheckError } = await adminClient
-          .from("entity_user_access")
-          .select("id")
-          .eq("tenant_membership_id", membershipId)
-          .eq("organization_entity_id", entityId)
-          .eq("tenant_role_id", tenantRoleId)
-          .maybeSingle()
-
-        if (accessCheckError) {
-          throw { step: "access_check", error: accessCheckError }
-        }
-
-        if (!existingAccess) {
-          const { error: accessError } = await adminClient.from("entity_user_access").insert({
-            tenant_membership_id: membershipId,
-            organization_entity_id: entityId,
-            tenant_role_id: tenantRoleId,
-            access_scope: accessScope,
-            is_active: isActive,
-            assigned_by: callerId,
-          })
-
-          if (accessError) {
-            throw { step: "access_create", error: accessError }
-          }
-        }
-      }
-
-      // Create tenant_user_roles record if tenant_role_id and membership_id provided
-      if (tenantRoleId && membershipId) {
-        const { data: existingRole, error: roleCheckError } = await adminClient
-          .from("tenant_user_roles")
-          .select("id")
-          .eq("tenant_membership_id", membershipId)
-          .eq("tenant_role_id", tenantRoleId)
-          .maybeSingle()
-
-        if (roleCheckError) {
-          throw { step: "role_check", error: roleCheckError }
-        }
-
-        if (!existingRole) {
-          const { error: roleError } = await adminClient
-            .from("tenant_user_roles")
-            .insert({
-              tenant_membership_id: membershipId,
-              tenant_role_id: tenantRoleId,
-              assigned_by: callerId,
-            })
-
-          if (roleError) {
-            throw { step: "role_create", error: roleError }
-          }
-        }
-      }
-
-      console.log("[create-sitecorp-user] user created successfully", {
-        userId,
-        email,
+    // Create profile record
+    const { error: profileError } = await adminClient.from("profiles").upsert(
+      {
+        id: userId,
+        full_name: fullName,
         username,
-        membershipId,
-      })
+        is_active: isActive,
+      },
+      { onConflict: "id" }
+    )
 
-      return json(
-        {
-          user_id: userId,
-          email,
-          username,
-          full_name: fullName,
-          tenant_membership_id: membershipId,
-          message: "Usuario creado correctamente.",
-        },
-        201
-      )
-    } catch (pipelineError: any) {
-      console.error("[create-sitecorp-user] rolling back created auth user", pipelineError)
-
-      // Rollback: delete the created auth user
+    if (profileError) {
+      console.error("[create-sitecorp-user] profile creation failed", profileError)
+      // Try to clean up the auth user
       try {
         await adminClient.auth.admin.deleteUser(userId)
-      } catch (rollbackError) {
-        console.error("[create-sitecorp-user] rollback delete failed", rollbackError)
+      } catch (cleanupError) {
+        console.error("[create-sitecorp-user] rollback delete failed", cleanupError)
       }
-
-      const step = pipelineError?.step || "unknown"
-      const errorMsg = pipelineError?.error?.message || "Error desconocido"
-
-      return json(
-        {
-          error: `No se pudo completar la creación del usuario (paso: ${step}): ${errorMsg}`,
-        },
-        500
-      )
+      return json({ error: "Error al crear el perfil: " + profileError.message }, 500)
     }
+
+    // Assign platform role
+    const { error: roleAssignError } = await adminClient.from("platform_user_roles").insert({
+      user_id: userId,
+      platform_role_id: platformRoleId,
+      assigned_by: callerId,
+    })
+
+    if (roleAssignError) {
+      console.error("[create-sitecorp-user] platform role assignment failed", roleAssignError)
+      // Try to clean up the profile and auth user
+      try {
+        await adminClient.from("profiles").delete().eq("id", userId)
+        await adminClient.auth.admin.deleteUser(userId)
+      } catch (cleanupError) {
+        console.error("[create-sitecorp-user] rollback failed", cleanupError)
+      }
+      return json({ error: "Error al asignar el rol de plataforma: " + roleAssignError.message }, 500)
+    }
+
+    console.log("[create-sitecorp-user] user created successfully", {
+      userId,
+      email,
+      platformRole: roleData.name,
+      isActive,
+    })
+
+    return json(
+      {
+        user_id: userId,
+        email,
+        username,
+        full_name: fullName,
+        platform_role_id: platformRoleId,
+        platform_role_name: roleData.name,
+        message: "Usuario creado correctamente.",
+      },
+      201
+    )
   } catch (error) {
     console.error("[create-sitecorp-user] unexpected error", error)
     return json({ error: "Error inesperado al crear el usuario." }, 500)
   }
 })
+
+/* To invoke this function:
+ * 
+ * curl -X POST 'https://<your-project-ref>.functions.supabase.co/create-sitecorp-user' \
+ * -H 'Authorization: Bearer <your-jwt>' \
+ * -H 'Content-Type: application/json' \
+ * -d '{"full_name":"Jane Doe","username":"jane_doe","email":"jane@example.com","password":"secret","platform_role_id":"<uuid>"}'
+ */

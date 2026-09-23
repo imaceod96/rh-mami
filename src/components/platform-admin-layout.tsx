@@ -1,7 +1,8 @@
 import * as React from "react"
-import { Outlet, Link, useNavigate } from "react-router-dom"
+import { Outlet, Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -11,7 +12,22 @@ import {
   User,
   LogOut,
   ArrowLeft,
+  Layers,
+  Building,
+  Factory,
 } from "lucide-react"
+
+const entityTypeLabels: Record<string, string> = {
+  business_group: "Grupo empresarial",
+  company: "Empresa",
+  ueb: "UEB",
+}
+
+const typeIcon = (type: string) => {
+  if (type === "business_group") return <Layers className="h-4 w-4" />
+  if (type === "company") return <Building className="h-4 w-4" />
+  return <Factory className="h-4 w-4" />
+}
 
 const PlatformAdminLayout = React.forwardRef<
   HTMLDivElement,
@@ -19,7 +35,9 @@ const PlatformAdminLayout = React.forwardRef<
 >(({ className, ...props }, ref) => {
   const { user, logout } = useAuth()
   const { currentTenant, clearCurrentTenant } = useCurrentTenant()
+  const { currentEntity, setCurrentEntity, clearCurrentEntity } = useCurrentEntity()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleLogout = async () => {
     await logout()
@@ -28,8 +46,11 @@ const PlatformAdminLayout = React.forwardRef<
 
   const handleReturnToAdmin = () => {
     clearCurrentTenant()
+    clearCurrentEntity()
     navigate("/admin")
   }
+
+  const isEntityRoute = location.pathname.startsWith("/organization/")
 
   return (
     <div
@@ -123,11 +144,37 @@ const PlatformAdminLayout = React.forwardRef<
             </div>
           </div>
         )}
+        {isEntityRoute && currentEntity && !currentTenant && (
+          <div className="border-b border-border bg-muted/30 px-6 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleReturnToAdmin}
+                className="inline-flex items-center gap-2 rounded-md bg-sitecorp-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sitecorp-primary-dark"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Volver a administración global
+              </button>
+              <span className="text-sm text-muted-foreground">
+                Actualmente en:{" "}
+                <strong className="text-ink flex items-center gap-1">
+                  {typeIcon(currentEntity.entity_type)}
+                  {currentEntity.name}
+                  <SiteCorpStatusBadge status="neutral">
+                    {entityTypeLabels[currentEntity.entity_type] || "Entidad"}
+                  </SiteCorpStatusBadge>
+                </strong>
+              </span>
+            </div>
+          </div>
+        )}
         <Outlet />
       </main>
     </div>
   )
 })
 PlatformAdminLayout.displayName = "PlatformAdminLayout"
+
+// Import SiteCorpStatusBadge for entity display
+import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 
 export { PlatformAdminLayout }
