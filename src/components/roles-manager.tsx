@@ -45,6 +45,7 @@ interface RoleRecord {
   permissionIds: string[]
   permissionCodes: string[]
   assignedUserCount: number
+  organizationEntityId: string | null
 }
 
 interface RoleForm {
@@ -233,9 +234,11 @@ const friendlySaveError = (scope: RoleScope, error: unknown) => {
 export const RolesManager = ({
   scope,
   tenantId,
+  organizationEntityId,
 }: {
   scope: RoleScope
   tenantId?: string
+  organizationEntityId?: string
 }) => {
   const isPlatform = scope === "platform"
   const [roles, setRoles] = React.useState<RoleRecord[]>([])
@@ -253,6 +256,7 @@ export const RolesManager = ({
   const [viewingRole, setViewingRole] = React.useState<RoleRecord | null>(null)
 
   const organizationReady = scope === "organization" && Boolean(tenantId)
+  const entityReady = scope === "organization" && Boolean(organizationEntityId)
 
   const loadData = React.useCallback(async () => {
     if (scope === "organization" && !tenantId) {
@@ -271,6 +275,7 @@ export const RolesManager = ({
             .from("tenant_roles")
             .select("*")
             .eq("tenant_id", tenantId as string)
+            .eq("organization_entity_id", organizationEntityId as string)
             .order("name")
 
       const [rolesResult, permissionsResult] = await Promise.all([
@@ -364,6 +369,7 @@ export const RolesManager = ({
               (assignment) => assignment.userId
             )
           ).size,
+          organizationEntityId: role.organization_entity_id || null,
         } as RoleRecord
       })
 
@@ -374,7 +380,7 @@ export const RolesManager = ({
     } finally {
       setLoading(false)
     }
-  }, [isPlatform, scope, tenantId])
+  }, [isPlatform, scope, tenantId, organizationEntityId])
 
   React.useEffect(() => {
     loadData()
@@ -429,6 +435,7 @@ export const RolesManager = ({
       : supabase.rpc("save_tenant_role", {
           p_role_id: role?.id || null,
           p_tenant_id: tenantId,
+          p_organization_entity_id: organizationEntityId,
           p_name: nextForm.name,
           p_description: nextForm.description,
           p_is_active: nextForm.is_active,
@@ -483,6 +490,37 @@ export const RolesManager = ({
       )
 
       setSuccess(`Rol ${role.is_active ? "desactivado" : "activado"} correctamente.`)
+      await loadData()
+    } catch (err) {
+      setError(friendlySaveError(scope, err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteRole = async (role: RoleRecord) => {
+    try {
+      setError(null)
+      setSuccess(null)
+      setSaving(true)
+
+      if (isPlatform && role.name === "SuperAdmin" && role.is_system_role) {
+        throw new Error("El rol SuperAdmin no puede eliminarse")
+      }
+
+      // Check if role has assigned users
+      if (role.assignedUserCount > 0) {
+        throw new Error("No se puede eliminar un rol que tiene usuarios asignados")
+      }
+
+      const request = isPlatform
+        ? supabase.from("platform_roles").delete().eq("id", role.id)
+        : supabase.from("tenant_roles").delete().eq("id", role.id)
+
+      const { error: deleteError } = await request
+      if (deleteError) throw deleteError
+
+      setSuccess("Rol eliminado correctamente.")
       await loadData()
     } catch (err) {
       setError(friendlySaveError(scope, err))
@@ -564,6 +602,11 @@ export const RolesManager = ({
             Selecciona un workspace de organización para gestionar sus roles.
           </SiteCorpAlert>
         )}
+        {!entityReady && scope === "organization" && (
+          <SiteCorpAlert type="warning" title="Entidad requerida">
+            Selecciona una entidad organizativa para gestionar sus roles.
+          </SiteCorpAlert>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -573,7 +616,7 @@ export const RolesManager = ({
           </div>
           <SiteCorpButton
             onClick={openCreate}
-            disabled={scope === "organization" && !organizationReady}
+            disabled={scope === "organization" && !entityReady}
           >
             <Plus className="mr-2 h-4 w-4" />
             {isPlatform ? "Nuevo rol de plataforma" : "Nuevo rol"}
@@ -586,7 +629,7 @@ export const RolesManager = ({
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             {isPlatform
               ? "No hay roles de plataforma disponibles."
-              : "Este workspace aún no tiene roles de organización."}
+              : "Esta entidad aún no tiene roles de organización."}
           </div>
         ) : (
           <div className="space-y-3">
@@ -646,7 +689,7 @@ export const RolesManager = ({
                       size="sm"
                       variant="outline"
                       disabled={saving}
-                      onClick={() => toggleActive(role)}
+                      onClick={() => deleteRole(role)}
                     >
                       <Power className="mr-1 h-3.5 w-3.5" />
                       {role.is_active ? "Desactivar" : "Activar"}
@@ -657,180 +700,180 @@ export const RolesManager = ({
             ))}
           </div>
         )}
-      </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <ShieldCheck className="h-5 w-5 text-sitecorp-primary" />
-              {editingRole
-                ? `Editar ${editingRole.name}`
-                : isPlatform
-                  ? "Nuevo rol de plataforma"
-                  : "Nuevo rol de organización"}
-            </DialogTitle>
-            <DialogDescription>
-              {isPlatform
-                ? "Los permisos seleccionados controlan la administración de la plataforma SiteCorp."
-                : "El rol define las capacidades. El acceso a entidades organizativas se gestiona por separado."}
-            </DialogDescription>
-          </DialogHeader>
+        <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
+          <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <ShieldCheck className="h-5 w-5 text-sitecorp-primary" />
+                {editingRole
+                  ? `Editar ${editingRole.name}`
+                  : isPlatform
+                    ? "Nuevo rol de plataforma"
+                    : "Nuevo rol de organización"}
+              </DialogTitle>
+              <DialogDescription>
+                {isPlatform
+                  ? "Los permisos seleccionados controlan la administración de la plataforma SiteCorp."
+                  : "El rol define las capacidades. El acceso a entidades organizativas se gestiona por separado."}
+              </DialogDescription>
+            </DialogHeader>
 
-          {formError && (
-            <SiteCorpAlert type="danger" title="Error">
-              {formError}
-            </SiteCorpAlert>
-          )}
+            {formError && (
+              <SiteCorpAlert type="danger" title="Error">
+                {formError}
+              </SiteCorpAlert>
+            )}
 
-          {permissionsLocked && (
-            <SiteCorpAlert type="info" title="Rol reservado">
-              SuperAdmin tiene acceso completo mediante la función reservada del sistema. Sus
-              permisos normales no pueden reducirse ni cambiarse.
-            </SiteCorpAlert>
-          )}
+            {permissionsLocked && (
+              <SiteCorpAlert type="info" title="Rol reservado">
+                SuperAdmin tiene acceso completo mediante la función reservada del sistema. Sus
+                permisos normales no pueden reducirse ni cambiarse.
+              </SiteCorpAlert>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-ink">Nombre</label>
-                <SiteCorpInput
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  disabled={Boolean(editingRole?.is_system_role)}
-                  required
-                />
-              </div>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-ink">Nombre</label>
+                  <SiteCorpInput
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    disabled={Boolean(editingRole?.is_system_role)}
+                    required
+                  />
+                </div>
 
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="text-sm font-medium text-ink">Descripción</label>
-                <SiteCorpInput
-                  value={form.description}
-                  onChange={(event) => setForm({ ...form, description: event.target.value })}
-                  placeholder="Descripción opcional"
-                />
-              </div>
-            </div>
-
-            <SiteCorpSelect
-              label="Estado"
-              value={form.is_active ? "active" : "inactive"}
-              onValueChange={(value) => setForm({ ...form, is_active: value === "active" })}
-              disabled={Boolean(editingRole?.is_system_role)}
-            >
-              <SelectItem value="active">Activo</SelectItem>
-              <SelectItem value="inactive">Inactivo</SelectItem>
-            </SiteCorpSelect>
-
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-ink">Permisos del sistema</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedPermissionIds.length} seleccionados · catálogo controlado por base de
-                    datos
-                  </p>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-sm font-medium text-ink">Descripción</label>
+                  <SiteCorpInput
+                    value={form.description}
+                    onChange={(event) => setForm({ ...form, description: event.target.value })}
+                    placeholder="Descripción opcional"
+                  />
                 </div>
               </div>
 
-              {allGroups.map((group) => {
-                const groupPermissions = permissions.filter((permission) =>
-                  group.codes.includes(permission.code)
-                )
+              <SiteCorpSelect
+                label="Estado"
+                value={form.is_active ? "active" : "inactive"}
+                onValueChange={(value) => setForm({ ...form, is_active: value === "active" })}
+                disabled={Boolean(editingRole?.is_system_role)}
+              >
+                <SelectItem value="active">Activo</SelectItem>
+                <SelectItem value="inactive">Inactivo</SelectItem>
+              </SiteCorpSelect>
 
-                if (groupPermissions.length === 0) return null
-
-                return (
-                  <section key={group.title} className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      {group.title}
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-ink">Permisos del sistema</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedPermissionIds.length} seleccionados · catálogo controlado por base de
+                      datos
                     </p>
-                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                      {groupPermissions.map(renderPermissionCheckbox)}
-                    </div>
-                  </section>
-                )
-              })}
-            </div>
+                  </div>
+                </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <SiteCorpButton type="button" variant="outline" onClick={closeDialog} disabled={saving}>
-                Cancelar
-              </SiteCorpButton>
-              <SiteCorpButton type="submit" disabled={saving}>
-                <Save className="mr-2 h-4 w-4" />
-                {saving ? "Guardando..." : editingRole ? "Guardar cambios" : "Crear rol"}
-              </SiteCorpButton>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+                {allGroups.map((group) => {
+                  const groupPermissions = permissions.filter((permission) =>
+                    group.codes.includes(permission.code)
+                  )
 
-      <Dialog
-        open={Boolean(viewingRole)}
-        onOpenChange={(open) => {
-          if (!open) setViewingRole(null)
-        }}
-      >
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <ShieldCheck className="h-5 w-5 text-sitecorp-primary" />
-              Permisos de {viewingRole?.name}
-            </DialogTitle>
-            <DialogDescription>
-              {viewingRole?.is_system_role
-                ? "Rol del sistema con controles protegidos."
-                : "Rol personalizado construido a partir del catálogo de permisos."}
-            </DialogDescription>
-          </DialogHeader>
+                  if (groupPermissions.length === 0) return null
 
-          {viewingRole && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <SiteCorpStatusBadge
-                  status={viewingRole.is_active ? "success" : "warning"}
-                >
-                  {viewingRole.is_active ? "Activo" : "Inactivo"}
-                </SiteCorpStatusBadge>
-                <SiteCorpStatusBadge status="neutral">
-                  {viewingRole.permissionIds.length} permisos
-                </SiteCorpStatusBadge>
-                <SiteCorpStatusBadge status="neutral">
-                  {viewingRole.assignedUserCount} usuarios
-                </SiteCorpStatusBadge>
+                  return (
+                    <section key={group.title} className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {group.title}
+                      </p>
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {groupPermissions.map(renderPermissionCheckbox)}
+                      </div>
+                    </section>
+                  )
+                })}
               </div>
 
-              {isPlatform && viewingRole.name === "SuperAdmin" ? (
-                <SiteCorpAlert type="info" title="Acceso completo reservado">
-                  SuperAdmin no depende de la lista normal de permisos. La autorización reservada le
-                  otorga acceso completo a la plataforma.
-                </SiteCorpAlert>
-              ) : viewingRole.permissionCodes.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
-                  Este rol no tiene permisos asignados.
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {viewingRole.permissionCodes.map((code) => {
-                    const permission = permissions.find((item) => item.code === code)
-                    return (
-                      <span
-                        key={code}
-                        className="inline-flex items-center rounded-lg border border-border bg-sitecorp-background px-3 py-1.5 text-xs font-medium text-ink"
-                      >
-                        {permission ? permissionLabel(scope, permission) : code}
-                      </span>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </SiteCorpCard>
-  )
-}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <SiteCorpButton type="button" variant="outline" onClick={closeDialog} disabled={saving}>
+                  Cancelar
+                </SiteCorpButton>
+                <SiteCorpButton type="submit" disabled={saving}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? "Guardando..." : editingRole ? "Guardar cambios" : "Crear rol"}
+                </SiteCorpButton>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
-export default RolesManager
+        <Dialog
+          open={Boolean(viewingRole)}
+          onOpenChange={(open) => {
+            if (!open) setViewingRole(null)
+          }}
+        >
+          <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <ShieldCheck className="h-5 w-5 text-sitecorp-primary" />
+                Permisos de {viewingRole?.name}
+              </DialogTitle>
+              <DialogDescription>
+                {viewingRole?.is_system_role
+                  ? "Rol del sistema con controles protegidos."
+                  : "Rol personalizado construido a partir del catálogo de permisos."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {viewingRole && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <SiteCorpStatusBadge
+                    status={viewingRole.is_active ? "success" : "warning"}
+                  >
+                    {viewingRole.is_active ? "Activo" : "Inactivo"}
+                  </SiteCorpStatusBadge>
+                  <SiteCorpStatusBadge status="neutral">
+                    {viewingRole.permissionIds.length} permisos
+                  </SiteCorpStatusBadge>
+                  <SiteCorpStatusBadge status="neutral">
+                    {viewingRole.assignedUserCount} usuarios
+                  </SiteCorpStatusBadge>
+                </div>
+
+                {isPlatform && viewingRole.name === "SuperAdmin" ? (
+                  <SiteCorpAlert type="info" title="Acceso completo reservado">
+                    SuperAdmin no depende de la lista normal de permisos. La autorización reservada le
+                    otorga acceso completo a la plataforma.
+                  </SiteCorpAlert>
+                ) : viewingRole.permissionCodes.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                    Este rol no tiene permisos asignados.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {viewingRole.permissionCodes.map((code) => {
+                      const permission = permissions.find((item) => item.code === code)
+                      return (
+                        <span
+                          key={code}
+                          className="inline-flex items-center rounded-lg border border-border bg-sitecorp-background px-3 py-1.5 text-xs font-medium text-ink"
+                        >
+                          {permission ? permissionLabel(scope, permission) : code}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+          </SiteCorpCard>
+        )
+      }
+      
+      export default RolesManager

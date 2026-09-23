@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { EntityUsersDialog } from "@/components/entity-users-dialog"
 import { OrganizationEntityDialog } from "@/components/organization-entity-dialog"
+import RolesManager from "@/components/roles-manager"
 
 interface OrganizationEntity {
   id: string
@@ -618,6 +619,11 @@ const OrganizationDetail = () => {
           )}
         </SiteCorpCard>
       </div>
+      
+      {/* Roles y permisos de la entidad */}
+      <SiteCorpCard title="Roles y permisos" description="Gestiona los roles y permisos específicos para esta entidad organizativa">
+        <RolesManager scope="organization" tenantId={currentTenant?.id} organizationEntityId={entity?.id} />
+      </SiteCorpCard>
       
       {/* Entity actions */}
       <div className="flex flex-col gap-3 md:flex-row md:justify-end">
