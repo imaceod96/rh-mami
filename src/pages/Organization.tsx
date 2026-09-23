@@ -9,9 +9,15 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
-import { Input as SiteCorpInput } from "@/components/ui/sitecorp-input"
+import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Building2, ChevronDown, ChevronRight, Factory, Layers, Pencil, Plus, Search, Trash2, Users } from "lucide-react"
+
+interface Tenant {
+  id: string
+  name: string
+  [key: string]: any
+}
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { OrganizationEntityDialog } from "@/components/organization-entity-dialog"
 
@@ -169,12 +175,11 @@ const Organization = () => {
             <div className="flex items-center gap-2">
               <SiteCorpStatusBadge
                 status={entity.is_active ? "success" : "danger"}
-                size="xs"
               >
                 {entity.is_active ? "Activa" : "Inactiva"}
               </SiteCorpStatusBadge>
               {entity.is_sitecorp_account && (
-                <SiteCorpStatusBadge status="info" size="xs">
+                <SiteCorpStatusBadge status="info">
                   Cuenta
                 </SiteCorpStatusBadge>
               )}
@@ -239,7 +244,6 @@ const Organization = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-80"
-          leftIcon={<Search className="h-4 w-4" />}
         />
         
         {isPlatformSuperAdmin && (
@@ -274,7 +278,7 @@ const Organization = () => {
         open={entityDialogOpen}
         onOpenChange={setEntityDialogOpen}
         onSaved={loadEntities}
-        tenants={currentTenant ? [currentTenant] : []}
+        tenants={currentTenant ? [currentTenant as Tenant] : []}
         entities={entities}
         editingEntity={editingEntity}
         defaultTenantId={currentTenant?.id || ""}

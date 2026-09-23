@@ -23,7 +23,9 @@ import { SelectItem } from "@/components/ui/select"
 import EntityUsersDialog, {
   type OrganizationEntity,
 } from "@/components/entity-users-dialog"
-import OrganizationEntityDialog from "@/components/organization-entity-dialog"
+import {
+  OrganizationEntityDialog,
+} from "@/components/organization-entity-dialog"
 import {
   Building2,
   ChevronDown,

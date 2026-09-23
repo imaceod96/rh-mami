@@ -36,6 +36,12 @@ import {
   ArrowLeft,
   LogOut,
 } from "lucide-react"
+
+interface Tenant {
+  id: string
+  name: string
+  [key: string]: any
+}
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -397,7 +403,6 @@ const OrganizationDetail = () => {
                   <span className="flex-1">{tenantEntity.name}</span>
                   <SiteCorpStatusBadge
                     status={tenantEntity.is_sitecorp_account && tenantEntity.account_is_active ? "success" : "neutral"}
-                    size="xs"
                   >
                     {tenantEntity.is_sitecorp_account ? "Cuenta" : "Sin cuenta"}
                   </SiteCorpStatusBadge>
@@ -667,7 +672,7 @@ const OrganizationDetail = () => {
         open={entityDialogOpen}
         onOpenChange={setEntityDialogOpen}
         onSaved={loadEntityData}
-        tenants={currentTenant ? [currentTenant] : []}
+        tenants={currentTenant ? [currentTenant as Tenant] : []}
         entities={tenantEntities}
         editingEntity={editingEntity}
         defaultTenantId={currentTenant?.id || ""}

@@ -132,7 +132,7 @@ export const OrganizationEntityDialog = ({
           tenant_id: editingEntity.tenant_id,
           parent_id: editingEntity.parent_id,
           regime_id: editingEntity.regime_id,
-          status: editingEntity.status,
+          status: editingEntity.status as "active" | "inactive",
           description: editingEntity.description,
           address: editingEntity.address,
           municipality: editingEntity.municipality,
