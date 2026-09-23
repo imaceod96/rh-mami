@@ -194,8 +194,9 @@ const PlatformUsers = () => {
   const loadEffectivePermissions = async (user: PlatformUser) => {
     try {
       const { data, error } = await supabase.rpc("has_platform_permission", {
-        p_code: "users.view_all",
+        permission_code: "users.view_all",
       })
+      if (error) throw error
       console.log("Effective permissions for", user.full_name, data)
     } catch (err) {
       console.error("Error loading permissions:", err)

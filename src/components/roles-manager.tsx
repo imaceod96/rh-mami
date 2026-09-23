@@ -567,7 +567,10 @@ export const RolesManager = ({
             {roles.length} {roles.length === 1 ? "rol" : "roles"} · {permissions.length} permisos del
             sistema
           </div>
-          <SiteCorpButton onClick={openCreate} disabled={!organizationReady}>
+          <SiteCorpButton
+            onClick={openCreate}
+            disabled={scope === "organization" && !organizationReady}
+          >
             <Plus className="mr-2 h-4 w-4" />
             {isPlatform ? "Nuevo rol de plataforma" : "Nuevo rol"}
           </SiteCorpButton>

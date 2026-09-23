@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { supabase } from "@/lib/supabase"
@@ -7,11 +8,12 @@ import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
-import { Building2, Users, Settings, ArrowRight } from "lucide-react"
+import { Building2, Users, Shield, ArrowRight } from "lucide-react"
 
 const Admin = () => {
   const { user, profile, isPlatformSuperAdmin } = useAuth()
   const { currentTenant } = useCurrentTenant()
+  const navigate = useNavigate()
   const [metrics, setMetrics] = React.useState({
     total: 0,
     active: 0,
@@ -47,29 +49,29 @@ const Admin = () => {
       />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <SiteCorpCard title="Total de cuentas">
+        <SiteCorpCard title="Total de workspaces">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-3xl font-bold text-ink">{metrics.total}</p>
-              <p className="text-sm text-muted-foreground">Cuentas registradas</p>
+              <p className="text-sm text-muted-foreground">Workspaces registrados</p>
             </div>
             <Building2 className="h-8 w-8 text-sitecorp-primary" />
           </div>
         </SiteCorpCard>
-        <SiteCorpCard title="Cuentas activas">
+        <SiteCorpCard title="Workspaces activos">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-3xl font-bold text-sitecorp-success">{metrics.active}</p>
-              <p className="text-sm text-muted-foreground">Cuentas activas</p>
+              <p className="text-sm text-muted-foreground">Workspaces activos</p>
             </div>
             <SiteCorpStatusBadge status="success">Activo</SiteCorpStatusBadge>
           </div>
         </SiteCorpCard>
-        <SiteCorpCard title="Cuentas inactivas">
+        <SiteCorpCard title="Workspaces inactivos">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-3xl font-bold text-sitecorp-warning">{metrics.inactive}</p>
-              <p className="text-sm text-muted-foreground">Cuentas inactivas</p>
+              <p className="text-sm text-muted-foreground">Workspaces inactivos</p>
             </div>
             <SiteCorpStatusBadge status="warning">Inactivo</SiteCorpStatusBadge>
           </div>
@@ -101,21 +103,37 @@ const Admin = () => {
 
         <SiteCorpCard title="Acciones rápidas">
           <div className="space-y-3">
-            <SiteCorpButton className="w-full justify-start" variant="outline">
+            <SiteCorpButton
+              className="w-full justify-start"
+              variant="outline"
+              onClick={() => navigate("/admin/companies")}
+            >
               <Building2 className="h-4 w-4 mr-2" />
-              Gestionar empresas
+              Clientes / Organizaciones
             </SiteCorpButton>
-            <SiteCorpButton className="w-full justify-start" variant="outline">
-              <Settings className="h-4 w-4 mr-2" />
-              Configuración de plataforma
+            <SiteCorpButton
+              className="w-full justify-start"
+              variant="outline"
+              onClick={() => navigate("/admin/users")}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Usuarios de plataforma
+            </SiteCorpButton>
+            <SiteCorpButton
+              className="w-full justify-start"
+              variant="outline"
+              onClick={() => navigate("/admin/roles")}
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Roles y permisos
             </SiteCorpButton>
           </div>
         </SiteCorpCard>
       </div>
 
       <div className="mt-6">
-        <SiteCorpButton>
-          Ir a Empresas <ArrowRight className="h-4 w-4 ml-2" />
+        <SiteCorpButton onClick={() => navigate("/admin/companies")}>
+          Ir a Clientes / Organizaciones <ArrowRight className="h-4 w-4 ml-2" />
         </SiteCorpButton>
       </div>
     </div>
