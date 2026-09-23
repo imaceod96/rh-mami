@@ -11,6 +11,7 @@ import { TenantLayout } from "@/components/tenant-layout"
 import Login from "./pages/Login"
 import Index from "./pages/Index"
 import Organization from "./pages/Organization"
+import OrganizationDetail from "./pages/OrganizationDetail"
 import Candidates from "./pages/Candidates"
 import Hiring from "./pages/Hiring"
 import Admin from "./pages/Admin"
@@ -118,20 +119,21 @@ const AppRoutes = () => {
     }
 
   // Tenant user -> Tenant Application
-  return (
-    <Routes>
-      <Route element={<TenantLayout />}>
-        <Route path="/" element={<Index />} />
-        <Route path="/organization" element={<Organization />} />
-        <Route path="/candidates" element={<Candidates />} />
-        <Route path="/hiring" element={<Hiring />} />
-        <Route path="/tenant/users" element={<TenantUsers />} />
-        <Route path="/tenant/roles" element={<TenantRoles />} />
-        <Route path="/tenant/invitations" element={<TenantInvitations />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
-  )
+    return (
+      <Routes>
+        <Route element={<TenantLayout />}>
+          <Route path="/" element={<Index />} />
+          <Route path="/organization" element={<Organization />} />
+          <Route path="/organization/:entityId" element={<OrganizationDetail />} />
+          <Route path="/candidates" element={<Candidates />} />
+          <Route path="/hiring" element={<Hiring />} />
+          <Route path="/tenant/users" element={<TenantUsers />} />
+          <Route path="/tenant/roles" element={<TenantRoles />} />
+          <Route path="/tenant/invitations" element={<TenantInvitations />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    )
 }
 
 const App = () => (
