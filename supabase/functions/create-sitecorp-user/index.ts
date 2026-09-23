@@ -49,19 +49,19 @@ serve(async (req) => {
   )
 
   try {
-    // Verify caller identity
+    // 1. Verify caller identity
     const { data: callerData, error: callerError } = await adminClient.auth.getUser(token)
-    if (callerError || !callerData.user) {
+    if (callerError || !callerData?.user) {
       console.error("[create-sitecorp-user] invalid caller token", callerError)
       return json({ error: "Unauthorized" }, 401)
     }
 
     const callerId = callerData.user.id
 
-    // Verify caller profile is active
+    // 2. Verify caller has an active platform profile
     const { data: callerProfile, error: callerProfileError } = await adminClient
       .from("profiles")
-      .select("id,is_active")
+      .select("id, is_active")
       .eq("id", callerId)
       .single()
 
@@ -70,10 +70,10 @@ serve(async (req) => {
       return json({ error: "Forbidden: inactive platform administrator" }, 403)
     }
 
-    // Verify caller authorization: SuperAdmin OR has users.manage_all permission
+    // 3. Verify caller authorization: SuperAdmin OR has users.manage_all permission
     const { data: callerRoles, error: callerRolesError } = await adminClient
       .from("platform_user_roles")
-      .select("platform_role_id, platform_roles(name,is_system_role,is_active)")
+      .select("platform_role_id, platform_roles(name, is_system_role, is_active)")
       .eq("user_id", callerId)
 
     if (callerRolesError) {
@@ -91,23 +91,30 @@ serve(async (req) => {
     // Check for users.manage_all permission
     const { data: permissionData, error: permissionError } = await adminClient
       .from("platform_user_roles")
-      .select("platform_role_id, platform_roles!inner(platform_role_permissions!inner(platform_permissions!inner(code)))")
+      .select("platform_role_id")
       .eq("user_id", callerId)
-      .eq("platform_roles.is_active", true)
 
-    const hasManageAllPermission = (permissionData || []).some(
-      (assignment: any) => {
-        const permissions = assignment.platform_roles?.platform_role_permissions || []
-        return permissions.some((p: any) => p.platform_permissions?.code === "users.manage_all")
+    let hasManageAllPermission = false
+    if (!permissionError && permissionData) {
+      const roleIds = permissionData.map((p: any) => p.platform_role_id)
+      const { data: permData, error: permError } = await adminClient
+        .from("platform_role_permissions")
+        .select("platform_role_id, platform_permissions(code)")
+        .in("platform_role_id", roleIds)
+
+      if (!permError && permData) {
+        hasManageAllPermission = permData.some(
+          (p: any) => p.platform_permissions?.code === "users.manage_all"
+        )
       }
-    )
+    }
 
     if (!isSuperAdmin && !hasManageAllPermission) {
       console.error("[create-sitecorp-user] caller not authorized", { callerId })
       return json({ error: "Forbidden: insufficient permissions to create users" }, 403)
     }
 
-    // Parse request body
+    // 4. Parse and validate request body
     const body = (await req.json()) as CreateSitecorpUserRequest
     const fullName = (body.full_name ?? "").trim()
     const username = (body.username ?? "").trim()
@@ -130,10 +137,10 @@ serve(async (req) => {
       return json({ error: "Introduce un email válido." }, 400)
     }
 
-    // Validate username uniqueness
+    // 5. Check username uniqueness
     const { data: existingUsername, error: usernameError } = await adminClient
       .from("profiles")
-      .select("id,username")
+      .select("id, username")
       .eq("username", username)
       .maybeSingle()
 
@@ -145,7 +152,8 @@ serve(async (req) => {
       return json({ error: "Ya existe un usuario con ese nombre." }, 409)
     }
 
-    // Create auth user via Admin API with email_confirm: true for development
+    // 6. Create auth user via Admin API with email_confirm: true for development
+    // Duplicate email detection is handled by admin.createUser error response
     const { data: newUser, error: createUserError } = await adminClient.auth.admin.createUser({
       email,
       password,
@@ -168,6 +176,7 @@ serve(async (req) => {
 
     const userId = newUser.user.id
 
+    // 7. Create/update related SiteCorp records in a coordinated transaction
     try {
       // Create/update profile
       const { error: profileError } = await adminClient.from("profiles").upsert(
@@ -184,8 +193,9 @@ serve(async (req) => {
         throw { step: "profile", error: profileError }
       }
 
-      // Create tenant membership if tenant_id provided
       let membershipId: string | null = null
+
+      // Create tenant membership if tenant_id provided
       if (tenantId) {
         const { data: existingMembership, error: membershipCheckError } = await adminClient
           .from("tenant_memberships")

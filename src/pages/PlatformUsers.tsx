@@ -467,64 +467,69 @@ const PlatformUsers = () => {
                       </div>
                       
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-ink">Workspace</label>
-                        <SiteCorpSelect
-                          value={formData.tenant_id}
-                          onValueChange={(value) => {
-                            setFormData({ ...formData, tenant_id: value ?? "" })
-                            setSelectedRoleId("")
-                          }}
-                          options={tenants.map(t => ({
-                            value: t.id,
-                            label: t.name,
-                            description: t.code || "",
-                          }))}
-                          disabled={loadingTenants}
-                        />
-                      </div>
+                                              <label className="text-sm font-medium text-ink">Workspace</label>
+                                              <SiteCorpSelect
+                                                value={formData.tenant_id}
+                                                onValueChange={(value) => {
+                                                  setFormData({ ...formData, tenant_id: value ?? "" })
+                                                  setSelectedRoleId("")
+                                                }}
+                                                disabled={loadingTenants}
+                                              >
+                                                {tenants.map(t => (
+                                                  <SelectItem key={t.id} value={t.id}>
+                                                    {t.name}
+                                                    <span className="text-xs text-muted-foreground block">{t.code}</span>
+                                                  </SelectItem>
+                                                ))}
+                                              </SiteCorpSelect>
+                                            </div>
                       
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-ink">Entidad organizacional</label>
-                        <SiteCorpSelect
-                          value={formData.entity_id}
-                          onValueChange={(value) => setFormData({ ...formData, entity_id: value ?? "" })}
-                          placeholder="Selecciona una entidad"
-                          options={entities.map(e => ({
-                            value: e.id,
-                            label: e.name,
-                            description: `[${e.entity_type}] ${e.code}`,
-                          }))}
-                          disabled={loadingEntities}
-                        loadingEntities
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-ink">Rol en el workspace</label>
-                        <SiteCorpSelect
-                          value={formData.tenant_role_id}
-                          onValueChange={(value) => setFormData({ ...formData, tenant_role_id: value ?? "" })}
-                          placeholder="Selecciona un rol"
-                          options={tenantRoles.map(r => ({
-                            value: r.id,
-                            label: r.name,
-                          }))}
-                          disabled={loadingTenantRoles}
-                        />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-ink">Alcance de acceso</label>
-                        <SiteCorpSelect
-                          value={formData.access_scope}
-                          onValueChange={(value) => setFormData({ ...formData, access_scope: value as "SELF" | "SELF_AND_DESCENDANTS" })}
-                          placeholder="Selecciona el alcance"
-                          options={[
-                            { value: "SELF", label: "Solo esta entidad (SELF)" },
-                            { value: "SELF_AND_DESCENDANTS", label: "Esta entidad y sus descendientes (SELF_AND_DESCENDANTS)" }
-                          ]}
-                        />
-                      </div>
+                                              <label className="text-sm font-medium text-ink">Entidad organizacional</label>
+                                              <SiteCorpSelect
+                                                value={formData.entity_id}
+                                                onValueChange={(value) => setFormData({ ...formData, entity_id: value ?? "" })}
+                                                disabled={loadingEntities}
+                                              >
+                                                {entities.map(e => (
+                                                  <SelectItem key={e.id} value={e.id}>
+                                                    {e.name}
+                                                    <span className="text-xs text-muted-foreground block">[{e.entity_type}] {e.code}</span>
+                                                  </SelectItem>
+                                                ))}
+                                              </SiteCorpSelect>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                              <label className="text-sm font-medium text-ink">Rol en el workspace</label>
+                                              <SiteCorpSelect
+                                                value={formData.tenant_role_id}
+                                                onValueChange={(value) => setFormData({ ...formData, tenant_role_id: value ?? "" })}
+                                                disabled={loadingTenantRoles}
+                                              >
+                                                {tenantRoles.map(r => (
+                                                  <SelectItem key={r.id} value={r.id}>
+                                                    {r.name}
+                                                  </SelectItem>
+                                                ))}
+                                              </SiteCorpSelect>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                              <label className="text-sm font-medium text-ink">Alcance de acceso</label>
+                                              <SiteCorpSelect
+                                                value={formData.access_scope}
+                                                onValueChange={(value) => setFormData({ ...formData, access_scope: value as "SELF" | "SELF_AND_DESCENDANTS" })}
+                                              >
+                                                <SelectItem value="SELF">
+                                                  Solo esta entidad (SELF)
+                                                </SelectItem>
+                                                <SelectItem value="SELF_AND_DESCENDANTS">
+                                                  Esta entidad y sus descendientes (SELF_AND_DESCENDANTS)
+                                                </SelectItem>
+                                              </SiteCorpSelect>
+                                            </div>
                       
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-medium text-ink">
