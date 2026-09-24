@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/contexts/AuthContext"
 import { CurrentTenantProvider, useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { CurrentEntityProvider, useCurrentEntity } from "@/contexts/CurrentEntityContext"
+import { SalaryProvider } from "@/contexts/SalaryContext"
 import { PlatformAdminLayout } from "@/components/platform-admin-layout"
 import EntityRouteWrapper from "@/components/entity-route-wrapper"
 import { TenantLayout } from "@/components/tenant-layout"
@@ -171,12 +172,14 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <CurrentTenantProvider>
-              <CurrentEntityProvider>
-                <AppRoutes />
-              </CurrentEntityProvider>
-            </CurrentTenantProvider>
-          </AuthProvider>
+                      <CurrentTenantProvider>
+                        <CurrentEntityProvider>
+                          <SalaryProvider>
+                            <AppRoutes />
+                          </SalaryProvider>
+                        </CurrentEntityProvider>
+                      </CurrentTenantProvider>
+                    </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

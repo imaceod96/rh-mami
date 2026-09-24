@@ -323,7 +323,7 @@ const Organizations = () => {
     }
   
     const enterEntity = (entity: OrganizationEntity) => {
-      navigate(`/organization/${entity.id}`)
+      navigate(`/entity/${entity.id}/panel`)
     }
 
   const renderEntity = (entity: OrganizationEntity, depth: number): React.ReactNode => {
