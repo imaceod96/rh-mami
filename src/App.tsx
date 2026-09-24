@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext"
 import { CurrentTenantProvider, useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { CurrentEntityProvider, useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { PlatformAdminLayout } from "@/components/platform-admin-layout"
+import EntityRouteWrapper from "@/components/entity-route-wrapper"
 import { TenantLayout } from "@/components/tenant-layout"
 import Login from "./pages/Login"
 import Index from "./pages/Index"
@@ -23,6 +24,17 @@ import RolesPermissions from "./pages/RolesPermissions"
 import TenantUsers from "./pages/TenantUsers"
 import TenantInvitations from "./pages/TenantInvitations"
 import TenantRoles from "./pages/TenantRoles"
+import AdminSettingsSalaryScale from "./pages/AdminSettingsSalaryScale"
+import EntityPanel from "./pages/EntityPanel"
+import EntityOrganization from "./pages/EntityOrganization"
+import EntityCandidates from "./pages/EntityCandidates"
+import EntityStaffing from "./pages/EntityStaffing"
+import EntityHiring from "./pages/EntityHiring"
+import EntitySettings from "./pages/EntitySettings"
+import EntitySettingsUsers from "./pages/EntitySettingsUsers"
+import EntitySettingsRoles from "./pages/EntitySettingsRoles"
+import EntitySettingsSalary from "./pages/EntitySettingsSalary"
+import EntitySettingsGoverningDocuments from "./pages/EntitySettingsGoverningDocuments"
 import NotFound from "./pages/NotFound"
 
 const queryClient = new QueryClient()
@@ -104,38 +116,51 @@ const AppRoutes = () => {
   }
 
   // Platform SuperAdmin with no current tenant -> Platform Admin
-      if (isPlatformSuperAdmin && !currentTenant) {
-        return (
-          <Routes>
-            <Route element={<PlatformAdminLayout />}>
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/admin/companies" element={<Organizations />} />
-              <Route path="/admin/users" element={<PlatformUsers />} />
-              <Route path="/admin/roles" element={<RolesPermissions />} />
-              <Route path="/admin/account" element={<Account />} />
-              <Route path="/organization/:entityId" element={<OrganizationDetail />} />
-              <Route path="*" element={<Navigate to="/admin" replace />} />
-            </Route>
-          </Routes>
-        )
-      }
-
-  // Tenant user -> Tenant Application
+  if (isPlatformSuperAdmin && !currentTenant) {
     return (
       <Routes>
-        <Route element={<TenantLayout />}>
-          <Route path="/" element={<Index />} />
-          <Route path="/organization" element={<Organization />} />
+        <Route element={<PlatformAdminLayout />}>
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/companies" element={<Organizations />} />
+          <Route path="/admin/users" element={<PlatformUsers />} />
+          <Route path="/admin/roles" element={<RolesPermissions />} />
+          <Route path="/admin/account" element={<Account />} />
+          <Route path="/admin/settings/salary-scale" element={<AdminSettingsSalaryScale />} />
           <Route path="/organization/:entityId" element={<OrganizationDetail />} />
-          <Route path="/candidates" element={<Candidates />} />
-          <Route path="/hiring" element={<Hiring />} />
-          <Route path="/tenant/users" element={<TenantUsers />} />
-          <Route path="/tenant/roles" element={<TenantRoles />} />
-          <Route path="/tenant/invitations" element={<TenantInvitations />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route element={<EntityRouteWrapper />}>
+            <Route path="/entity/:entityId/panel" element={<EntityPanel />} />
+            <Route path="/entity/:entityId/organization" element={<EntityOrganization />} />
+            <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
+            <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
+            <Route path="/entity/:entityId/hiring" element={<EntityHiring />} />
+            <Route path="/entity/:entityId/settings" element={<EntitySettings />} />
+            <Route path="/entity/:entityId/settings/users" element={<EntitySettingsUsers />} />
+            <Route path="/entity/:entityId/settings/roles" element={<EntitySettingsRoles />} />
+            <Route path="/entity/:entityId/settings/salary" element={<EntitySettingsSalary />} />
+            <Route path="/entity/:entityId/settings/governing-documents" element={<EntitySettingsGoverningDocuments />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
       </Routes>
     )
+  }
+
+  // Tenant user -> Tenant Application
+  return (
+    <Routes>
+      <Route element={<TenantLayout />}>
+        <Route path="/" element={<Index />} />
+        <Route path="/organization" element={<Organization />} />
+        <Route path="/organization/:entityId" element={<OrganizationDetail />} />
+        <Route path="/candidates" element={<Candidates />} />
+        <Route path="/hiring" element={<Hiring />} />
+        <Route path="/tenant/users" element={<TenantUsers />} />
+        <Route path="/tenant/roles" element={<TenantRoles />} />
+        <Route path="/tenant/invitations" element={<TenantInvitations />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  )
 }
 
 const App = () => (
