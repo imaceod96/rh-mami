@@ -57,6 +57,8 @@ interface SalaryContextType {
   fetchScaleWithGroups: (scaleId: string) => Promise<SalaryScaleWithGroups | null>
   fetchGlobalPresupuestadaScale: () => Promise<SalaryScale | null>
   fetchEntityEmpresarialScale: (entityId: string) => Promise<SalaryScale | null>
+  createGlobalPresupuestadaScale: (name: string, currencyCode: string, effectiveFrom: string) => Promise<SalaryScale | null>
+  createEntityEmpresarialScale: (entityId: string, name: string, currencyCode: string, effectiveFrom: string) => Promise<SalaryScale | null>
   
   // Group operations
   addSalaryGroup: (scaleId: string, description?: string) => Promise<SalaryGroup | null>
@@ -195,6 +197,58 @@ export const SalaryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (err) {
       console.error('[SalaryContext] Error fetching entity empresarial scale:', err)
       return null
+    }
+  }, [user])
+
+  const createGlobalPresupuestadaScale = React.useCallback(async (name: string, currencyCode: string, effectiveFrom: string): Promise<SalaryScale | null> => {
+    if (!user) return null
+    try {
+      const { data, error } = await supabase
+        .from('salary_scales')
+        .insert({
+          scope_type: 'PRESUPUESTADA_GLOBAL',
+          tenant_id: null,
+          organization_entity_id: null,
+          regime_id: 'PRESUPUESTADA',
+          name,
+          description: 'Escala salarial presupuestada general de SiteCorp',
+          currency_code: currencyCode,
+          is_active: true
+        })
+        .select()
+        .single()
+      
+      if (error) throw error
+      return data as SalaryScale
+    } catch (err) {
+      console.error('[SalaryContext] Error creating global presupuestada scale:', err)
+      throw err
+    }
+  }, [user])
+
+  const createEntityEmpresarialScale = React.useCallback(async (entityId: string, name: string, currencyCode: string, effectiveFrom: string): Promise<SalaryScale | null> => {
+    if (!user) return null
+    try {
+      const { data, error } = await supabase
+        .from('salary_scales')
+        .insert({
+          scope_type: 'EMPRESARIAL_ENTITY',
+          tenant_id: null,
+          organization_entity_id: entityId,
+          regime_id: 'EMPRESARIAL',
+          name,
+          description: 'Escala salarial empresarial de la entidad',
+          currency_code: currencyCode,
+          is_active: true
+        })
+        .select()
+        .single()
+      
+      if (error) throw error
+      return data as SalaryScale
+    } catch (err) {
+      console.error('[SalaryContext] Error creating entity empresarial scale:', err)
+      throw err
     }
   }, [user])
 
@@ -462,22 +516,24 @@ export const SalaryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   return (
     <SalaryContext.Provider value={{
-      resolveScaleForEntity,
-      fetchScaleWithGroups,
-      fetchGlobalPresupuestadaScale,
-      fetchEntityEmpresarialScale,
-      addSalaryGroup,
-      updateSalaryGroup,
-      deactivateSalaryGroup,
-      addSalaryValue,
-      updateSalaryValue,
-      fetchSalaryHistory,
-      getCurrentSalaryValue,
-      resolveSalaryValue,
-      canViewSalary,
-      canManageSalary,
-      canManageGlobalSalary
-    }}>
+          resolveScaleForEntity,
+          fetchScaleWithGroups,
+          fetchGlobalPresupuestadaScale,
+          fetchEntityEmpresarialScale,
+          createGlobalPresupuestadaScale,
+          createEntityEmpresarialScale,
+          addSalaryGroup,
+          updateSalaryGroup,
+          deactivateSalaryGroup,
+          addSalaryValue,
+          updateSalaryValue,
+          fetchSalaryHistory,
+          getCurrentSalaryValue,
+          resolveSalaryValue,
+          canViewSalary,
+          canManageSalary,
+          canManageGlobalSalary
+        }}>
       {children}
     </SalaryContext.Provider>
   )

@@ -83,11 +83,11 @@ const EntityLayout = React.forwardRef<
             {entityId && (
               <>
                 <Link
-                  to={`/entity/${entityId}/panel`}
+                  to={`/entity/${entityId}/summary`}
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
                 >
                   <LayoutDashboard className="h-5 w-5" />
-                  Panel
+                  Resumen
                 </Link>
 
                 <Link

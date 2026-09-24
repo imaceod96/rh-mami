@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { useSalary } from "@/contexts/SalaryContext"
+import { useAuth } from "@/contexts/AuthContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
@@ -8,7 +9,7 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
-import { Plus, Edit3, Clock } from "lucide-react"
+import { Plus, Edit3, Clock, PlusCircle } from "lucide-react"
 
 interface SalaryGroupRow {
   id: string
@@ -21,7 +22,8 @@ interface SalaryGroupRow {
 
 const AdminSettingsSalaryScale = () => {
   const navigate = useNavigate()
-  const { fetchGlobalPresupuestadaScale, fetchScaleWithGroups, addSalaryGroup, addSalaryValue } = useSalary()
+  const { fetchGlobalPresupuestadaScale, fetchScaleWithGroups, addSalaryGroup, addSalaryValue, createGlobalPresupuestadaScale, canManageGlobalSalary } = useSalary()
+  const { isPlatformSuperAdmin } = useAuth()
   const [scale, setScale] = React.useState<any>(null)
   const [groups, setGroups] = React.useState<SalaryGroupRow[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -31,6 +33,11 @@ const AdminSettingsSalaryScale = () => {
   const [showEditValue, setShowEditValue] = React.useState<string | null>(null)
   const [newAmount, setNewAmount] = React.useState("")
   const [newEffectiveFrom, setNewEffectiveFrom] = React.useState("")
+  const [showCreateScale, setShowCreateScale] = React.useState(false)
+  const [newScaleName, setNewScaleName] = React.useState("Escala salarial presupuestada general")
+  const [newScaleCurrency, setNewScaleCurrency] = React.useState("CUP")
+  const [newScaleEffectiveFrom, setNewScaleEffectiveFrom] = React.useState(() => new Date().toISOString().split("T")[0])
+  const [canManageGlobal, setCanManageGlobal] = React.useState(false)
 
   const loadScale = React.useCallback(async () => {
     try {
@@ -62,9 +69,15 @@ const AdminSettingsSalaryScale = () => {
     }
   }, [fetchGlobalPresupuestadaScale, fetchScaleWithGroups])
 
+  const checkPermission = React.useCallback(async () => {
+    const canManage = await canManageGlobalSalary()
+    setCanManageGlobal(canManage)
+  }, [canManageGlobalSalary])
+
   React.useEffect(() => {
     loadScale()
-  }, [loadScale])
+    checkPermission()
+  }, [loadScale, checkPermission])
 
   const handleAddGroup = async () => {
     if (!scale || !newGroupDesc.trim()) return
@@ -98,6 +111,22 @@ const AdminSettingsSalaryScale = () => {
     }
   }
 
+  const handleCreateScale = async () => {
+    if (!newScaleName.trim() || !newScaleCurrency.trim() || !newScaleEffectiveFrom) return
+    try {
+      const newScale = await createGlobalPresupuestadaScale(newScaleName.trim(), newScaleCurrency.trim(), newScaleEffectiveFrom)
+      if (newScale) {
+        setShowCreateScale(false)
+        setNewScaleName("Escala salarial presupuestada general")
+        setNewScaleCurrency("CUP")
+        setNewScaleEffectiveFrom(new Date().toISOString().split("T")[0])
+        await loadScale()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear la escala salarial")
+    }
+  }
+
   if (!scale) {
     return (
       <div className="space-y-6 p-6">
@@ -110,8 +139,55 @@ const AdminSettingsSalaryScale = () => {
           <SiteCorpCard title="Sin escala salarial presupuestada">
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                No se ha configurado una escala salarial presupuestada global.
+                No se ha configurado todavía la escala salarial presupuestada general.
               </p>
+              {(isPlatformSuperAdmin || canManageGlobal) && (
+                <div className="space-y-3">
+                  <SiteCorpButton onClick={() => setShowCreateScale(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Crear escala salarial
+                  </SiteCorpButton>
+                  {showCreateScale && (
+                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-ink">Crear escala salarial presupuestada global</h4>
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">Nombre</label>
+                          <SiteCorpInput
+                            placeholder="Escala salarial presupuestada general"
+                            value={newScaleName}
+                            onChange={(e) => setNewScaleName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">Moneda</label>
+                          <SiteCorpInput
+                            placeholder="CUP"
+                            value={newScaleCurrency}
+                            onChange={(e) => setNewScaleCurrency(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">Fecha de vigencia</label>
+                          <SiteCorpInput
+                            type="date"
+                            value={newScaleEffectiveFrom}
+                            onChange={(e) => setNewScaleEffectiveFrom(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <SiteCorpButton onClick={handleCreateScale}>Crear</SiteCorpButton>
+                        <SiteCorpButton variant="outline" onClick={() => { setShowCreateScale(false); setNewScaleName("Escala salarial presupuestada general"); setNewScaleCurrency("CUP"); setNewScaleEffectiveFrom(new Date().toISOString().split("T")[0]) }}>Cancelar</SiteCorpButton>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {(!isPlatformSuperAdmin && !canManageGlobal) && (
+                <p className="text-sm text-muted-foreground">
+                  La escala debe ser configurada por un administrador autorizado de SiteCorp.
+                </p>
+              )}
             </div>
           </SiteCorpCard>
         )}

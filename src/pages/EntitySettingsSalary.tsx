@@ -13,7 +13,7 @@ import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { Scale, Plus, Edit3, Clock, AlertTriangle } from "lucide-react"
-import type { SalaryGroupWithCurrent } from "@/contexts/SalaryContext"
+import type { SalaryGroupWithCurrent, SalaryScale } from "@/contexts/SalaryContext"
 
 interface SalaryGroupRow {
   id: string
@@ -27,9 +27,17 @@ interface SalaryGroupRow {
 const EntitySettingsSalary = () => {
   const navigate = useNavigate()
   const { currentEntity } = useCurrentEntity()
-  const { fetchEntityEmpresarialScale, fetchScaleWithGroups, addSalaryGroup, addSalaryValue } = useSalary()
-  const { isPlatformSuperAdmin } = useAuth()
-  const [scale, setScale] = React.useState<any>(null)
+  const { 
+    fetchEntityEmpresarialScale, 
+    fetchScaleWithGroups, 
+    addSalaryGroup, 
+    addSalaryValue,
+    fetchGlobalPresupuestadaScale,
+    createGlobalPresupuestadaScale,
+    canManageGlobalSalary
+  } = useSalary()
+  const { isPlatformSuperAdmin, user } = useAuth()
+  const [scale, setScale] = React.useState<SalaryScale | null>(null)
   const [groups, setGroups] = React.useState<SalaryGroupRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -38,37 +46,67 @@ const EntitySettingsSalary = () => {
   const [showEditValue, setShowEditValue] = React.useState<string | null>(null)
   const [newAmount, setNewAmount] = React.useState("")
   const [newEffectiveFrom, setNewEffectiveFrom] = React.useState("")
+  const [canManageGlobal, setCanManageGlobal] = React.useState(false)
+  const [globalScale, setGlobalScale] = React.useState<SalaryScale | null>(null)
 
   const loadScale = React.useCallback(async () => {
     if (!currentEntity) return
     try {
       setLoading(true)
       setError(null)
-      const scaleData = await fetchEntityEmpresarialScale(currentEntity.id)
-      if (scaleData) {
-        setScale(scaleData)
-        const scaleWithGroups = await fetchScaleWithGroups(scaleData.id)
-        if (scaleWithGroups) {
-          const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
-            id: g.group.id,
-            sequence_number: g.group.sequence_number,
-            description: g.group.description,
-            is_active: g.group.is_active,
-            current_value: g.current_value,
-            roman_numeral: g.roman_numeral,
-          }))
-          setGroups(mappedGroups)
+      
+      // Check global scale management permission
+      if (currentEntity.regime_id === "PRESUPUESTADA") {
+        const canManage = await canManageGlobalSalary()
+        setCanManageGlobal(canManage)
+        
+        // Load global Presupuestada scale
+        const globalScaleData = await fetchGlobalPresupuestadaScale()
+        setGlobalScale(globalScaleData)
+        
+        if (globalScaleData) {
+          const scaleWithGroups = await fetchScaleWithGroups(globalScaleData.id)
+          if (scaleWithGroups) {
+            const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
+              id: g.group.id,
+              sequence_number: g.group.sequence_number,
+              description: g.group.description,
+              is_active: g.group.is_active,
+              current_value: g.current_value,
+              roman_numeral: g.roman_numeral,
+            }))
+            setGroups(mappedGroups)
+            setScale(globalScaleData)
+          }
         }
       } else {
-        setScale(null)
-        setGroups([])
+        // EMPRESARIAL: Load entity-specific scale
+        const scaleData = await fetchEntityEmpresarialScale(currentEntity.id)
+        if (scaleData) {
+          setScale(scaleData)
+          const scaleWithGroups = await fetchScaleWithGroups(scaleData.id)
+          if (scaleWithGroups) {
+            const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
+              id: g.group.id,
+              sequence_number: g.group.sequence_number,
+              description: g.group.description,
+              is_active: g.group.is_active,
+              current_value: g.current_value,
+              roman_numeral: g.roman_numeral,
+            }))
+            setGroups(mappedGroups)
+          }
+        } else {
+          setScale(null)
+          setGroups([])
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar la escala salarial")
     } finally {
       setLoading(false)
     }
-  }, [currentEntity?.id, fetchEntityEmpresarialScale, fetchScaleWithGroups])
+  }, [currentEntity?.id, currentEntity?.regime_id, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary])
 
   React.useEffect(() => {
     loadScale()
@@ -106,6 +144,23 @@ const EntitySettingsSalary = () => {
     }
   }
 
+  const handleCreateGlobalScale = async () => {
+    if (!user) return
+    try {
+      // Simple form for initial scale creation
+      const name = "Escala salarial presupuestada general"
+      const currencyCode = "CUP" // Default currency, could be made configurable
+      const effectiveFrom = new Date().toISOString().split('T')[0] // Today
+      
+      const newScale = await createGlobalPresupuestadaScale(name, currencyCode, effectiveFrom)
+      if (newScale) {
+        await loadScale() // Reload to show the new scale
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear la escala salarial")
+    }
+  }
+
   if (!currentEntity) {
     return (
       <div className="space-y-6 p-6">
@@ -139,21 +194,163 @@ const EntitySettingsSalary = () => {
       </SiteCorpAlert>
 
       {currentEntity.regime_id === "PRESUPUESTADA" ? (
-        /* PRESUPUESTADA: Show link to global scale */
-        <SiteCorpCard title="Escala salarial aplicable">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Scale className="h-8 w-8 text-sitecorp-primary" />
-              <div>
-                <p className="text-sm font-semibold text-ink">Escala salarial presupuestada general de SiteCorp</p>
-                <p className="text-xs text-muted-foreground">Esta escala es común para todas las entidades presupuestadas del sistema</p>
+        /* PRESUPUESTADA: Show global scale management */
+        <>
+          {globalScale ? (
+            <SiteCorpCard title="Escala salarial presupuestada general de SiteCorp" description="Esta escala es común para todas las entidades presupuestadas del sistema">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-ink">Moneda: {globalScale.currency_code}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {groups.filter(g => g.is_active).length} grupo(s) activo(s)
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {canManageGlobal && (
+                      <>
+                        <SiteCorpButton onClick={() => setShowAddGroup(true)}>
+                          <Plus className="mr-2 h-4 w-4" /> Añadir grupo salarial
+                        </SiteCorpButton>
+                        <SiteCorpButton variant="outline" onClick={() => navigate("/admin/settings/salary-scale")}>
+                          Gestionar escala
+                        </SiteCorpButton>
+                      </>
+                    )}
+                    {!canManageGlobal && (
+                      <SiteCorpButton variant="outline" onClick={() => navigate("/admin/settings/salary-scale")}>
+                        Ver escala
+                      </SiteCorpButton>
+                    )}
+                  </div>
+                </div>
+
+                {/* Add group form */}
+                {showAddGroup && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                    <SiteCorpInput
+                      placeholder="Descripción del grupo"
+                      value={newGroupDesc}
+                      onChange={(e) => setNewGroupDesc(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <SiteCorpButton onClick={handleAddGroup}>Guardar</SiteCorpButton>
+                      <SiteCorpButton variant="outline" onClick={() => { setShowAddGroup(false); setNewGroupDesc("") }}>Cancelar</SiteCorpButton>
+                    </div>
+                  </div>
+                )}
+
+                {/* Groups table */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
+                  {groups.length > 0 ? (
+                                      groups.map((group) => (
+                                        <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                          <div className="flex items-center gap-3">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary/10">
+                                              <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
+                                            </div>
+                                            <div>
+                                              <p className="text-sm font-medium text-ink">
+                                                Grupo {group.roman_numeral}
+                                                {group.description && ` — ${group.description}`}
+                                              </p>
+                                              <p className="text-xs text-muted-foreground">
+                                                Secuencia: {group.sequence_number}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-3">
+                                            {group.current_value ? (
+                                              <div className="text-right">
+                                                <p className="text-sm font-medium text-ink">
+                                                  {group.current_value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} {group.current_value.currency_code}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                  Vigente desde: {group.current_value.effective_from}
+                                                </p>
+                                              </div>
+                                            ) : (
+                                              <span className="text-sm text-muted-foreground">Sin valor asignado</span>
+                                            )}
+                                            <SiteCorpStatusBadge status={group.is_active ? "success" : "warning"}>
+                                              {group.is_active ? "Activo" : "Inactivo"}
+                                            </SiteCorpStatusBadge>
+                                            {canManageGlobal && (
+                                              <SiteCorpButton
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                  setShowEditValue(showEditValue === group.id ? null : group.id)
+                                                  setNewAmount("")
+                                                  setNewEffectiveFrom("")
+                                                }}
+                                              >
+                                                <Edit3 className="mr-1 h-3.5 w-3.5" /> Editar
+                                              </SiteCorpButton>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground text-center py-4">
+                                        No hay grupos salariales configurados aún.
+                                      </p>
+                                    )}
+                </div>
+
+                {/* Edit value form */}
+                {showEditValue && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                    <h4 className="text-sm font-semibold text-ink">Editar salario del grupo</h4>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">Nuevo salario</label>
+                        <SiteCorpInput
+                          type="number"
+                          placeholder="Monto"
+                          value={newAmount}
+                          onChange={(e) => setNewAmount(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">Vigente desde</label>
+                        <SiteCorpInput
+                          type="date"
+                          value={newEffectiveFrom}
+                          onChange={(e) => setNewEffectiveFrom(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <SiteCorpButton onClick={() => handleEditValue(showEditValue)}>Guardar</SiteCorpButton>
+                      <SiteCorpButton variant="outline" onClick={() => setShowEditValue(null)}>Cancelar</SiteCorpButton>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-            <SiteCorpButton onClick={() => navigate("/admin/settings/salary-scale")}>
-              Ver escala global
-            </SiteCorpButton>
-          </div>
-        </SiteCorpCard>
+            </SiteCorpCard>
+          ) : (
+            /* No global scale exists yet */
+            <SiteCorpCard title="Escala salarial presupuestada">
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  No se ha configurado todavía la escala salarial presupuestada general.
+                </p>
+                {canManageGlobal && (
+                  <SiteCorpButton onClick={handleCreateGlobalScale}>
+                    Crear escala salarial
+                  </SiteCorpButton>
+                )}
+                {!canManageGlobal && (
+                  <p className="text-sm text-muted-foreground">
+                    La escala debe ser configurada por un administrador autorizado de SiteCorp.
+                  </p>
+                )}
+              </div>
+            </SiteCorpCard>
+          )}
+        </>
       ) : (
         /* EMPRESARIAL: Show entity-specific scale */
         <>
