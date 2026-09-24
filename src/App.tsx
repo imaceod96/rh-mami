@@ -130,7 +130,7 @@ const AppRoutes = () => {
           <Route path="/organization/:entityId" element={<OrganizationDetail />} />
           <Route element={<EntityRouteWrapper />}>
             <Route path="/entity/:entityId/summary" element={<EntitySummary />} />
-            <Route path="/entity/:entityId/panel" element={<Navigate to="/entity/:entityId/summary" replace />} />
+            <Route path="/entity/:entityId/panel" element={<Navigate to="summary" replace />} />
             <Route path="/entity/:entityId/organization" element={<EntityOrganization />} />
             <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
             <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
