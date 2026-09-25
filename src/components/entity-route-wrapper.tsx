@@ -15,7 +15,7 @@ import { Outlet } from "react-router-dom"
 const EntityRouteWrapper = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const navigate = useNavigate()
-  const { user, isPlatformSuperAdmin } = useAuth()
+  const { user, isPlatformSuperAdmin, hasPlatformPermission } = useAuth()
   const { currentTenant } = useCurrentTenant()
   const { setCurrentEntity } = useCurrentEntity()
 
@@ -42,13 +42,35 @@ const EntityRouteWrapper = () => {
 
         if (fetchError) throw fetchError
 
-        // Check permissions
-        if (currentTenant && data.tenant_id !== currentTenant.id) {
-          throw new Error("No tienes permiso para acceder a esta entidad")
+        // Authorization logic
+        let isAuthorized = false
+
+        // 1. Platform SuperAdmin always authorized
+        if (isPlatformSuperAdmin) {
+          isAuthorized = true
+        }
+        // 2. Platform User with organization view/manage permissions
+        else {
+          const [viewAllPerm, manageAllPerm] = await Promise.all([
+            hasPlatformPermission("organizations.view_all"),
+            hasPlatformPermission("organizations.manage_all")
+          ])
+          
+          if (viewAllPerm || manageAllPerm) {
+            isAuthorized = true
+          }
+          // 3. Normal entity-user access check
+          else {
+            const { data: accessData, error: accessError } = await supabase
+              .rpc("can_view_entity", { target_entity_id: entityId })
+              
+            if (accessError) throw accessError
+            isAuthorized = !!accessData
+          }
         }
 
-        if (!currentTenant && !isPlatformSuperAdmin) {
-          throw new Error("No tienes permiso para acceder a esta entidad")
+        if (!isAuthorized) {
+          throw new Error("Acceso no autorizado")
         }
 
         setCurrentEntity(data)
@@ -60,7 +82,7 @@ const EntityRouteWrapper = () => {
     }
 
     loadEntity()
-  }, [entityId, currentTenant?.id, isPlatformSuperAdmin, setCurrentEntity])
+  }, [entityId, isPlatformSuperAdmin, hasPlatformPermission, setCurrentEntity])
 
   if (loading) {
     return (
