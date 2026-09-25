@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { supabase } from "@/lib/supabase"
+import { useNavigate } from "react-router-dom"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
@@ -11,7 +12,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from "@/components/ui/pagination"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
-import { Users, Search, Edit3, Trash2, Plus, Upload } from "lucide-react"
+import { Users, Search, Edit3, Trash2, Plus, Upload, Eye } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import {
   Dialog,
@@ -310,9 +311,12 @@ const EntityCandidates = () => {
   ])
 
   // Form handlers
-  const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
+    const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
+      setFormData(prev => ({ ...prev, [field]: value }))
+    }
+  
+    // Navigation
+    const navigate = useNavigate()
 
   // DNI autocomplete for birth date (Cuban DNI format: first 6 digits = aammdd)
     const handleIdentificationChange = (value: string) => {
@@ -722,12 +726,17 @@ const EntityCandidates = () => {
                             <Users className="h-4 w-4 text-sitecorp-primary" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-ink">
-                              {candidate.first_name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {candidate.first_surname} {candidate.second_surname || ""}
-                            </p>
+                            <button
+                              className="text-left hover:underline"
+                              onClick={() => navigate(`/entity/${entityId}/candidates/${candidate.id}`)}
+                            >
+                              <p className="text-sm font-medium text-ink cursor-pointer">
+                                {candidate.first_name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {candidate.first_surname} {candidate.second_surname || ""}
+                              </p>
+                            </button>
                           </div>
                         </div>
                       </TableCell>
@@ -777,6 +786,13 @@ const EntityCandidates = () => {
                         </p>
                       </TableCell>
                       <TableCell className="flex items-center gap-2">
+                        <SiteCorpButton
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/entity/${entityId}/candidates/${candidate.id}`)}
+                        >
+                          <Eye className="mr-1 h-3 w-3" /> Ver
+                        </SiteCorpButton>
                         <SiteCorpButton
                           variant="outline"
                           size="sm"
