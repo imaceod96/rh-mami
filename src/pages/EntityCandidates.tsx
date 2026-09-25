@@ -11,7 +11,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from "@/components/ui/pagination"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
-import { Users, Search, Edit3, Trash2, Plus } from "lucide-react"
+import { Users, Search, Edit3, Trash2, Plus, Upload } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import {
   Dialog,
@@ -42,6 +42,9 @@ interface Candidate {
   province: string | null
   education_level_id: string | null
   specialty: string | null
+  political_affiliation: string | null
+  is_retired_or_rehired: boolean | null
+  has_disciplinary_measures: boolean | null
   status: "active" | "archived"
   created_at: string
   updated_at: string
@@ -62,6 +65,16 @@ interface EducationLevel {
   name: string
 }
 
+interface Province {
+  id: string
+  name: string
+}
+
+interface Municipality {
+  id: string
+  name: string
+}
+
 interface CandidateFormData {
   first_name: string
   first_surname: string
@@ -77,6 +90,9 @@ interface CandidateFormData {
   province: string
   education_level_id: string
   specialty: string
+  political_affiliation: string
+  is_retired_or_rehired: string
+  has_disciplinary_measures: boolean
 }
 
 const emptyFormData: CandidateFormData = {
@@ -94,7 +110,47 @@ const emptyFormData: CandidateFormData = {
   province: "",
   education_level_id: "",
   specialty: "",
+  political_affiliation: "",
+  is_retired_or_rehired: "",
+  has_disciplinary_measures: false,
 }
+
+const CUBA_PROVINCES = [
+  "Pinar del Río", "Artemisa", "La Habana", "Mayabeque", "Matanzas",
+  "Cienfuegos", "Villa Clara", "Sancti Spíritus", "Ciego de Ávila",
+  "Camagüey", "Las Tunas", "Holguín", "Granma", "Santiago de Cuba",
+  "Guantánamo", "Isla de la Juventud",
+]
+
+const MUNICIPIOS_BY_PROVINCE: Record<string, string[]> = {
+  "Pinar del Río": ["Pinar del Río", "San Luis", "Sandino", "Consolación del Sur", "Guane", "Mantua", "Viñales", "La Palma", "Los Palacios", "San Juan y Martínez", "San Cristóbal"],
+  "Artemisa": ["Artemisa", "Bauta", "Caimito", "Guanajay", "Güines", "Mariel", "San Antonio de los Baños", "San José de las Lajas"],
+  "La Habana": ["La Habana Vieja", "Centro Habana", "Plaza de la Revolución", "Cerro", "Marianao", "10 de Octubre", "La Lisa", "Playa", "Miramar", "Regla", "Guanabacoa", "San Miguel del Padrón", "Diez de Octubre", "Boyeros", "Cotorro", "San José de las Lajas"],
+  "Mayabeque": ["San José de las Lajas", "Güines", "Batabanó", "Bejucal", "San Nicolás de Bari", "Santa Cruz del Norte", "Nueva Paz", "San Nicolás", "Madruga", "Melena del Sur", "Quivicán"],
+  "Matanzas": ["Matanzas", "Cárdenas", "Colón", "Jagüey Grande", "Jovellanos", "Pedro Betancourt", "Unión de Reyes", "Calimete", "Corralillo", "Guaguasi", "Limonar", "Perico", "Martí"],
+  "Cienfuegos": ["Cienfuegos", "Abreus", "Aguada de Pasajeros", "Cumanayagua", "Lajas", "Palmira", "Rodas", "Cumanayagua"],
+  "Villa Clara": ["Santa Clara", "Camajuaní", "Caibarién", "Placetas", "Sagua la Grande", "Manicaragua", "Remedios", "Cifuentes", "Santo Domingo", "Zulueta"],
+  "Sancti Spíritus": ["Sancti Spíritus", "Trinidad", "Fomento", "Yaguajay", "Zaza del Medio", "Jatibonico", "La Sierpe", "Taguasco", "Tuinicú"],
+  "Ciego de Ávila": ["Ciego de Ávila", "Morón", "Baraguá", "Chambas", "Majagua", "Ciro Redondo", "Venezuela", "Florencia"],
+  "Camagüey": ["Camagüey", "Nuevitas", "Florida", "Sierra de Cubitas", "Esmeralda", "Vertientes", "Jimaguayú", "Najasa", "Santa Cruz del Sur", "Sibanicú", "Guáimaro"],
+  "Las Tunas": ["Las Tunas", "Manatí", "Puerto Padre", "Colombia", "Jesús Menéndez", "Jobabo", "Amancio", "Cauto Cristo"],
+  "Holguín": ["Holguín", "Banes", "Frank País", "Mayarí", "Antilla", "Báguanos", "Cacocum", "Cueto", "Gibara", "Rafael Freyre", "Río Cauto", "Sagua de Tánamo"],
+  "Granma": ["Bayamo", "Manzanillo", "Jiguaní", "Buey Arriba", "Campechuela", "Cauto Cristo", "Guisa", "Jiguaní", "Niquero", "Pilón", "Yara"],
+  "Santiago de Cuba": ["Santiago de Cuba", "Contramaestre", "Guamá", "Mella", "Palma Soriano", "San Luis", "Siboney", "Tercer Frente", "Segundo Frente", "Baconao"],
+  "Guantánamo": ["Guantánamo", "Baracoa", "Caimanera", "El Salvador", "Maisí", "Manuel Tames", "Niceto Pérez", "San Antonio del Sur", "Yateras"],
+  "Isla de la Juventud": ["Nueva Gerona", "Santa Fe"],
+}
+
+const POLITICAL_AFFILIATIONS = [
+  { id: "pcc", name: "PCC" },
+  { id: "ujc", name: "UJC" },
+  { id: "none", name: "Ninguna" },
+]
+
+const RETIRED_REHIRED_OPTIONS = [
+  { id: "yes", name: "Sí" },
+  { id: "no", name: "No" },
+]
 
 const EntityCandidates = () => {
   const { currentEntity } = useCurrentEntity()
@@ -104,6 +160,8 @@ const EntityCandidates = () => {
   const [genders, setGenders] = React.useState<Gender[]>([])
   const [maritalStatuses, setMaritalStatuses] = React.useState<MaritalStatus[]>([])
   const [educationLevels, setEducationLevels] = React.useState<EducationLevel[]>([])
+  const [provinces, setProvinces] = React.useState<Province[]>([])
+  const [municipalities, setMunicipalities] = React.useState<Municipality[]>([])
 
   const [searchTerm, setSearchTerm] = React.useState("")
   const [selectedGender, setSelectedGender] = React.useState<string | null>(null)
@@ -125,6 +183,11 @@ const EntityCandidates = () => {
   const [formError, setFormError] = React.useState<string | null>(null)
   const [formSuccess, setFormSuccess] = React.useState(false)
 
+  // Disciplinary measures dialog
+  const [disciplinaryDialogOpen, setDisciplinaryDialogOpen] = React.useState(false)
+  const [disciplinaryDocument, setDisciplinaryDocument] = React.useState<File | null>(null)
+  const [disciplinaryUploading, setDisciplinaryUploading] = React.useState(false)
+
   // Fetch reference data
   React.useEffect(() => {
     const fetchReferenceData = async () => {
@@ -142,6 +205,9 @@ const EntityCandidates = () => {
         setGenders(gendersData.data || [])
         setMaritalStatuses(maritalStatusesData.data || [])
         setEducationLevels(educationLevelsData.data || [])
+
+        // Set provinces from Cuba list
+        setProvinces(CUBA_PROVINCES.map(name => ({ id: name, name })))
       } catch (err) {
         console.error("Error fetching reference data:", err)
         setError("Error al cargar datos de referencia")
@@ -244,8 +310,69 @@ const EntityCandidates = () => {
   ])
 
   // Form handlers
-  const handleFormChange = (field: keyof CandidateFormData, value: string) => {
+  const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  // DNI autocomplete for birth date
+  const handleIdentificationChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, "")
+    setFormData(prev => ({ ...prev, identification: cleaned }))
+
+    // Auto-fill birth date from first 6 digits (aammdd)
+    if (cleaned.length >= 6) {
+      const yearStr = cleaned.substring(0, 2)
+      const monthStr = cleaned.substring(2, 4)
+      const dayStr = cleaned.substring(4, 6)
+
+      const year = parseInt(yearStr, 10)
+      const month = parseInt(monthStr, 10)
+      const day = parseInt(dayStr, 10)
+
+      if (year >= 0 && year <= 99 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const fullYear = year >= 50 ? 1900 + year : 2000 + year
+        const date = new Date(fullYear, month - 1, day)
+        const dateStr = date.toISOString().split("T")[0]
+        setFormData(prev => ({ ...prev, birth_date: dateStr }))
+      }
+    }
+  }
+
+  // Province change - reset municipality
+  const handleProvinceChange = (province: string) => {
+    setFormData(prev => ({ ...prev, province, municipality: "" }))
+    setMunicipalities([])
+
+    if (province && MUNICIPIOS_BY_PROVINCE[province]) {
+      setMunicipalities(MUNICIPIOS_BY_PROVINCE[province].map(name => ({ id: name, name })))
+    }
+  }
+
+  // Disciplinary measures upload
+  const handleDisciplinaryUpload = async () => {
+    if (!disciplinaryDocument) return
+
+    setDisciplinaryUploading(true)
+    try {
+      const file = disciplinaryDocument
+      const fileName = `disciplinary_${Date.now()}_${file.name}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      setDisciplinaryDialogOpen(false)
+      setDisciplinaryDocument(null)
+      setFormSuccess(true)
+      setTimeout(() => setFormSuccess(false), 3000)
+    } catch (err) {
+      console.error("Error uploading document:", err)
+      setFormError("Error al subir el documento disciplinario")
+    } finally {
+      setDisciplinaryUploading(false)
+    }
   }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -303,24 +430,27 @@ const EntityCandidates = () => {
       }
 
       const newCandidate = {
-        tenant_id: currentEntity?.tenant_id,
-        organization_entity_id: entityId,
-        first_name: formData.first_name.trim(),
-        first_surname: formData.first_surname.trim(),
-        second_surname: formData.second_surname.trim() || null,
-        identification: formData.identification.trim(),
-        birth_date: formData.birth_date || null,
-        gender_id: formData.gender_id || null,
-        marital_status_id: formData.marital_status_id || null,
-        phone: formData.phone.trim() || null,
-        email: formData.email.trim() || null,
-        address: formData.address.trim() || null,
-        municipality: formData.municipality.trim() || null,
-        province: formData.province.trim() || null,
-        education_level_id: formData.education_level_id || null,
-        specialty: formData.specialty.trim() || null,
-        status: "active" as const,
-      }
+              tenant_id: currentEntity?.tenant_id,
+              organization_entity_id: entityId,
+              first_name: formData.first_name.trim(),
+              first_surname: formData.first_surname.trim(),
+              second_surname: formData.second_surname.trim() || null,
+              identification: formData.identification.trim(),
+              birth_date: formData.birth_date || null,
+              gender_id: formData.gender_id || null,
+              marital_status_id: formData.marital_status_id || null,
+              phone: formData.phone.trim() || null,
+              email: formData.email.trim() || null,
+              address: formData.address.trim() || null,
+              municipality: formData.municipality.trim() || null,
+              province: formData.province.trim() || null,
+              education_level_id: formData.education_level_id || null,
+              specialty: formData.specialty.trim() || null,
+              political_affiliation: formData.political_affiliation || null,
+              is_retired_or_rehired: formData.is_retired_or_rehired === "yes",
+              has_disciplinary_measures: formData.has_disciplinary_measures,
+              status: "active" as const,
+            }
 
       const { error: insertError } = await supabase
         .from("candidates")
@@ -814,15 +944,15 @@ const EntityCandidates = () => {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Identificación *</Label>
-                  <SiteCorpInput
-                    type="text"
-                    placeholder="Cédula / DNI / Pasaporte"
-                    value={formData.identification}
-                    onChange={(e) => handleFormChange("identification", e.target.value)}
-                    required
-                  />
-                </div>
+                                  <Label>Identificación *</Label>
+                                  <SiteCorpInput
+                                    type="text"
+                                    placeholder="Cédula / DNI / Pasaporte"
+                                    value={formData.identification}
+                                    onChange={(e) => handleIdentificationChange(e.target.value)}
+                                    required
+                                  />
+                                </div>
                 <div className="space-y-1.5">
                   <Label>Fecha de nacimiento</Label>
                   <SiteCorpInput
@@ -849,77 +979,116 @@ const EntityCandidates = () => {
             </div>
 
             {/* Section 2: Datos personales */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-ink border-b pb-2">Datos personales</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                                  <Label>Estado civil</Label>
-                                  <SiteCorpSelect
-                                    value={formData.marital_status_id || undefined}
-                                    onValueChange={(value) => handleFormChange("marital_status_id", value === "__placeholder__" ? "" : value)}
-                                  >
-                                    <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
-                                    {maritalStatuses.map(status => (
-                                      <SelectItem key={status.id} value={status.id}>
-                                        {status.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SiteCorpSelect>
-                                </div>
-              </div>
-            </div>
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Datos personales</h3>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label>Estado civil</Label>
+                              <SiteCorpSelect
+                                value={formData.marital_status_id || undefined}
+                                onValueChange={(value) => handleFormChange("marital_status_id", value === "__placeholder__" ? "" : value)}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {maritalStatuses.map(status => (
+                                  <SelectItem key={status.id} value={status.id}>
+                                    {status.name}
+                                  </SelectItem>
+                                ))}
+                              </SiteCorpSelect>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Afiliación política</Label>
+                              <SiteCorpSelect
+                                value={formData.political_affiliation || undefined}
+                                onValueChange={(value) => handleFormChange("political_affiliation", value === "__placeholder__" ? "" : value)}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {POLITICAL_AFFILIATIONS.map(aff => (
+                                  <SelectItem key={aff.id} value={aff.id}>
+                                    {aff.name}
+                                  </SelectItem>
+                                ))}
+                              </SiteCorpSelect>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Retirado o Recontratado</Label>
+                              <SiteCorpSelect
+                                value={formData.is_retired_or_rehired || undefined}
+                                onValueChange={(value) => handleFormChange("is_retired_or_rehired", value === "__placeholder__" ? "" : value)}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {RETIRED_REHIRED_OPTIONS.map(opt => (
+                                  <SelectItem key={opt.id} value={opt.id}>
+                                    {opt.name}
+                                  </SelectItem>
+                                ))}
+                              </SiteCorpSelect>
+                            </div>
+                          </div>
+                        </div>
 
             {/* Section 3: Contacto y dirección */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-ink border-b pb-2">Contacto y dirección</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>Teléfono</Label>
-                  <SiteCorpInput
-                    type="tel"
-                    placeholder="+51 999 999 999"
-                    value={formData.phone}
-                    onChange={(e) => handleFormChange("phone", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <SiteCorpInput
-                    type="email"
-                    placeholder="correo@ejemplo.com"
-                    value={formData.email}
-                    onChange={(e) => handleFormChange("email", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Dirección</Label>
-                  <Textarea
-                    placeholder="Dirección completa"
-                    value={formData.address}
-                    onChange={(e) => handleFormChange("address", e.target.value)}
-                    rows={2}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Municipio</Label>
-                  <SiteCorpInput
-                    type="text"
-                    placeholder="Municipio"
-                    value={formData.municipality}
-                    onChange={(e) => handleFormChange("municipality", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Provincia</Label>
-                  <SiteCorpInput
-                    type="text"
-                    placeholder="Provincia"
-                    value={formData.province}
-                    onChange={(e) => handleFormChange("province", e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Contacto y dirección</h3>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label>Teléfono</Label>
+                              <SiteCorpInput
+                                type="tel"
+                                placeholder="+51 999 999 999"
+                                value={formData.phone}
+                                onChange={(e) => handleFormChange("phone", e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Email</Label>
+                              <SiteCorpInput
+                                type="email"
+                                placeholder="correo@ejemplo.com"
+                                value={formData.email}
+                                onChange={(e) => handleFormChange("email", e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1.5 sm:col-span-2">
+                              <Label>Dirección</Label>
+                              <Textarea
+                                placeholder="Dirección completa"
+                                value={formData.address}
+                                onChange={(e) => handleFormChange("address", e.target.value)}
+                                rows={2}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Provincia</Label>
+                              <SiteCorpSelect
+                                value={formData.province || undefined}
+                                onValueChange={(value) => handleProvinceChange(value === "__placeholder__" ? "" : value)}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {provinces.map(province => (
+                                  <SelectItem key={province.id} value={province.id}>
+                                    {province.name}
+                                  </SelectItem>
+                                ))}
+                              </SiteCorpSelect>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Municipio</Label>
+                              <SiteCorpSelect
+                                value={formData.municipality || undefined}
+                                onValueChange={(value) => handleFormChange("municipality", value === "__placeholder__" ? "" : value)}
+                                disabled={!formData.province}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {municipalities.map(muni => (
+                                  <SelectItem key={muni.id} value={muni.id}>
+                                    {muni.name}
+                                  </SelectItem>
+                                ))}
+                              </SiteCorpSelect>
+                            </div>
+                          </div>
+                        </div>
 
             {/* Section 4: Formación */}
             <div className="space-y-4">
@@ -951,10 +1120,37 @@ const EntityCandidates = () => {
               </div>
             </div>
 
-            {/* Form error */}
-            {formError && (
-              <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
-            )}
+            {/* Section 5: Medidas disciplinarias */}
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Medidas disciplinarias</h3>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.has_disciplinary_measures}
+                                onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
+                            </label>
+                          </div>
+                          {formData.has_disciplinary_measures && (
+                            <SiteCorpButton
+                              type="button"
+                              variant="outline"
+                              onClick={() => setDisciplinaryDialogOpen(true)}
+                              className="mt-2"
+                            >
+                              <Upload className="mr-2 h-4 w-4" />
+                              Subir documento disciplinario
+                            </SiteCorpButton>
+                          )}
+                        </div>
+            
+                        {/* Form error */}
+                        {formError && (
+                          <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
+                        )}
 
             {/* Form footer */}
             <DialogFooter className="gap-2">
