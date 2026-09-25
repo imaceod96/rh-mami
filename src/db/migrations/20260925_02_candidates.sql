@@ -27,9 +27,9 @@
 --   updated_at timestamptz default now()
 --
 -- Indexes: tenant_id, organization_entity_id, identification, status
--- RLS: enabled, no policies yet
+-- RLS: enabled, policies added in 20260925_03_candidates_rls.sql
 -- Updated trigger: handle_updated_at()
--- Tenant consistency: tenant_id and organization_entity_id must belong to the same tenant
+-- Tenant consistency: trigger ensures tenant_id and organization_entity_id belong to same tenant
 
 -- ============================================================================
 -- Table: public.candidates
@@ -56,13 +56,7 @@ CREATE TABLE public.candidates (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
 
-  CONSTRAINT candidates_status_check CHECK (status IN ('active', 'archived')),
-  CONSTRAINT candidates_tenant_entity_same_tenant CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_entities oe
-      WHERE oe.id = organization_entity_id AND oe.tenant_id = tenant_id
-    )
-  )
+  CONSTRAINT candidates_status_check CHECK (status IN ('active', 'archived'))
 );
 
 -- ============================================================================
@@ -87,6 +81,38 @@ CREATE TRIGGER candidates_updated_at
   EXECUTE FUNCTION public.handle_updated_at();
 
 -- ============================================================================
+-- Tenant consistency trigger
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.candidates_tenant_entity_same_tenant()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.tenant_id IS NULL OR NEW.organization_entity_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.organization_entities oe
+    WHERE oe.id = NEW.organization_entity_id
+      AND oe.tenant_id = NEW.tenant_id
+  ) THEN
+    RAISE EXCEPTION 'Candidate organization_entity_id must belong to the same tenant as tenant_id'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER candidates_tenant_entity_check
+  BEFORE INSERT OR UPDATE OF tenant_id, organization_entity_id ON public.candidates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.candidates_tenant_entity_same_tenant();
+
+-- ============================================================================
 -- Grants
 -- ============================================================================
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.candidates TO service_role;
+GRANT SELECT, INSERT, UPDATE ON public.candidates TO authenticated;
