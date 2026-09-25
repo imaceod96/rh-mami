@@ -265,10 +265,43 @@ const EntityCandidates = () => {
       return
     }
 
+    // Validar especialidad solo para Técnico/Profesional
+    if (formData.education_level_id) {
+      const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
+      if (educationLevel?.name === "Técnico/Profesional" && !formData.specialty.trim()) {
+        setFormError("La especialidad es obligatoria para Técnico/Profesional")
+        return
+      }
+    }
+
+    // Validar formato de email si se proporciona
+    if (formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email.trim())) {
+        setFormError("El formato del email no es válido")
+        return
+      }
+    }
+
     setFormSubmitting(true)
     setFormError(null)
 
     try {
+      // Verificar si ya existe un candidato con la misma identificación
+      const { data: existingCandidates, error: checkError } = await supabase
+        .from("candidates")
+        .select("id")
+        .eq("organization_entity_id", entityId)
+        .eq("identification", formData.identification.trim())
+
+      if (checkError) throw checkError
+
+      if (existingCandidates && existingCandidates.length > 0) {
+        // Mostrar advertencia pero no bloquear
+        setFormError(`Advertencia: Ya existe un candidato con la identificación ${formData.identification.trim()}. ¿Desea continuar de todos modos?`)
+        // Continuar con el guardado
+      }
+
       const newCandidate = {
         tenant_id: currentEntity?.tenant_id,
         organization_entity_id: entityId,
