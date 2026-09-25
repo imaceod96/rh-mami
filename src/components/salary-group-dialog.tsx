@@ -13,17 +13,44 @@ interface SalaryGroupDialogProps {
 
 export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: SalaryGroupDialogProps) => {
   const [description, setDescription] = React.useState("")
+  const [salary, setSalary] = React.useState("")
+  const [effectiveFrom, setEffectiveFrom] = React.useState("")
+  const [salaryError, setSalaryError] = React.useState("")
+
+  const validateSalary = (value: string): string => {
+    if (!value.trim()) return "El salario es obligatorio"
+    const num = parseFloat(value)
+    if (isNaN(num)) return "El salario debe ser un número válido"
+    if (num <= 0) return "El salario debe ser mayor que 0"
+    return ""
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!description.trim() || isLoading) return
+
+    const salaryErr = validateSalary(salary)
+    if (salaryErr) {
+      setSalaryError(salaryErr)
+      return
+    }
+    setSalaryError("")
+
+    if (!effectiveFrom.trim()) return
+
     await onSubmit(description.trim())
     setDescription("")
+    setSalary("")
+    setEffectiveFrom("")
+    setSalaryError("")
     onOpenChange(false)
   }
 
   const handleClose = () => {
     setDescription("")
+    setSalary("")
+    setEffectiveFrom("")
+    setSalaryError("")
     onOpenChange(false)
   }
 
@@ -36,7 +63,7 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
             <X className="ml-auto h-4 w-4 text-muted-foreground cursor-pointer hover:text-ink" onClick={handleClose} />
           </DialogTitle>
           <DialogDescription>
-            Ingrese una descripción para el nuevo grupo salarial
+            Ingrese la información del nuevo grupo salarial
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -47,11 +74,37 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
             disabled={isLoading}
             autoFocus
           />
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Salario *</label>
+            <SiteCorpInput
+              type="number"
+              placeholder="Monto (mayor que 0)"
+              value={salary}
+              onChange={(e) => {
+                setSalary(e.target.value)
+                if (salaryError) setSalaryError("")
+              }}
+              disabled={isLoading}
+            />
+            {salaryError && (
+              <p className="text-xs text-sitecorp-danger">{salaryError}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Vigente desde *</label>
+            <SiteCorpInput
+              type="date"
+              value={effectiveFrom}
+              onChange={(e) => setEffectiveFrom(e.target.value)}
+              disabled={isLoading}
+              required
+            />
+          </div>
           <div className="flex justify-end gap-2 pt-2">
             <SiteCorpButton variant="outline" type="button" onClick={handleClose} disabled={isLoading}>
               Cancelar
             </SiteCorpButton>
-            <SiteCorpButton type="submit" disabled={isLoading || !description.trim()}>
+            <SiteCorpButton type="submit" disabled={isLoading || !description.trim() || !salary || !effectiveFrom}>
               {isLoading ? "Guardando..." : "Guardar"}
             </SiteCorpButton>
           </div>
