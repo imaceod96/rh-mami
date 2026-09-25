@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/contexts/AuthContext"
 import { CurrentTenantProvider, useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { CurrentEntityProvider, useCurrentEntity } from "@/contexts/CurrentEntityContext"
@@ -98,6 +98,7 @@ const LoadingScreen = () => (
 const AppRoutes = () => {
   const { authLoading, authReady, user, isPlatformSuperAdmin, isProfileActive } = useAuth()
   const { currentTenant } = useCurrentTenant()
+  const location = useLocation()
 
   if (authLoading) {
     return <LoadingScreen />
@@ -116,6 +117,30 @@ const AppRoutes = () => {
     )
   }
 
+  // Entity routes are evaluated BEFORE platform/tenant branching.
+  // currentTenant is intentionally NOT used here: Platform users may have a
+  // null tenant, and a stale non-null tenant must not hide entity routes.
+  // EntityRouteWrapper remains responsible for authorization.
+  if (location.pathname.startsWith("/entity/")) {
+    return (
+      <Routes>
+        <Route element={<EntityRouteWrapper />}>
+          <Route path="/entity/:entityId/summary" element={<EntitySummary />} />
+          <Route path="/entity/:entityId/panel" element={<Navigate to="summary" replace />} />
+          <Route path="/entity/:entityId/organization" element={<EntityOrganization />} />
+          <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
+          <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
+          <Route path="/entity/:entityId/hiring" element={<EntityHiring />} />
+          <Route path="/entity/:entityId/settings" element={<EntitySettings />} />
+          <Route path="/entity/:entityId/settings/users" element={<EntitySettingsUsers />} />
+          <Route path="/entity/:entityId/settings/roles" element={<EntitySettingsRoles />} />
+          <Route path="/entity/:entityId/settings/salary" element={<EntitySettingsSalary />} />
+          <Route path="/entity/:entityId/settings/governing-documents" element={<EntitySettingsGoverningDocuments />} />
+        </Route>
+      </Routes>
+    )
+  }
+
   // Platform SuperAdmin with no current tenant -> Platform Admin
   if (isPlatformSuperAdmin && !currentTenant) {
     return (
@@ -128,19 +153,6 @@ const AppRoutes = () => {
           <Route path="/admin/account" element={<Account />} />
           <Route path="/admin/settings/salary-scale" element={<AdminSettingsSalaryScale />} />
           <Route path="/organization/:entityId" element={<OrganizationDetail />} />
-          <Route element={<EntityRouteWrapper />}>
-            <Route path="/entity/:entityId/summary" element={<EntitySummary />} />
-            <Route path="/entity/:entityId/panel" element={<Navigate to="summary" replace />} />
-            <Route path="/entity/:entityId/organization" element={<EntityOrganization />} />
-            <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
-            <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
-            <Route path="/entity/:entityId/hiring" element={<EntityHiring />} />
-            <Route path="/entity/:entityId/settings" element={<EntitySettings />} />
-            <Route path="/entity/:entityId/settings/users" element={<EntitySettingsUsers />} />
-            <Route path="/entity/:entityId/settings/roles" element={<EntitySettingsRoles />} />
-            <Route path="/entity/:entityId/settings/salary" element={<EntitySettingsSalary />} />
-            <Route path="/entity/:entityId/settings/governing-documents" element={<EntitySettingsGoverningDocuments />} />
-          </Route>
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
       </Routes>
