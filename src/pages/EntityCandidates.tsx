@@ -392,14 +392,15 @@ const EntityCandidates = () => {
       return
     }
 
-    // Validar especialidad solo para Técnico/Profesional
-    if (formData.education_level_id) {
-      const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
-      if (educationLevel?.name === "Técnico/Profesional" && !formData.specialty.trim()) {
-        setFormError("La especialidad es obligatoria para Técnico/Profesional")
-        return
-      }
-    }
+    // Validar especialidad para niveles que la requieren
+        if (formData.education_level_id) {
+          const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
+          const requiresSpecialty = ["Técnico/Profesional", "Obrero"].includes(educationLevel?.name || "")
+          if (requiresSpecialty && !formData.specialty.trim()) {
+            setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
+            return
+          }
+        }
 
     // Validar formato de email si se proporciona
     if (formData.email.trim()) {
