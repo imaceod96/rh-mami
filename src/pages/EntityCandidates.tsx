@@ -620,25 +620,30 @@ const EntityCandidates = () => {
                         </div>
 
             {/* Education level filter */}
-                        <div>
-                          <label className="text-sm font-medium text-ink">Nivel educacional</label>
-                          <SiteCorpSelect
-                            value={selectedEducationLevel || undefined}
-                            onValueChange={(value) => setSelectedEducationLevel(value === "__placeholder__" ? null : value)}
-                          >
-                            <SelectItem value="__placeholder__">
-                              Todos
-                            </SelectItem>
-                            {educationLevels.map(level => (
-                              <SelectItem
-                                key={level.id}
-                                value={level.id}
-                              >
-                                {level.name}
-                              </SelectItem>
-                            ))}
-                          </SiteCorpSelect>
-                        </div>
+                                    <div>
+                                      <label className="text-sm font-medium text-ink">Nivel educacional</label>
+                                      <SiteCorpSelect
+                                        value={selectedEducationLevel || undefined}
+                                        onValueChange={(value) => setSelectedEducationLevel(value === "__placeholder__" ? null : value)}
+                                      >
+                                        <SelectItem value="__placeholder__">
+                                          Todos
+                                        </SelectItem>
+                                        {educationLevels
+                                          .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico/Profesional", "Bachillerato", "Universitario"].includes(level.name))
+                                          .map(level => (
+                                            <SelectItem
+                                              key={level.id}
+                                              value={level.id}
+                                            >
+                                              {level.name === "Técnico/Profesional" ? "Técnico" :
+                                               level.name === "Bachillerato" ? "Bachiller" :
+                                               level.name === "Universitario" ? "Superior" :
+                                               level.name}
+                                            </SelectItem>
+                                          ))}
+                                      </SiteCorpSelect>
+                                    </div>
 
             {/* Specialty filter */}
             <div>
@@ -1092,34 +1097,45 @@ const EntityCandidates = () => {
                         </div>
 
             {/* Section 4: Formación */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-ink border-b pb-2">Formación</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                                  <Label>Nivel educacional</Label>
-                                  <SiteCorpSelect
-                                    value={formData.education_level_id || undefined}
-                                    onValueChange={(value) => handleFormChange("education_level_id", value === "__placeholder__" ? "" : value)}
-                                  >
-                                    <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
-                                    {educationLevels.map(level => (
-                                      <SelectItem key={level.id} value={level.id}>
-                                        {level.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SiteCorpSelect>
-                                </div>
-                <div className="space-y-1.5">
-                  <Label>Especialidad</Label>
-                  <SiteCorpInput
-                    type="text"
-                    placeholder="Especialidad"
-                    value={formData.specialty}
-                    onChange={(e) => handleFormChange("specialty", e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Formación</h3>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label>Nivel educacional</Label>
+                              <SiteCorpSelect
+                                value={formData.education_level_id || undefined}
+                                onValueChange={(value) => handleFormChange("education_level_id", value === "__placeholder__" ? "" : value)}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {educationLevels
+                                  .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico/Profesional", "Bachillerato", "Universitario"].includes(level.name))
+                                  .map(level => (
+                                    <SelectItem key={level.id} value={level.id}>
+                                      {level.name === "Técnico/Profesional" ? "Técnico" :
+                                       level.name === "Bachillerato" ? "Bachiller" :
+                                       level.name === "Universitario" ? "Superior" :
+                                       level.name}
+                                    </SelectItem>
+                                  ))}
+                              </SiteCorpSelect>
+                            </div>
+                            {(formData.education_level_id && (() => {
+                              const level = educationLevels.find(l => l.id === formData.education_level_id)
+                              return level?.name === "Técnico/Profesional" || level?.name === "Obrero"
+                            })()) && (
+                              <div className="space-y-1.5">
+                                <Label>Especialidad *</Label>
+                                <SiteCorpInput
+                                  type="text"
+                                  placeholder="Especialidad"
+                                  value={formData.specialty}
+                                  onChange={(e) => handleFormChange("specialty", e.target.value)}
+                                  required
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
             {/* Section 5: Medidas disciplinarias */}
                         <div className="space-y-4">
