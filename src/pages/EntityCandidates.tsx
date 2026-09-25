@@ -314,29 +314,29 @@ const EntityCandidates = () => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  // DNI autocomplete for birth date
-  const handleIdentificationChange = (value: string) => {
-    const cleaned = value.replace(/\D/g, "")
-    setFormData(prev => ({ ...prev, identification: cleaned }))
-
-    // Auto-fill birth date from first 6 digits (aammdd)
-    if (cleaned.length >= 6) {
-      const yearStr = cleaned.substring(0, 2)
-      const monthStr = cleaned.substring(2, 4)
-      const dayStr = cleaned.substring(4, 6)
-
-      const year = parseInt(yearStr, 10)
-      const month = parseInt(monthStr, 10)
-      const day = parseInt(dayStr, 10)
-
-      if (year >= 0 && year <= 99 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        const fullYear = year >= 50 ? 1900 + year : 2000 + year
-        const date = new Date(fullYear, month - 1, day)
-        const dateStr = date.toISOString().split("T")[0]
-        setFormData(prev => ({ ...prev, birth_date: dateStr }))
+  // DNI autocomplete for birth date (Cuban DNI format: first 6 digits = aammdd)
+    const handleIdentificationChange = (value: string) => {
+      const cleaned = value.replace(/\D/g, "")
+      setFormData(prev => ({ ...prev, identification: cleaned }))
+  
+      // Auto-fill birth date from first 6 digits (aammdd) and display as dd/mm/yyyy
+      if (cleaned.length >= 6) {
+        const yearStr = cleaned.substring(0, 2)
+        const monthStr = cleaned.substring(2, 4)
+        const dayStr = cleaned.substring(4, 6)
+  
+        const year = parseInt(yearStr, 10)
+        const month = parseInt(monthStr, 10)
+        const day = parseInt(dayStr, 10)
+  
+        if (year >= 0 && year <= 99 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          const fullYear = year >= 50 ? 1900 + year : 2000 + year
+          const date = new Date(fullYear, month - 1, day)
+          const dateStr = date.toISOString().split("T")[0]
+          setFormData(prev => ({ ...prev, birth_date: dateStr }))
+        }
       }
     }
-  }
 
   // Province change - reset municipality
   const handleProvinceChange = (province: string) => {
@@ -960,13 +960,20 @@ const EntityCandidates = () => {
                                   />
                                 </div>
                 <div className="space-y-1.5">
-                  <Label>Fecha de nacimiento</Label>
-                  <SiteCorpInput
-                    type="date"
-                    value={formData.birth_date}
-                    onChange={(e) => handleFormChange("birth_date", e.target.value)}
-                  />
-                </div>
+                                  <Label>Fecha de nacimiento (dd/mm/aaaa)</Label>
+                                  <SiteCorpInput
+                                    type="text"
+                                    placeholder="dd/mm/aaaa"
+                                    value={formData.birth_date}
+                                    onChange={(e) => {
+                                      const val = e.target.value.replace(/\D/g, "").substring(0, 8)
+                                      let formatted = val
+                                      if (val.length > 4) formatted = `${val.substring(0, 2)}/${val.substring(2, 4)}/${val.substring(4, 8)}`
+                                      else if (val.length > 2) formatted = `${val.substring(0, 2)}/${val.substring(2)}`
+                                      handleFormChange("birth_date", formatted)
+                                    }}
+                                  />
+                                </div>
                 <div className="space-y-1.5">
                                   <Label>Sexo</Label>
                                   <SiteCorpSelect
