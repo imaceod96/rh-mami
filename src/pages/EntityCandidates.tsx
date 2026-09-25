@@ -395,7 +395,7 @@ const EntityCandidates = () => {
     // Validar especialidad para niveles que la requieren
         if (formData.education_level_id) {
           const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
-          const requiresSpecialty = ["Técnico/Profesional", "Obrero"].includes(educationLevel?.name || "")
+          const requiresSpecialty = ["Técnico", "Obrero"].includes(educationLevel?.name || "")
           if (requiresSpecialty && !formData.specialty.trim()) {
             setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
             return
@@ -630,18 +630,15 @@ const EntityCandidates = () => {
                                           Todos
                                         </SelectItem>
                                         {educationLevels
-                                          .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico/Profesional", "Bachillerato", "Universitario"].includes(level.name))
-                                          .map(level => (
-                                            <SelectItem
-                                              key={level.id}
-                                              value={level.id}
-                                            >
-                                              {level.name === "Técnico/Profesional" ? "Técnico" :
-                                               level.name === "Bachillerato" ? "Bachiller" :
-                                               level.name === "Universitario" ? "Superior" :
-                                               level.name}
-                                            </SelectItem>
-                                          ))}
+                                                                      .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico", "Bachiller", "Superior"].includes(level.name))
+                                                                      .map(level => (
+                                                                        <SelectItem
+                                                                          key={level.id}
+                                                                          value={level.id}
+                                                                        >
+                                                                          {level.name}
+                                                                        </SelectItem>
+                                                                      ))}
                                       </SiteCorpSelect>
                                     </div>
 
@@ -1115,21 +1112,18 @@ const EntityCandidates = () => {
                               >
                                 <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
                                 {educationLevels
-                                  .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico/Profesional", "Bachillerato", "Universitario"].includes(level.name))
-                                  .map(level => (
-                                    <SelectItem key={level.id} value={level.id}>
-                                      {level.name === "Técnico/Profesional" ? "Técnico" :
-                                       level.name === "Bachillerato" ? "Bachiller" :
-                                       level.name === "Universitario" ? "Superior" :
-                                       level.name}
-                                    </SelectItem>
-                                  ))}
+                                                                  .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico", "Bachiller", "Superior"].includes(level.name))
+                                                                  .map(level => (
+                                                                    <SelectItem key={level.id} value={level.id}>
+                                                                      {level.name}
+                                                                    </SelectItem>
+                                                                  ))}
                               </SiteCorpSelect>
                             </div>
                             {(formData.education_level_id && (() => {
-                              const level = educationLevels.find(l => l.id === formData.education_level_id)
-                              return level?.name === "Técnico/Profesional" || level?.name === "Obrero"
-                            })()) && (
+                                                          const level = educationLevels.find(l => l.id === formData.education_level_id)
+                                                          return level?.name === "Técnico" || level?.name === "Obrero"
+                                                        })()) && (
                               <div className="space-y-1.5">
                                 <Label>Especialidad *</Label>
                                 <SiteCorpInput
