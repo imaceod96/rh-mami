@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null
   profile: Record<string, any> | null
   isPlatformSuperAdmin: boolean
+  isPlatformUser: boolean
   isProfileActive: boolean
   memberships: Record<string, any>[]
   authLoading: boolean
@@ -21,6 +22,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = React.useState<User | null>(null)
     const [profile, setProfile] = React.useState<Record<string, any> | null>(null)
     const [isPlatformSuperAdmin, setIsPlatformSuperAdmin] = React.useState(false)
+    const [isPlatformUser, setIsPlatformUser] = React.useState(false)
     const [isProfileActive, setIsProfileActive] = React.useState(true)
     const [memberships, setMemberships] = React.useState<Record<string, any>[]>([])
     const [authLoading, setAuthLoading] = React.useState(true)
@@ -58,6 +60,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
           if (mounted) {
             setIsPlatformSuperAdmin(!!superAdminData)
+          }
+
+          // Load Platform User status (at least one active Platform Role)
+          const { data: platformUserData } = await supabase.rpc("is_platform_user")
+          if (mounted) {
+            setIsPlatformUser(!!platformUserData || !!superAdminData)
           }
 
           // Load memberships
@@ -106,6 +114,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       const { data: superAdminData } = await supabase.rpc("is_platform_superadmin")
             setIsPlatformSuperAdmin(!!superAdminData)
 
+                      const { data: platformUserData } = await supabase.rpc("is_platform_user")
+            setIsPlatformUser(!!platformUserData || !!superAdminData)
+
             const { data: membershipsData } = await supabase
               .from("tenant_memberships")
               .select("*, tenant:tenants(*)")
@@ -117,6 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   setUser(null)
                   setProfile(null)
                   setIsPlatformSuperAdmin(false)
+                  setIsPlatformUser(false)
                   setIsProfileActive(true)
                   setMemberships([])
                   setAuthLoading(false)
@@ -167,6 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         isPlatformSuperAdmin,
+        isPlatformUser,
         isProfileActive,
         memberships,
         authLoading,

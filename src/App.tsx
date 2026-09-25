@@ -103,8 +103,7 @@ const EntityPanelRedirect = () => {
 
 // Main routing logic
 const AppRoutes = () => {
-  const { authLoading, authReady, user, isPlatformSuperAdmin, isProfileActive } = useAuth()
-  const { currentTenant } = useCurrentTenant()
+  const { authLoading, authReady, user, isPlatformUser, isProfileActive } = useAuth()
   const location = useLocation()
 
   if (authLoading) {
@@ -148,8 +147,11 @@ const AppRoutes = () => {
     )
   }
 
-  // Platform SuperAdmin with no current tenant -> Platform Admin
-  if (isPlatformSuperAdmin && !currentTenant) {
+  // Platform User (any active Platform Role, including SuperAdmin)
+  // -> Global Platform Administration.
+  // currentTenant is intentionally NOT required: a Platform User's default
+  // application is Global Administration.
+  if (isPlatformUser) {
     return (
       <Routes>
         <Route element={<PlatformAdminLayout />}>
