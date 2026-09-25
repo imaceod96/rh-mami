@@ -10,7 +10,7 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
-import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
+import { SalaryGroupDialog } from "@/components/salary-group-dialog"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { Scale, Plus, Edit3, Clock, AlertTriangle } from "lucide-react"
 import type { SalaryGroupWithCurrent, SalaryScale } from "@/contexts/SalaryContext"
@@ -225,20 +225,12 @@ const EntitySettingsSalary = () => {
                   </div>
                 </div>
 
-                {/* Add group form */}
-                {showAddGroup && (
-                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                    <SiteCorpInput
-                      placeholder="Descripción del grupo"
-                      value={newGroupDesc}
-                      onChange={(e) => setNewGroupDesc(e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <SiteCorpButton onClick={handleAddGroup}>Guardar</SiteCorpButton>
-                      <SiteCorpButton variant="outline" onClick={() => { setShowAddGroup(false); setNewGroupDesc("") }}>Cancelar</SiteCorpButton>
-                    </div>
-                  </div>
-                )}
+                {/* Add group dialog */}
+                <SalaryGroupDialog
+                  open={showAddGroup}
+                  onOpenChange={setShowAddGroup}
+                  onSubmit={handleAddGroup}
+                />
 
                 {/* Groups table */}
                 <div className="space-y-3">
@@ -387,25 +379,17 @@ const EntitySettingsSalary = () => {
                     )}
                   </div>
 
-                  {/* Add group form */}
-                  {showAddGroup && (
-                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                      <SiteCorpInput
-                        placeholder="Descripción del grupo"
-                        value={newGroupDesc}
-                        onChange={(e) => setNewGroupDesc(e.target.value)}
-                      />
-                      <div className="flex gap-2">
-                        <SiteCorpButton onClick={handleAddGroup}>Guardar</SiteCorpButton>
-                        <SiteCorpButton variant="outline" onClick={() => { setShowAddGroup(false); setNewGroupDesc("") }}>Cancelar</SiteCorpButton>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Groups table */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
-                    {groups.map((group) => (
+                  {/* Add group dialog */}
+                                    <SalaryGroupDialog
+                                      open={showAddGroup}
+                                      onOpenChange={setShowAddGroup}
+                                      onSubmit={handleAddGroup}
+                                    />
+                  
+                                    {/* Groups table */}
+                                    <div className="space-y-3">
+                                      <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
+                                      {groups.map((group) => (
                       <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary/10">

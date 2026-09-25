@@ -9,6 +9,7 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
+import { SalaryGroupDialog } from "@/components/salary-group-dialog"
 import { Plus, Edit3, Clock, PlusCircle } from "lucide-react"
 
 interface SalaryGroupRow {
@@ -230,20 +231,12 @@ const AdminSettingsSalaryScale = () => {
                 </SiteCorpButton>
               </div>
 
-              {/* Add group form */}
-              {showAddGroup && (
-                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                  <SiteCorpInput
-                    placeholder="Descripción del grupo"
-                    value={newGroupDesc}
-                    onChange={(e) => setNewGroupDesc(e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <SiteCorpButton onClick={handleAddGroup}>Guardar</SiteCorpButton>
-                    <SiteCorpButton variant="outline" onClick={() => { setShowAddGroup(false); setNewGroupDesc("") }}>Cancelar</SiteCorpButton>
-                  </div>
-                </div>
-              )}
+              {/* Add group dialog */}
+              <SalaryGroupDialog
+                open={showAddGroup}
+                onOpenChange={setShowAddGroup}
+                onSubmit={handleAddGroup}
+              />
 
               {/* Groups table */}
               <div className="space-y-3">
