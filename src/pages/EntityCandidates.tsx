@@ -1,6 +1,5 @@
 import * as React from "react"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
-import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -12,8 +11,18 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from "@/components/ui/pagination"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
-import { Users, Search, Edit3, Trash2 } from "lucide-react"
+import { Users, Search, Edit3, Trash2, Plus } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 interface Candidate {
   id: string
@@ -53,6 +62,40 @@ interface EducationLevel {
   name: string
 }
 
+interface CandidateFormData {
+  first_name: string
+  first_surname: string
+  second_surname: string
+  identification: string
+  birth_date: string
+  gender_id: string
+  marital_status_id: string
+  phone: string
+  email: string
+  address: string
+  municipality: string
+  province: string
+  education_level_id: string
+  specialty: string
+}
+
+const emptyFormData: CandidateFormData = {
+  first_name: "",
+  first_surname: "",
+  second_surname: "",
+  identification: "",
+  birth_date: "",
+  gender_id: "",
+  marital_status_id: "",
+  phone: "",
+  email: "",
+  address: "",
+  municipality: "",
+  province: "",
+  education_level_id: "",
+  specialty: "",
+}
+
 const EntityCandidates = () => {
   const { currentEntity } = useCurrentEntity()
   const entityId = currentEntity?.id
@@ -74,6 +117,13 @@ const EntityCandidates = () => {
   const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+
+  // Form state
+  const [formOpen, setFormOpen] = React.useState(false)
+  const [formData, setFormData] = React.useState<CandidateFormData>(emptyFormData)
+  const [formSubmitting, setFormSubmitting] = React.useState(false)
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [formSuccess, setFormSuccess] = React.useState(false)
 
   // Fetch reference data
   React.useEffect(() => {
@@ -193,6 +243,79 @@ const EntityCandidates = () => {
     selectedStatus
   ])
 
+  // Form handlers
+  const handleFormChange = (field: keyof CandidateFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Validation
+    if (!formData.first_name.trim()) {
+      setFormError("El nombre es obligatorio")
+      return
+    }
+    if (!formData.first_surname.trim()) {
+      setFormError("El primer apellido es obligatorio")
+      return
+    }
+    if (!formData.identification.trim()) {
+      setFormError("La identificación es obligatoria")
+      return
+    }
+
+    setFormSubmitting(true)
+    setFormError(null)
+
+    try {
+      const newCandidate = {
+        tenant_id: currentEntity?.tenant_id,
+        organization_entity_id: entityId,
+        first_name: formData.first_name.trim(),
+        first_surname: formData.first_surname.trim(),
+        second_surname: formData.second_surname.trim() || null,
+        identification: formData.identification.trim(),
+        birth_date: formData.birth_date || null,
+        gender_id: formData.gender_id || null,
+        marital_status_id: formData.marital_status_id || null,
+        phone: formData.phone.trim() || null,
+        email: formData.email.trim() || null,
+        address: formData.address.trim() || null,
+        municipality: formData.municipality.trim() || null,
+        province: formData.province.trim() || null,
+        education_level_id: formData.education_level_id || null,
+        specialty: formData.specialty.trim() || null,
+        status: "active" as const,
+      }
+
+      const { error: insertError } = await supabase
+        .from("candidates")
+        .insert(newCandidate)
+
+      if (insertError) throw insertError
+
+      // Reset form and close
+      setFormData(emptyFormData)
+      setFormSuccess(true)
+      setFormOpen(false)
+
+      // Refresh candidates list
+      setTimeout(() => setFormSuccess(false), 3000)
+    } catch (err) {
+      console.error("Error creating candidate:", err)
+      setFormError("Error al guardar el candidato. Inténtalo de nuevo.")
+    } finally {
+      setFormSubmitting(false)
+    }
+  }
+
+  const handleFormCancel = () => {
+    setFormData(emptyFormData)
+    setFormError(null)
+    setFormOpen(false)
+  }
+
   if (!entityId) {
     return (
       <div className="space-y-6 p-6">
@@ -257,10 +380,23 @@ const EntityCandidates = () => {
 
   return (
     <div className="space-y-6 p-6">
-      <SiteCorpPageHeader
-        title="Candidatos"
-        description={`Listado de candidatos para ${currentEntity?.name}`}
-      />
+      <div className="flex items-center justify-between">
+        <SiteCorpPageHeader
+          title="Candidatos"
+          description={`Listado de candidatos para ${currentEntity?.name}`}
+        />
+        <SiteCorpButton onClick={() => setFormOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nuevo candidato
+        </SiteCorpButton>
+      </div>
+
+      {/* Success alert */}
+      {formSuccess && (
+        <SiteCorpAlert type="success">
+          Candidato creado exitosamente
+        </SiteCorpAlert>
+      )}
 
       {/* Search and Filters */}
       <SiteCorpCard>
@@ -597,6 +733,216 @@ const EntityCandidates = () => {
           </div>
         </>
       )}
+
+      {/* New Candidate Dialog */}
+      <Dialog open={formOpen} onOpenChange={(open) => {
+        if (!open) handleFormCancel()
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo candidato</DialogTitle>
+            <DialogDescription>
+              Complete los datos del candidato. Los campos marcados con * son obligatorios.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleFormSubmit} className="space-y-6">
+            {/* Section 1: Identificación */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-ink border-b pb-2">Identificación</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Nombre *</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Nombre"
+                    value={formData.first_name}
+                    onChange={(e) => handleFormChange("first_name", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Primer apellido *</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Primer apellido"
+                    value={formData.first_surname}
+                    onChange={(e) => handleFormChange("first_surname", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Segundo apellido</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Segundo apellido"
+                    value={formData.second_surname}
+                    onChange={(e) => handleFormChange("second_surname", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Identificación *</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Cédula / DNI / Pasaporte"
+                    value={formData.identification}
+                    onChange={(e) => handleFormChange("identification", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Fecha de nacimiento</Label>
+                  <SiteCorpInput
+                    type="date"
+                    value={formData.birth_date}
+                    onChange={(e) => handleFormChange("birth_date", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Sexo</Label>
+                  <SiteCorpSelect
+                    value={formData.gender_id}
+                    onValueChange={(value) => handleFormChange("gender_id", value)}
+                  >
+                    <SelectItem value="">Seleccionar...</SelectItem>
+                    {genders.map(gender => (
+                      <SelectItem key={gender.id} value={gender.id}>
+                        {gender.name}
+                      </SelectItem>
+                    ))}
+                  </SiteCorpSelect>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Datos personales */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-ink border-b pb-2">Datos personales</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Estado civil</Label>
+                  <SiteCorpSelect
+                    value={formData.marital_status_id}
+                    onValueChange={(value) => handleFormChange("marital_status_id", value)}
+                  >
+                    <SelectItem value="">Seleccionar...</SelectItem>
+                    {maritalStatuses.map(status => (
+                      <SelectItem key={status.id} value={status.id}>
+                        {status.name}
+                      </SelectItem>
+                    ))}
+                  </SiteCorpSelect>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Contacto y dirección */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-ink border-b pb-2">Contacto y dirección</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Teléfono</Label>
+                  <SiteCorpInput
+                    type="tel"
+                    placeholder="+51 999 999 999"
+                    value={formData.phone}
+                    onChange={(e) => handleFormChange("phone", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <SiteCorpInput
+                    type="email"
+                    placeholder="correo@ejemplo.com"
+                    value={formData.email}
+                    onChange={(e) => handleFormChange("email", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Dirección</Label>
+                  <Textarea
+                    placeholder="Dirección completa"
+                    value={formData.address}
+                    onChange={(e) => handleFormChange("address", e.target.value)}
+                    rows={2}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Municipio</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Municipio"
+                    value={formData.municipality}
+                    onChange={(e) => handleFormChange("municipality", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Provincia</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Provincia"
+                    value={formData.province}
+                    onChange={(e) => handleFormChange("province", e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 4: Formación */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-ink border-b pb-2">Formación</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Nivel educacional</Label>
+                  <SiteCorpSelect
+                    value={formData.education_level_id}
+                    onValueChange={(value) => handleFormChange("education_level_id", value)}
+                  >
+                    <SelectItem value="">Seleccionar...</SelectItem>
+                    {educationLevels.map(level => (
+                      <SelectItem key={level.id} value={level.id}>
+                        {level.name}
+                      </SelectItem>
+                    ))}
+                  </SiteCorpSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Especialidad</Label>
+                  <SiteCorpInput
+                    type="text"
+                    placeholder="Especialidad"
+                    value={formData.specialty}
+                    onChange={(e) => handleFormChange("specialty", e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Form error */}
+            {formError && (
+              <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
+            )}
+
+            {/* Form footer */}
+            <DialogFooter className="gap-2">
+              <SiteCorpButton
+                type="button"
+                variant="outline"
+                onClick={handleFormCancel}
+                disabled={formSubmitting}
+              >
+                Cancelar
+              </SiteCorpButton>
+              <SiteCorpButton
+                type="submit"
+                disabled={formSubmitting}
+              >
+                {formSubmitting ? "Guardando..." : "Guardar candidato"}
+              </SiteCorpButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
