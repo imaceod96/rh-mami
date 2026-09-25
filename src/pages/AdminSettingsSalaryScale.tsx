@@ -312,16 +312,16 @@ const AdminSettingsSalaryScale = () => {
                         {group.is_active ? "Activo" : "Inactivo"}
                       </SiteCorpStatusBadge>
                       <SiteCorpButton
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setShowEditValue(showEditValue === group.id ? null : group.id)
-                          setNewAmount("")
-                          setNewEffectiveFrom("")
-                        }}
-                      >
-                        <Edit3 className="mr-1 h-3.5 w-3.5" /> Editar
-                      </SiteCorpButton>
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={() => {
+                                                setShowEditValue(showEditValue === group.id ? null : group.id)
+                                                setNewAmount("")
+                                                setNewEffectiveFrom("")
+                                              }}
+                                            >
+                                              <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
+                                            </SiteCorpButton>
                       <SiteCorpButton
                         size="sm"
                         variant="outline"
@@ -337,7 +337,7 @@ const AdminSettingsSalaryScale = () => {
               {/* Edit value form */}
               {showEditValue && (
                 <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                  <h4 className="text-sm font-semibold text-ink">Editar salario del grupo</h4>
+                  <h4 className="text-sm font-semibold text-ink">Cambiar salario del grupo</h4>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-1.5">
                       <label className="text-xs text-muted-foreground">Nuevo salario</label>
@@ -392,11 +392,20 @@ const AdminSettingsSalaryScale = () => {
           </SiteCorpCard>
         </>
       )}
+
+      {/* Salary History Modal */}
+      <SalaryHistoryModal
+        open={showHistoryModal}
+        onOpenChange={(open) => setShowHistoryModal(open)}
+        groupId={historyGroupId}
+        historyData={historyData}
+        historyLoading={historyLoading}
+      />
     </div>
   )
 }
-
-// Salary History Modal
+          
+          // Salary History Modal
 const SalaryHistoryModal = ({ 
   open, 
   onOpenChange, 

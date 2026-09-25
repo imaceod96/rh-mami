@@ -308,18 +308,18 @@ const EntitySettingsSalary = () => {
                                               {group.is_active ? "Activo" : "Inactivo"}
                                             </SiteCorpStatusBadge>
                                             {canManageGlobal && (
-                                              <SiteCorpButton
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                  setShowEditValue(showEditValue === group.id ? null : group.id)
-                                                  setNewAmount("")
-                                                  setNewEffectiveFrom("")
-                                                }}
-                                              >
-                                                <Edit3 className="mr-1 h-3.5 w-3.5" /> Editar
-                                              </SiteCorpButton>
-                                            )}
+                                                                                          <SiteCorpButton
+                                                                                            size="sm"
+                                                                                            variant="outline"
+                                                                                            onClick={() => {
+                                                                                              setShowEditValue(showEditValue === group.id ? null : group.id)
+                                                                                              setNewAmount("")
+                                                                                              setNewEffectiveFrom("")
+                                                                                            }}
+                                                                                          >
+                                                                                            <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
+                                                                                          </SiteCorpButton>
+                                                                                        )}
                                             <SiteCorpButton
                                               size="sm"
                                               variant="outline"
@@ -468,18 +468,18 @@ const EntitySettingsSalary = () => {
                             {group.is_active ? "Activo" : "Inactivo"}
                           </SiteCorpStatusBadge>
                           {isPlatformSuperAdmin && (
-                            <SiteCorpButton
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setShowEditValue(showEditValue === group.id ? null : group.id)
-                                setNewAmount("")
-                                setNewEffectiveFrom("")
-                              }}
-                            >
-                              <Edit3 className="mr-1 h-3.5 w-3.5" /> Editar
-                            </SiteCorpButton>
-                          )}
+                                                      <SiteCorpButton
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                          setShowEditValue(showEditValue === group.id ? null : group.id)
+                                                          setNewAmount("")
+                                                          setNewEffectiveFrom("")
+                                                        }}
+                                                      >
+                                                        <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
+                                                      </SiteCorpButton>
+                                                    )}
                           <SiteCorpButton
                             size="sm"
                             variant="outline"
@@ -552,6 +552,15 @@ const EntitySettingsSalary = () => {
           )}
         </>
       )}
+
+      {/* Salary History Modal */}
+      <SalaryHistoryModal
+        open={showHistoryModal}
+        onOpenChange={(open) => setShowHistoryModal(open)}
+        groupId={historyGroupId}
+        historyData={historyData}
+        historyLoading={historyLoading}
+      />
     </div>
   )
 }
