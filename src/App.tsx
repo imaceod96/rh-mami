@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/contexts/AuthContext"
 import { CurrentTenantProvider, useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { CurrentEntityProvider, useCurrentEntity } from "@/contexts/CurrentEntityContext"
@@ -94,6 +94,13 @@ const LoadingScreen = () => (
   </div>
 )
 
+// /panel compatibility redirect: resolves to the sibling canonical route
+// /entity/<REAL_ENTITY_ID>/summary (NOT /entity/<id>/panel/summary)
+const EntityPanelRedirect = () => {
+  const { entityId } = useParams<{ entityId: string }>()
+  return <Navigate to={`/entity/${entityId}/summary`} replace />
+}
+
 // Main routing logic
 const AppRoutes = () => {
   const { authLoading, authReady, user, isPlatformSuperAdmin, isProfileActive } = useAuth()
@@ -126,7 +133,7 @@ const AppRoutes = () => {
       <Routes>
         <Route element={<EntityRouteWrapper />}>
           <Route path="/entity/:entityId/summary" element={<EntitySummary />} />
-          <Route path="/entity/:entityId/panel" element={<Navigate to="summary" replace />} />
+          <Route path="/entity/:entityId/panel" element={<EntityPanelRedirect />} />
           <Route path="/entity/:entityId/organization" element={<EntityOrganization />} />
           <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
           <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
