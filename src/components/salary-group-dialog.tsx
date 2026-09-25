@@ -7,7 +7,7 @@ import { X } from "lucide-react"
 interface SalaryGroupDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (description: string) => Promise<void>
+  onSubmit: (description: string, salary: string, effectiveFrom: string) => Promise<void>
   isLoading?: boolean
 }
 
@@ -38,7 +38,7 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
 
     if (!effectiveFrom.trim()) return
 
-    await onSubmit(description.trim())
+    await onSubmit(description.trim(), salary.trim(), effectiveFrom)
     setDescription("")
     setSalary("")
     setEffectiveFrom("")

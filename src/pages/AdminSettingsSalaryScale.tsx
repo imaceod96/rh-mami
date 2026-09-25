@@ -80,19 +80,23 @@ const AdminSettingsSalaryScale = () => {
     checkPermission()
   }, [loadScale, checkPermission])
 
-  const handleAddGroup = async () => {
-    if (!scale || !newGroupDesc.trim()) return
-    try {
-      const newGroup = await addSalaryGroup(scale.id, newGroupDesc.trim())
-      if (newGroup) {
-        setNewGroupDesc("")
-        setShowAddGroup(false)
-        await loadScale()
+  const handleAddGroup = async (description: string, salary: string, effectiveFrom: string) => {
+      if (!scale || !description.trim()) return
+      try {
+        const newGroup = await addSalaryGroup(scale.id, description.trim())
+        if (newGroup) {
+          const amount = parseFloat(salary)
+          if (!isNaN(amount) && amount > 0) {
+            await addSalaryValue(newGroup.id, amount, "CUP", effectiveFrom)
+          }
+          setNewGroupDesc("")
+          setShowAddGroup(false)
+          await loadScale()
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al añadir grupo")
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al añadir grupo")
     }
-  }
 
   const handleEditValue = async (groupId: string) => {
     if (!newAmount || !newEffectiveFrom) return
