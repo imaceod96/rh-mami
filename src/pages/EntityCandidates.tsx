@@ -447,67 +447,67 @@ const EntityCandidates = () => {
             </div>
 
             {/* Gender filter */}
-            <div>
-              <label className="text-sm font-medium text-ink">Sexo</label>
-              <SiteCorpSelect
-                value={selectedGender || ""}
-                onValueChange={(value) => setSelectedGender(value || null)}
-              >
-                <SelectItem value="">
-                  Todas
-                </SelectItem>
-                {genders.map(gender => (
-                  <SelectItem
-                    key={gender.id}
-                    value={gender.id}
-                  >
-                    {gender.name}
-                  </SelectItem>
-                ))}
-              </SiteCorpSelect>
-            </div>
+                        <div>
+                          <label className="text-sm font-medium text-ink">Sexo</label>
+                          <SiteCorpSelect
+                            value={selectedGender || undefined}
+                            onValueChange={(value) => setSelectedGender(value === "__placeholder__" ? null : value)}
+                          >
+                            <SelectItem value="__placeholder__">
+                              Todas
+                            </SelectItem>
+                            {genders.map(gender => (
+                              <SelectItem
+                                key={gender.id}
+                                value={gender.id}
+                              >
+                                {gender.name}
+                              </SelectItem>
+                            ))}
+                          </SiteCorpSelect>
+                        </div>
 
             {/* Marital status filter */}
-            <div>
-              <label className="text-sm font-medium text-ink">Estado civil</label>
-              <SiteCorpSelect
-                value={selectedMaritalStatus || ""}
-                onValueChange={(value) => setSelectedMaritalStatus(value || null)}
-              >
-                <SelectItem value="">
-                  Todos
-                </SelectItem>
-                {maritalStatuses.map(status => (
-                  <SelectItem
-                    key={status.id}
-                    value={status.id}
-                  >
-                    {status.name}
-                  </SelectItem>
-                ))}
-              </SiteCorpSelect>
-            </div>
+                        <div>
+                          <label className="text-sm font-medium text-ink">Estado civil</label>
+                          <SiteCorpSelect
+                            value={selectedMaritalStatus || undefined}
+                            onValueChange={(value) => setSelectedMaritalStatus(value === "__placeholder__" ? null : value)}
+                          >
+                            <SelectItem value="__placeholder__">
+                              Todos
+                            </SelectItem>
+                            {maritalStatuses.map(status => (
+                              <SelectItem
+                                key={status.id}
+                                value={status.id}
+                              >
+                                {status.name}
+                              </SelectItem>
+                            ))}
+                          </SiteCorpSelect>
+                        </div>
 
             {/* Education level filter */}
-            <div>
-              <label className="text-sm font-medium text-ink">Nivel educacional</label>
-              <SiteCorpSelect
-                value={selectedEducationLevel || ""}
-                onValueChange={(value) => setSelectedEducationLevel(value || null)}
-              >
-                <SelectItem value="">
-                  Todos
-                </SelectItem>
-                {educationLevels.map(level => (
-                  <SelectItem
-                    key={level.id}
-                    value={level.id}
-                  >
-                    {level.name}
-                  </SelectItem>
-                ))}
-              </SiteCorpSelect>
-            </div>
+                        <div>
+                          <label className="text-sm font-medium text-ink">Nivel educacional</label>
+                          <SiteCorpSelect
+                            value={selectedEducationLevel || undefined}
+                            onValueChange={(value) => setSelectedEducationLevel(value === "__placeholder__" ? null : value)}
+                          >
+                            <SelectItem value="__placeholder__">
+                              Todos
+                            </SelectItem>
+                            {educationLevels.map(level => (
+                              <SelectItem
+                                key={level.id}
+                                value={level.id}
+                              >
+                                {level.name}
+                              </SelectItem>
+                            ))}
+                          </SiteCorpSelect>
+                        </div>
 
             {/* Specialty filter */}
             <div>
@@ -521,23 +521,23 @@ const EntityCandidates = () => {
             </div>
 
             {/* Status filter */}
-            <div>
-              <label className="text-sm font-medium text-ink">Estado</label>
-              <SiteCorpSelect
-                value={selectedStatus || ""}
-                onValueChange={(value) => setSelectedStatus(value || null)}
-              >
-                <SelectItem value="">
-                  Todos
-                </SelectItem>
-                <SelectItem value="active">
-                  Activo
-                </SelectItem>
-                <SelectItem value="archived">
-                  Archivado
-                </SelectItem>
-              </SiteCorpSelect>
-            </div>
+                        <div>
+                          <label className="text-sm font-medium text-ink">Estado</label>
+                          <SiteCorpSelect
+                            value={selectedStatus || undefined}
+                            onValueChange={(value) => setSelectedStatus(value === "__placeholder__" ? null : value)}
+                          >
+                            <SelectItem value="__placeholder__">
+                              Todos
+                            </SelectItem>
+                            <SelectItem value="active">
+                              Activo
+                            </SelectItem>
+                            <SelectItem value="archived">
+                              Archivado
+                            </SelectItem>
+                          </SiteCorpSelect>
+                        </div>
 
             {/* Actions */}
             <div className="flex items-end">
@@ -832,19 +832,19 @@ const EntityCandidates = () => {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Sexo</Label>
-                  <SiteCorpSelect
-                    value={formData.gender_id}
-                    onValueChange={(value) => handleFormChange("gender_id", value)}
-                  >
-                    <SelectItem value="">Seleccionar...</SelectItem>
-                    {genders.map(gender => (
-                      <SelectItem key={gender.id} value={gender.id}>
-                        {gender.name}
-                      </SelectItem>
-                    ))}
-                  </SiteCorpSelect>
-                </div>
+                                  <Label>Sexo</Label>
+                                  <SiteCorpSelect
+                                    value={formData.gender_id || undefined}
+                                    onValueChange={(value) => handleFormChange("gender_id", value === "__placeholder__" ? "" : value)}
+                                  >
+                                    <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                    {genders.map(gender => (
+                                      <SelectItem key={gender.id} value={gender.id}>
+                                        {gender.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SiteCorpSelect>
+                                </div>
               </div>
             </div>
 
@@ -853,19 +853,19 @@ const EntityCandidates = () => {
               <h3 className="text-sm font-semibold text-ink border-b pb-2">Datos personales</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Estado civil</Label>
-                  <SiteCorpSelect
-                    value={formData.marital_status_id}
-                    onValueChange={(value) => handleFormChange("marital_status_id", value)}
-                  >
-                    <SelectItem value="">Seleccionar...</SelectItem>
-                    {maritalStatuses.map(status => (
-                      <SelectItem key={status.id} value={status.id}>
-                        {status.name}
-                      </SelectItem>
-                    ))}
-                  </SiteCorpSelect>
-                </div>
+                                  <Label>Estado civil</Label>
+                                  <SiteCorpSelect
+                                    value={formData.marital_status_id || undefined}
+                                    onValueChange={(value) => handleFormChange("marital_status_id", value === "__placeholder__" ? "" : value)}
+                                  >
+                                    <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                    {maritalStatuses.map(status => (
+                                      <SelectItem key={status.id} value={status.id}>
+                                        {status.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SiteCorpSelect>
+                                </div>
               </div>
             </div>
 
@@ -926,19 +926,19 @@ const EntityCandidates = () => {
               <h3 className="text-sm font-semibold text-ink border-b pb-2">Formación</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Nivel educacional</Label>
-                  <SiteCorpSelect
-                    value={formData.education_level_id}
-                    onValueChange={(value) => handleFormChange("education_level_id", value)}
-                  >
-                    <SelectItem value="">Seleccionar...</SelectItem>
-                    {educationLevels.map(level => (
-                      <SelectItem key={level.id} value={level.id}>
-                        {level.name}
-                      </SelectItem>
-                    ))}
-                  </SiteCorpSelect>
-                </div>
+                                  <Label>Nivel educacional</Label>
+                                  <SiteCorpSelect
+                                    value={formData.education_level_id || undefined}
+                                    onValueChange={(value) => handleFormChange("education_level_id", value === "__placeholder__" ? "" : value)}
+                                  >
+                                    <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                    {educationLevels.map(level => (
+                                      <SelectItem key={level.id} value={level.id}>
+                                        {level.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SiteCorpSelect>
+                                </div>
                 <div className="space-y-1.5">
                   <Label>Especialidad</Label>
                   <SiteCorpInput
