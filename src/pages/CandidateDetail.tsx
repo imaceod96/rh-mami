@@ -33,11 +33,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { CalendarIcon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
-import { Users, Edit3, ArrowLeft, FileText, Briefcase, GraduationCap, Paperclip, FileText as Notes, Upload, Trash2, Download, FileType, Calendar } from "lucide-react"
+import { Users, Edit3, ArrowLeft, FileText, Briefcase, GraduationCap, Paperclip, FileText as Notes, Upload, Trash2, Download, FileType, Calendar as CalendarIcon } from "lucide-react"
 
 interface Candidate {
   id: string
@@ -916,7 +915,7 @@ const CandidateDetail = () => {
                         <span>{getDocumentTypeName(document.document_type_id)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
+                        <CalendarIcon className="h-4 w-4" />
                         <span>{formatDate(document.created_at)}</span>
                       </div>
                       {document.description && (
