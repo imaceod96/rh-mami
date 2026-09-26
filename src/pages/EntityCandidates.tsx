@@ -185,9 +185,11 @@ const EntityCandidates = () => {
   const [formSuccess, setFormSuccess] = React.useState(false)
 
   // Disciplinary measures dialog
-  const [disciplinaryDialogOpen, setDisciplinaryDialogOpen] = React.useState(false)
-  const [disciplinaryDocument, setDisciplinaryDocument] = React.useState<File | null>(null)
-  const [disciplinaryUploading, setDisciplinaryUploading] = React.useState(false)
+    const [disciplinaryDialogOpen, setDisciplinaryDialogOpen] = React.useState(false)
+    const [disciplinaryDocument, setDisciplinaryDocument] = React.useState<File | null>(null)
+    const [disciplinaryUploading, setDisciplinaryUploading] = React.useState(false)
+    const [disciplinaryDocumentPath, setDisciplinaryDocumentPath] = React.useState<string | null>(null)
+    const [disciplinaryDocumentName, setDisciplinaryDocumentName] = React.useState<string | null>(null)
 
   // Fetch reference data
   React.useEffect(() => {
@@ -367,8 +369,9 @@ const EntityCandidates = () => {
 
       if (uploadError) throw uploadError
 
+      setDisciplinaryDocumentPath(fileName)
+      setDisciplinaryDocumentName(file.name)
       setDisciplinaryDialogOpen(false)
-      setDisciplinaryDocument(null)
       setFormSuccess(true)
       setTimeout(() => setFormSuccess(false), 3000)
     } catch (err) {
@@ -457,19 +460,45 @@ const EntityCandidates = () => {
               status: "active" as const,
             }
 
-      const { error: insertError } = await supabase
-        .from("candidates")
-        .insert(newCandidate)
-
-      if (insertError) throw insertError
-
-      // Reset form and close
-      setFormData(emptyFormData)
-      setFormSuccess(true)
-      setFormOpen(false)
-
-      // Refresh candidates list
-      setTimeout(() => setFormSuccess(false), 3000)
+      const { data: candidateData, error: insertError } = await supabase
+              .from("candidates")
+              .insert(newCandidate)
+              .select("id")
+              .single()
+      
+            if (insertError) throw insertError
+      
+            // If there's a disciplinary document uploaded, save it to candidate_documents
+            if (disciplinaryDocumentPath && candidateData?.id) {
+              const { error: docError } = await supabase
+                .from("candidate_documents")
+                .insert({
+                  candidate_id: candidateData.id,
+                  document_type_id: "DISCIPLINARY_DOCUMENT",
+                  original_file_name: disciplinaryDocumentName,
+                  storage_path: disciplinaryDocumentPath,
+                  mime_type: disciplinaryDocument?.type,
+                  file_size: disciplinaryDocument?.size,
+                  description: "Documento disciplinario subido durante la creación del candidato",
+                  uploaded_by: (await supabase.auth.getUser()).data.user?.id,
+                })
+      
+              if (docError) {
+                console.error("Error saving disciplinary document reference:", docError)
+                // Don't throw, the candidate was created successfully
+              }
+            }
+      
+            // Reset form and close
+            setFormData(emptyFormData)
+            setDisciplinaryDocument(null)
+            setDisciplinaryDocumentPath(null)
+            setDisciplinaryDocumentName(null)
+            setFormSuccess(true)
+            setFormOpen(false)
+      
+            // Refresh candidates list
+            setTimeout(() => setFormSuccess(false), 3000)
     } catch (err) {
       console.error("Error creating candidate:", err)
       setFormError("Error al guardar el candidato. Inténtalo de nuevo.")
