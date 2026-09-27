@@ -36,13 +36,14 @@ interface SalaryHistoryValue {
 const EntitySettingsSalary = () => {
   const navigate = useNavigate()
   const { currentEntity } = useCurrentEntity()
-  const { 
-    fetchEntityEmpresarialScale, 
-    fetchScaleWithGroups, 
-    addSalaryGroup, 
+  const {
+    fetchEntityEmpresarialScale,
+    fetchScaleWithGroups,
+    addSalaryGroup,
     addSalaryValue,
     fetchGlobalPresupuestadaScale,
     createGlobalPresupuestadaScale,
+    createEntityEmpresarialScale,
     canManageGlobalSalary,
     fetchSalaryHistory
   } = useSalary()
@@ -58,7 +59,13 @@ const EntitySettingsSalary = () => {
   const [newEffectiveFrom, setNewEffectiveFrom] = React.useState("")
   const [canManageGlobal, setCanManageGlobal] = React.useState(false)
   const [globalScale, setGlobalScale] = React.useState<SalaryScale | null>(null)
-  
+  const [showCreateEnterpriseScale, setShowCreateEnterpriseScale] = React.useState(false)
+  const [newScaleName, setNewScaleName] = React.useState("")
+  const [newScaleCurrency, setNewScaleCurrency] = React.useState("CUP")
+  const [newScaleEffectiveFrom, setNewScaleEffectiveFrom] = React.useState("")
+  const [creatingScale, setCreatingScale] = React.useState(false)
+  const [enterpriseScaleName, setEnterpriseScaleName] = React.useState("")
+
   // History modal state
   const [showHistoryModal, setShowHistoryModal] = React.useState(false)
   const [historyGroupId, setHistoryGroupId] = React.useState<string | null>(null)
@@ -66,63 +73,63 @@ const EntitySettingsSalary = () => {
   const [historyLoading, setHistoryLoading] = React.useState(false)
 
   const loadScale = React.useCallback(async () => {
-    if (!currentEntity) return
-    try {
-      setLoading(true)
-      setError(null)
-      
-      // Check global scale management permission
-      if (currentEntity.regime_id === "PRESUPUESTADA") {
-        const canManage = await canManageGlobalSalary()
-        setCanManageGlobal(canManage)
-        
-        // Load global Presupuestada scale
-        const globalScaleData = await fetchGlobalPresupuestadaScale()
-        setGlobalScale(globalScaleData)
-        
-        if (globalScaleData) {
-          const scaleWithGroups = await fetchScaleWithGroups(globalScaleData.id)
-          if (scaleWithGroups) {
-            const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
-              id: g.group.id,
-              sequence_number: g.group.sequence_number,
-              description: g.group.description,
-              is_active: g.group.is_active,
-              current_value: g.current_value,
-              roman_numeral: g.roman_numeral,
-            }))
-            setGroups(mappedGroups)
-            setScale(globalScaleData)
-          }
-        }
-      } else {
-        // EMPRESARIAL: Load entity-specific scale
-        const scaleData = await fetchEntityEmpresarialScale(currentEntity.id)
-        if (scaleData) {
-          setScale(scaleData)
-          const scaleWithGroups = await fetchScaleWithGroups(scaleData.id)
-          if (scaleWithGroups) {
-            const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
-              id: g.group.id,
-              sequence_number: g.group.sequence_number,
-              description: g.group.description,
-              is_active: g.group.is_active,
-              current_value: g.current_value,
-              roman_numeral: g.roman_numeral,
-            }))
-            setGroups(mappedGroups)
+      if (!currentEntity) return
+      try {
+        setLoading(true)
+        setError(null)
+  
+        // Check global scale management permission
+        if (currentEntity.regime_id === "PRESUPUESTADA") {
+          const canManage = await canManageGlobalSalary()
+          setCanManageGlobal(canManage)
+  
+          // Load global Presupuestada scale
+          const globalScaleData = await fetchGlobalPresupuestadaScale()
+          setGlobalScale(globalScaleData)
+  
+          if (globalScaleData) {
+            const scaleWithGroups = await fetchScaleWithGroups(globalScaleData.id)
+            if (scaleWithGroups) {
+              const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
+                id: g.group.id,
+                sequence_number: g.group.sequence_number,
+                description: g.group.description,
+                is_active: g.group.is_active,
+                current_value: g.current_value,
+                roman_numeral: g.roman_numeral,
+              }))
+              setGroups(mappedGroups)
+              setScale(globalScaleData)
+            }
           }
         } else {
-          setScale(null)
-          setGroups([])
+          // EMPRESARIAL: Load entity-specific scale ONLY
+          const scaleData = await fetchEntityEmpresarialScale(currentEntity.id)
+          if (scaleData) {
+            setScale(scaleData)
+            const scaleWithGroups = await fetchScaleWithGroups(scaleData.id)
+            if (scaleWithGroups) {
+              const mappedGroups: SalaryGroupRow[] = scaleWithGroups.groups.map((g) => ({
+                id: g.group.id,
+                sequence_number: g.group.sequence_number,
+                description: g.group.description,
+                is_active: g.group.is_active,
+                current_value: g.current_value,
+                roman_numeral: g.roman_numeral,
+              }))
+              setGroups(mappedGroups)
+            }
+          } else {
+            setScale(null)
+            setGroups([])
+          }
         }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al cargar la escala salarial")
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar la escala salarial")
-    } finally {
-      setLoading(false)
-    }
-  }, [currentEntity?.id, currentEntity?.regime_id, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary])
+    }, [currentEntity?.id, currentEntity?.regime_id, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary])
 
   React.useEffect(() => {
     loadScale()
@@ -197,6 +204,34 @@ const EntitySettingsSalary = () => {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al crear la escala salarial")
+    }
+  }
+
+  const handleCreateEnterpriseScale = async () => {
+    if (!currentEntity) return
+    setCreatingScale(true)
+    try {
+      const name = newScaleName.trim() || "Escala salarial empresarial"
+      const currency = newScaleCurrency.trim() || "CUP"
+      const effectiveFrom = newScaleEffectiveFrom || new Date().toISOString().split('T')[0]
+      
+      const newScale = await createEntityEmpresarialScale(
+        currentEntity.id,
+        name,
+        currency,
+        effectiveFrom
+      )
+      if (newScale) {
+        setShowCreateEnterpriseScale(false)
+        setNewScaleName("")
+        setNewScaleCurrency("CUP")
+        setNewScaleEffectiveFrom(new Date().toISOString().split('T')[0])
+        await loadScale()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear la escala salarial")
+    } finally {
+      setCreatingScale(false)
     }
   }
 
@@ -397,17 +432,17 @@ const EntitySettingsSalary = () => {
           ) : error ? (
             <SiteCorpAlert type="danger" title="Error">{error}</SiteCorpAlert>
           ) : !scale ? (
-            <SiteCorpCard title="Sin escala salarial">
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Esta entidad todavía no tiene configurada una escala salarial.
-                </p>
-                <SiteCorpButton onClick={() => navigate("/admin/settings/salary-scale")}>
-                  Crear escala salarial
-                </SiteCorpButton>
-              </div>
-            </SiteCorpCard>
-          ) : (
+                <SiteCorpCard title="Sin escala salarial empresarial">
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Esta empresa todavía no tiene una escala salarial empresarial configurada.
+                    </p>
+                    <SiteCorpButton onClick={() => setShowCreateEnterpriseScale(true)}>
+                      Configurar escala salarial
+                    </SiteCorpButton>
+                  </div>
+                </SiteCorpCard>
+              ) : (
             <>
               <SiteCorpCard title={`Escala salarial de ${currentEntity.name}`} description={scale.description || "Escala salarial empresarial"}>
                 <div className="space-y-4">
