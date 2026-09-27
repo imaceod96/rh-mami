@@ -27,7 +27,6 @@ import TenantInvitations from "./pages/TenantInvitations"
 import TenantRoles from "./pages/TenantRoles"
 import AdminSettingsSalaryScale from "./pages/AdminSettingsSalaryScale"
 import EntitySummary from "./pages/EntitySummary"
-import EntityOrganization from "./pages/EntityOrganization"
 import EntityCandidates from "./pages/EntityCandidates"
 import CandidateDetail from "./pages/CandidateDetail"
 import CandidateEdit from "./pages/CandidateEdit"
@@ -135,7 +134,6 @@ const AppRoutes = () => {
         <Route element={<EntityRouteWrapper />}>
           <Route path="/entity/:entityId/summary" element={<EntitySummary />} />
           <Route path="/entity/:entityId/panel" element={<EntityPanelRedirect />} />
-          <Route path="/entity/:entityId/organization" element={<EntityOrganization />} />
           <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
           <Route path="/entity/:entityId/candidates/:candidateId" element={<CandidateDetail />} />
           <Route path="/entity/:entityId/candidates/:candidateId/edit" element={<CandidateEdit />} />

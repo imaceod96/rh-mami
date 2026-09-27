@@ -6,7 +6,6 @@ import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
-  Building2,
   Users,
   Briefcase,
   Mail,
@@ -88,14 +87,6 @@ const EntityLayout = React.forwardRef<
                 >
                   <LayoutDashboard className="h-5 w-5" />
                   Resumen
-                </Link>
-
-                <Link
-                  to={`/entity/${entityId}/organization`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <Building2 className="h-5 w-5" />
-                  Organización
                 </Link>
 
                 <Link

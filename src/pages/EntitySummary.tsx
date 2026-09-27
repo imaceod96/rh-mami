@@ -95,14 +95,7 @@ const EntitySummary = () => {
 
       {/* Quick Access */}
       <SiteCorpCard title="Accesos rápidos">
-        <div className="grid gap-2 sm:grid-cols-3">
-          <a
-            href="#organization"
-            className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm text-ink hover:bg-muted transition-colors"
-          >
-            <Building2 className="h-4 w-4 text-sitecorp-primary" />
-            Ver organización
-          </a>
+        <div className="grid gap-2 sm:grid-cols-2">
           <a
             href="#candidates"
             className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm text-ink hover:bg-muted transition-colors"
