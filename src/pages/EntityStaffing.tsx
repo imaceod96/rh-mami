@@ -12,11 +12,11 @@ const EntityStaffing = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Plantilla"
-        description="Gestión de plantilla, puestos y plazas"
+        description="Situación operativa de la plantilla: puestos ocupados y vacantes"
       />
 
       <SiteCorpAlert type="info" title="Módulo en desarrollo">
-        Aquí se gestionará la plantilla, puestos y plazas de esta entidad.
+        Aquí se gestionará la plantilla operativa de esta entidad: áreas, cargos, puestos y el trabajador que ocupa cada puesto.
       </SiteCorpAlert>
 
       <SiteCorpCard title="Contexto actual">

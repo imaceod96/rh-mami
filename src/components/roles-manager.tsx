@@ -100,6 +100,8 @@ const organizationLabels: Record<string, string> = {
   "candidates.manage": "Gestionar candidatos",
   "staffing.view": "Ver plantilla / puestos",
   "staffing.manage": "Gestionar plantilla / puestos",
+  "areas.view": "Ver áreas de la plantilla",
+  "areas.manage": "Gestionar áreas de la plantilla",
   "hiring.view": "Ver contratación",
   "hiring.manage": "Gestionar contratación",
   "salary.view": "Ver compensación",

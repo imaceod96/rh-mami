@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
-import { Building2, Users, Shield, Scale, FileText } from "lucide-react"
+import { Building2, Users, Shield, Scale, FileText, Network } from "lucide-react"
 
 const EntitySettings = () => {
   const { currentEntity } = useCurrentEntity()
@@ -27,6 +27,12 @@ const EntitySettings = () => {
       description: "Consulta o gestiona la escala salarial aplicable.",
       icon: Scale,
       href: `/entity/${currentEntity?.id}/settings/salary`,
+    },
+    {
+      title: "Configuración de plantilla",
+      description: "Configura las áreas, cargos y puestos que conforman la estructura de plantilla de la entidad.",
+      icon: Network,
+      href: `/entity/${currentEntity?.id}/settings/staffing`,
     },
     {
       title: "Documentos rectores",
