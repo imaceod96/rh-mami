@@ -50,6 +50,7 @@ interface OrganizationEntityFormData {
   description: string | null
   is_sitecorp_account: boolean
   account_code: string | null
+  parent_id: string | null
 }
 
 const entityTypeOptions = [
@@ -89,6 +90,7 @@ const organizationEntitySchema = z.object({
   description: z.string().nullable(),
   is_sitecorp_account: z.boolean().default(false),
   account_code: z.string().nullable(),
+  parent_id: z.string().nullable(),
 })
 
 type OrganizationEntityFormDataZod = z.infer<typeof organizationEntitySchema>
@@ -119,6 +121,9 @@ export const OrganizationEntityDialog = ({
   const { toast } = useToast()
   const [saving, setSaving] = React.useState(false)
 
+  // Auto-assign tenant from current context, fallback to first tenant
+  const defaultTenantId = currentTenant?.id || tenants[0]?.id || ""
+
   const {
     register,
     handleSubmit,
@@ -129,57 +134,57 @@ export const OrganizationEntityDialog = ({
   } = useForm<OrganizationEntityFormDataZod>({
     resolver: zodResolver(organizationEntitySchema),
     defaultValues: {
-      name: "",
-      entity_type: defaultEntityType,
-      regime_id: defaultRegime,
-      province: null,
-      municipality: null,
-      is_active: true,
-      description: null,
-      is_sitecorp_account: false,
-      account_code: null,
-    },
-  })
-
-  React.useEffect(() => {
-    if (open) {
-      if (editingEntity) {
-        reset({
-          name: editingEntity.name,
-          entity_type: editingEntity.entity_type,
-          regime_id: editingEntity.regime_id,
-          province: editingEntity.province,
-          municipality: editingEntity.municipality,
-          is_active: editingEntity.is_active,
-          description: editingEntity.description,
-          is_sitecorp_account: editingEntity.is_sitecorp_account,
-          account_code: editingEntity.account_code,
-        })
-        // When editing, keep the code unchanged
-      } else {
-        reset({
           name: "",
           entity_type: defaultEntityType,
-          regime_id: defaultRegime,
+          regime_id: defaultRegime as "presupuestada" | "empresarial" | null,
           province: null,
           municipality: null,
           is_active: true,
           description: null,
           is_sitecorp_account: false,
           account_code: null,
-        })
-      }
+        },
+  })
+
+  React.useEffect(() => {
+    if (open) {
+      if (editingEntity) {
+              reset({
+                name: editingEntity.name,
+                entity_type: editingEntity.entity_type,
+                regime_id: editingEntity.regime_id as "presupuestada" | "empresarial" | null,
+                province: editingEntity.province,
+                municipality: editingEntity.municipality,
+                is_active: editingEntity.is_active,
+                description: editingEntity.description,
+                is_sitecorp_account: editingEntity.is_sitecorp_account,
+                account_code: editingEntity.account_code,
+              })
+        // When editing, keep the code unchanged
+      } else {
+              reset({
+                name: "",
+                entity_type: defaultEntityType,
+                regime_id: defaultRegime as "presupuestada" | "empresarial" | null,
+                province: null,
+                municipality: null,
+                is_active: true,
+                description: null,
+                is_sitecorp_account: false,
+                account_code: null,
+              })
+            }
     }
   }, [open, editingEntity, reset, defaultEntityType, defaultRegime])
 
   // When entity type changes, filter parent entities accordingly
-  React.useEffect(() => {
-    const entityType = watch("entity_type")
-    if (entityType === "business_group") {
-      // Business groups cannot have parents, clear any existing parent
-      setValue("parent_id", null)
-    }
-  }, [watch("entity_type"), setValue])
+    React.useEffect(() => {
+      const entityType = watch("entity_type")
+      if (entityType === "business_group") {
+        // Business groups cannot have parents, clear any existing parent
+        ;(setValue as any)("parent_id", null)
+      }
+    }, [watch("entity_type"), setValue])
 
   const onSubmit = async (data: OrganizationEntityFormDataZod) => {
     if (!user) return
