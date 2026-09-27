@@ -113,19 +113,19 @@ SECURITY DEFINER
 AS $$
 DECLARE
   scale_id uuid;
-  regime_id uuid;
+  entity_regime_id uuid;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN NULL; END IF;
 
-  SELECT regime_id INTO regime_id
+  SELECT regime_id INTO entity_regime_id
   FROM public.organization_entities
   WHERE id = entity_id AND is_active = true AND is_sitecorp_account = false;
 
   IF NOT FOUND THEN RETURN NULL; END IF;
 
-  IF regime_id = (SELECT id FROM public.entity_regimes WHERE name = 'PRESUPUESTADA' LIMIT 1) THEN
+  IF entity_regime_id = (SELECT id FROM public.entity_regimes WHERE name = 'PRESUPUESTADA' LIMIT 1) THEN
     SELECT id INTO scale_id FROM public.salary_scales
-    WHERE scope_type = 'PRESUPUESTADA_GLOBAL' AND regime_id = regime_id AND is_active = true LIMIT 1;
+    WHERE scope_type = 'PRESUPUESTADA_GLOBAL' AND regime_id = entity_regime_id AND is_active = true LIMIT 1;
   ELSE
     SELECT id INTO scale_id FROM public.salary_scales
     WHERE scope_type = 'EMPRESARIAL_ENTITY' AND organization_entity_id = entity_id AND is_active = true LIMIT 1;

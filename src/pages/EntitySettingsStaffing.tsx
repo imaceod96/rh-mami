@@ -45,6 +45,7 @@ import {
 } from "lucide-react"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { JobForm } from "@/components/JobForm"
+import { AreaForm } from "@/components/AreaForm"
 
 interface OrganizationArea {
   id: string
@@ -151,8 +152,10 @@ const EntitySettingsStaffing = () => {
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
   const [notice, setNotice] = React.useState<{ type: "success" | "danger"; message: string } | null>(null)
 
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = React.useState(false)
+  // Separate dialog states for Areas and Jobs
+  const [areaDialogOpen, setAreaDialogOpen] = React.useState(false)
+  const [jobDialogOpen, setJobDialogOpen] = React.useState(false)
+  const [editingArea, setEditingArea] = React.useState<OrganizationArea | null>(null)
   const [editingJob, setEditingJob] = React.useState<OrganizationJob | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -297,12 +300,12 @@ const EntitySettingsStaffing = () => {
   // Options for the parent selector: active areas of this entity.
   // When editing, exclude the area itself and all its descendants.
   const parentOptions = React.useMemo(() => {
-    const excluded = editingJob ? getDescendantIds(editingJob.id, areas) : new Set<string>()
+    const excluded = editingArea ? getDescendantIds(editingArea.id, areas) : new Set<string>()
     let options = areas.filter(a => a.is_active && !excluded.has(a.id))
 
     // If editing, always include the current parent so the value is visible
-    if (editingJob?.area_id) {
-      const currentParent = areas.find(a => a.id === editingJob.area_id)
+    if (editingArea?.parent_area_id) {
+      const currentParent = areas.find(a => a.id === editingArea.parent_area_id)
       if (currentParent && !options.some(o => o.id === currentParent.id)) {
         options = [...options, currentParent]
       }
@@ -310,53 +313,95 @@ const EntitySettingsStaffing = () => {
     return options.sort(
       (a, b) => a.hierarchy_order - b.hierarchy_order || a.name.localeCompare(b.name)
     )
-  }, [areas, editingJob])
+  }, [areas, editingArea])
 
-  const openCreateDialog = () => {
-    setEditingJob(null)
+  // Area dialog handlers
+  const openCreateAreaDialog = () => {
+    setEditingArea(null)
     setFormError(null)
-    setDialogOpen(true)
+    setAreaDialogOpen(true)
   }
 
-  const openEditDialog = (job: OrganizationJob) => {
+  const openEditAreaDialog = (area: OrganizationArea) => {
+    setEditingArea(area)
+    setFormError(null)
+    setAreaDialogOpen(true)
+  }
+
+  // Job dialog handlers
+  const openCreateJobDialog = () => {
+    setEditingJob(null)
+    setFormError(null)
+    setJobDialogOpen(true)
+  }
+
+  const openEditJobDialog = (job: OrganizationJob) => {
     setEditingJob(job)
     setFormError(null)
-    setDialogOpen(true)
+    setJobDialogOpen(true)
   }
 
-  const handleSave = async () => {
+  const handleAreaSave = async () => {
     await loadData()
-    setDialogOpen(false)
+    setAreaDialogOpen(false)
+    setEditingArea(null)
+  }
+
+  const handleJobSave = async () => {
+    await loadData()
+    setJobDialogOpen(false)
     setEditingJob(null)
   }
 
-  const handleToggleActive = async (job: OrganizationJob) => {
-      if (job.is_active) {
-        if (!confirm(`¿Desactivar el cargo "${job.name}"?`)) return
-      } else {
-        // Validate that the area is active before allowing reactivation
-        const area = areas.find(a => a.id === job.area_id)
-        if (area && !area.is_active) {
-          showNotice("danger", "No se puede reactivar este cargo porque su área está inactiva. Reactiva primero el área.")
-          return
+  const handleToggleActiveArea = async (area: OrganizationArea) => {
+        if (area.is_active) {
+          if (!confirm(`¿Desactivar el área "${area.name}"?`)) return
+        } else {
+          if (!confirm(`¿Reactivar el área "${area.name}"?`)) return
         }
-        if (!confirm(`¿Reactivar el cargo "${job.name}"?`)) return
+    
+        try {
+          const { error: updateError } = await supabase
+            .from("organization_areas")
+            .update({ is_active: !area.is_active })
+            .eq("id", area.id)
+          if (updateError) throw updateError
+          await loadData()
+          showNotice("success", area.is_active ? "Área desactivada" : "Área reactivada")
+        } catch (err) {
+          console.error("Error toggling area state:", err)
+          const message = err instanceof Error ? err.message : "Error al cambiar el estado del área"
+          showNotice("danger", message)
+        }
       }
   
-      try {
-        const { error: updateError } = await supabase
-          .from("organization_jobs")
-          .update({ is_active: !job.is_active })
-          .eq("id", job.id)
-        if (updateError) throw updateError
-        await loadData()
-        showNotice("success", job.is_active ? "Cargo desactivado" : "Cargo reactivado")
-      } catch (err) {
-        console.error("Error toggling job state:", err)
-        const message = err instanceof Error ? err.message : "Error al cambiar el estado del cargo"
-        showNotice("danger", message)
+    const handleToggleActiveJob = async (job: OrganizationJob) => {
+        if (job.is_active) {
+          if (!confirm(`¿Desactivar el cargo "${job.name}"?`)) return
+        } else {
+          // Validate that the area is active before allowing reactivation
+          const area = areas.find(a => a.id === job.area_id)
+          if (area && !area.is_active) {
+            showNotice("danger", "No se puede reactivar este cargo porque su área está inactiva. Reactiva primero el área.")
+            return
+          }
+          if (!confirm(`¿Reactivar el cargo "${job.name}"?`)) return
+        }
+    
+        try {
+          const { error: updateError } = await supabase
+            .from("organization_jobs")
+            .update({ is_active: !job.is_active })
+            .eq("id", job.id)
+          if (updateError) throw updateError
+          await loadData()
+          showNotice("success", job.is_active ? "Cargo desactivado" : "Cargo reactivado")
+        } catch (err) {
+          console.error("Error toggling job state:", err)
+          const message = err instanceof Error ? err.message : "Error al cambiar el estado del cargo"
+          showNotice("danger", message)
+        }
       }
-    }
 
   const handleDelete = async (job: OrganizationJob) => {
     if (!confirm(`¿Desactivar el cargo "${job.name}"?`)) return
@@ -441,14 +486,14 @@ const EntitySettingsStaffing = () => {
               <PopoverContent align="end" className="w-52 p-1">
                 <button
                   type="button"
-                  onClick={() => openEditDialog(node)}
+                  onClick={() => openEditAreaDialog(node)}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-ink hover:bg-muted"
                 >
                   <Pencil className="h-4 w-4" /> Editar
                 </button>
                 <button
                   type="button"
-                  onClick={() => openEditDialog(node)}
+                  onClick={() => openEditAreaDialog(node)}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-ink hover:bg-muted"
                 >
                   <ArrowRightLeft className="h-4 w-4" /> Mover
@@ -456,7 +501,7 @@ const EntitySettingsStaffing = () => {
                 {node.is_active && (
                   <button
                     type="button"
-                    onClick={() => openCreateDialog()}
+                    onClick={() => openCreateAreaDialog()}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-ink hover:bg-muted"
                   >
                     <CornerDownRight className="h-4 w-4" /> Añadir subárea
@@ -464,22 +509,22 @@ const EntitySettingsStaffing = () => {
                 )}
                 <div className="my-1 h-px bg-border" />
                 {node.is_active ? (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(node)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-sitecorp-danger hover:bg-muted"
-                  >
-                    <PowerOff className="h-4 w-4" /> Desactivar
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(node)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-ink hover:bg-muted"
-                  >
-                    <Power className="h-4 w-4" /> Reactivar
-                  </button>
-                )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleActiveArea(node)}
+                                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-sitecorp-danger hover:bg-muted"
+                                  >
+                                    <PowerOff className="h-4 w-4" /> Desactivar
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleActiveArea(node)}
+                                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-ink hover:bg-muted"
+                                  >
+                                    <Power className="h-4 w-4" /> Reactivar
+                                  </button>
+                                )}
               </PopoverContent>
             </Popover>
           )}
@@ -572,7 +617,7 @@ const EntitySettingsStaffing = () => {
                   <SelectItem value="all">Todas</SelectItem>
                 </SiteCorpSelect>
                 {canManage && (
-                  <SiteCorpButton onClick={() => openCreateDialog()}>
+                  <SiteCorpButton onClick={openCreateAreaDialog}>
                     <Plus className="mr-2 h-4 w-4" /> Nueva área
                   </SiteCorpButton>
                 )}
@@ -587,7 +632,7 @@ const EntitySettingsStaffing = () => {
                   Comienza creando la estructura interna de esta entidad.
                 </p>
                 {canManage && (
-                  <SiteCorpButton onClick={() => openCreateDialog()}>
+                  <SiteCorpButton onClick={openCreateAreaDialog}>
                     <Plus className="mr-2 h-4 w-4" /> Crear primera área
                   </SiteCorpButton>
                 )}
@@ -619,7 +664,7 @@ const EntitySettingsStaffing = () => {
                 </p>
               </div>
               {canManage && (
-                <SiteCorpButton onClick={openCreateDialog}>
+                <SiteCorpButton onClick={openCreateJobDialog}>
                   <Plus className="mr-2 h-4 w-4" /> Nuevo cargo
                 </SiteCorpButton>
               )}
@@ -657,7 +702,7 @@ const EntitySettingsStaffing = () => {
                   Comienza creando los cargos que conformarán la plantilla de esta entidad.
                 </p>
                 {canManage && (
-                  <SiteCorpButton onClick={openCreateDialog}>
+                  <SiteCorpButton onClick={openCreateJobDialog}>
                     <Plus className="mr-2 h-4 w-4" /> Crear primer cargo
                   </SiteCorpButton>
                 )}
@@ -716,31 +761,31 @@ const EntitySettingsStaffing = () => {
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
-                                  onClick={() => openEditDialog(job)}
+                                  onClick={() => openEditJobDialog(job)}
                                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
                                   aria-label="Editar cargo"
                                 >
                                   <Pencil className="h-4 w-4" />
                                 </button>
                                 {job.is_active ? (
-                                                                  <button
-                                                                    type="button"
-                                                                    onClick={() => handleToggleActive(job)}
-                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-sitecorp-danger"
-                                                                    aria-label="Desactivar cargo"
-                                                                  >
-                                                                    <PowerOff className="h-4 w-4" />
-                                                                  </button>
-                                                                ) : (
-                                                                  <button
-                                                                    type="button"
-                                                                    onClick={() => handleToggleActive(job)}
-                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
-                                                                    aria-label="Reactivar cargo"
-                                                                  >
-                                                                    <Power className="h-4 w-4" />
-                                                                  </button>
-                                                                )}
+                                                                                                  <button
+                                                                                                    type="button"
+                                                                                                    onClick={() => handleToggleActiveJob(job)}
+                                                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-sitecorp-danger"
+                                                                                                    aria-label="Desactivar cargo"
+                                                                                                  >
+                                                                                                    <PowerOff className="h-4 w-4" />
+                                                                                                  </button>
+                                                                                                ) : (
+                                                                                                  <button
+                                                                                                    type="button"
+                                                                                                    onClick={() => handleToggleActiveJob(job)}
+                                                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+                                                                                                    aria-label="Reactivar cargo"
+                                                                                                  >
+                                                                                                    <Power className="h-4 w-4" />
+                                                                                                  </button>
+                                                                                                )}
                               </div>
                             )}
                           </div>
@@ -762,11 +807,45 @@ const EntitySettingsStaffing = () => {
         </Tabs>
       </SiteCorpCard>
 
+      {/* New / Edit Area Dialog */}
+      <Dialog
+        open={areaDialogOpen}
+        onOpenChange={(open) => {
+          setAreaDialogOpen(open)
+          if (!open) {
+            setEditingArea(null)
+            setFormError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingArea ? "Editar área" : "Nueva área"}</DialogTitle>
+            <DialogDescription>
+              {editingArea
+                ? "Modifica los datos del área."
+                : "Crea una nueva área para esta entidad."}
+            </DialogDescription>
+          </DialogHeader>
+          <AreaForm
+            entityId={entityId!}
+            areas={areas}
+            editingArea={editingArea}
+            onSuccess={handleAreaSave}
+            onCancel={() => {
+              setAreaDialogOpen(false)
+              setEditingArea(null)
+              setFormError(null)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
       {/* New / Edit Job Dialog */}
       <Dialog
-        open={dialogOpen}
+        open={jobDialogOpen}
         onOpenChange={(open) => {
-          setDialogOpen(open)
+          setJobDialogOpen(open)
           if (!open) {
             setEditingJob(null)
             setFormError(null)
@@ -785,9 +864,9 @@ const EntitySettingsStaffing = () => {
           <JobForm
             entityId={entityId!}
             editingJob={editingJob}
-            onSuccess={handleSave}
+            onSuccess={handleJobSave}
             onCancel={() => {
-              setDialogOpen(false)
+              setJobDialogOpen(false)
               setEditingJob(null)
               setFormError(null)
             }}

@@ -197,19 +197,20 @@ export const JobForm: React.FC<JobFormProps> = ({
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!entityId) return
-
-    setFormError(null)
-
-    const name = (e.target as HTMLFormElement).name.value.trim()
-    const code = (e.target as HTMLFormElement).code.value.trim()
-    const area_id = (e.target as HTMLFormElement).area_id.value
-    const description = (e.target as HTMLFormElement).description.value.trim() || null
-    const hierarchy_order = parseInt(
-      (e.target as HTMLFormElement).hierarchy_order.value,
-      10
-    )
+      e.preventDefault()
+      if (!entityId) return
+  
+      setFormError(null)
+  
+      const form = e.target as HTMLFormElement
+      const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim()
+      const code = (form.elements.namedItem("code") as HTMLInputElement).value.trim()
+      const area_id = (form.elements.namedItem("area_id") as HTMLSelectElement).value
+      const description = (form.elements.namedItem("description") as HTMLTextAreaElement).value.trim() || null
+      const hierarchy_order = parseInt(
+        (form.elements.namedItem("hierarchy_order") as HTMLInputElement).value,
+        10
+      )
 
     if (!name) {
       setFormError("El nombre es obligatorio")
@@ -347,33 +348,31 @@ export const JobForm: React.FC<JobFormProps> = ({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="job-area">Área *</Label>
-        <SiteCorpSelect
-          id="job-area"
-          name="area_id"
-          defaultValue={editingJob?.area_id || ""}
-          required
-        >
-          <option value="">Seleccionar área</option>
-          {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name} ({area.code})
-            </option>
-          ))}
-        </SiteCorpSelect>
-        <p className="text-xs text-muted-foreground">
-          Solo áreas activas de esta entidad.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="job-group">Grupo salarial *</Label>
-        <SiteCorpSelect
-          id="job-group"
-          value={selectedGroup}
-          onValueChange={handleGroupChange}
-          required
-        >
+              <Label htmlFor="job-area">Área *</Label>
+              <SiteCorpSelect
+                name="area_id"
+                defaultValue={editingJob?.area_id || ""}
+                required
+              >
+                <option value="">Seleccionar área</option>
+                {areas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name} ({area.code})
+                  </option>
+                ))}
+              </SiteCorpSelect>
+              <p className="text-xs text-muted-foreground">
+                Solo áreas activas de esta entidad.
+              </p>
+            </div>
+      
+            <div className="space-y-2">
+              <Label htmlFor="job-group">Grupo salarial *</Label>
+              <SiteCorpSelect
+                value={selectedGroup}
+                onValueChange={handleGroupChange}
+                required
+              >
           <option value="">Seleccionar grupo salarial</option>
           {groups.map((g) => (
             <option key={g.group.id} value={g.group.id}>
