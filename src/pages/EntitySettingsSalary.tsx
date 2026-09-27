@@ -411,184 +411,198 @@ const EntitySettingsSalary = () => {
                   No se ha configurado todavía la escala salarial presupuestada general.
                 </p>
                 {canManageGlobal && (
-                  <SiteCorpButton onClick={handleCreateGlobalScale}>
-                    Crear escala salarial
-                  </SiteCorpButton>
-                )}
-                {!canManageGlobal && (
-                  <p className="text-sm text-muted-foreground">
-                    La escala debe ser configurada por un administrador autorizado de SiteCorp.
-                  </p>
-                )}
+                                  <SiteCorpButton onClick={handleCreateGlobalScale}>
+                                    Crear escala salarial
+                                  </SiteCorpButton>
+                                )}
+                                {!canManageGlobal && (
+                                  <p className="text-sm text-muted-foreground">
+                                    La escala debe ser configurada por un administrador autorizado de SiteCorp.
+                                  </p>
+                                )}
+                              </div>
+                            </SiteCorpCard>
+                          )}
+                    </>
+                  ) : (
+    /* EMPRESARIAL: Show entity-specific scale */
+    <>
+      {loading ? (
+        <SiteCorpLoading rows={5} />
+      ) : error ? (
+        <SiteCorpAlert type="danger" title="Error">{error}</SiteCorpAlert>
+      ) : !scale ? (
+            <SiteCorpCard title="Sin escala salarial empresarial">
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Esta empresa todavía no tiene una escala salarial empresarial configurada.
+                </p>
+                <SiteCorpButton onClick={() => setShowCreateEnterpriseScale(true)}>
+                  Configurar escala salarial
+                </SiteCorpButton>
               </div>
             </SiteCorpCard>
-          )}
-        </>
-      ) : (
-        /* EMPRESARIAL: Show entity-specific scale */
+          ) : (
         <>
-          {loading ? (
-            <SiteCorpLoading rows={5} />
-          ) : error ? (
-            <SiteCorpAlert type="danger" title="Error">{error}</SiteCorpAlert>
-          ) : !scale ? (
-                <SiteCorpCard title="Sin escala salarial empresarial">
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Esta empresa todavía no tiene una escala salarial empresarial configurada.
-                    </p>
-                    <SiteCorpButton onClick={() => setShowCreateEnterpriseScale(true)}>
-                      Configurar escala salarial
-                    </SiteCorpButton>
-                  </div>
-                </SiteCorpCard>
-              ) : (
-            <>
-              <SiteCorpCard title={`Escala salarial de ${currentEntity.name}`} description={scale.description || "Escala salarial empresarial"}>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-ink">Moneda: {scale.currency_code}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {groups.filter(g => g.is_active).length} grupo(s) activo(s)
-                      </p>
-                    </div>
-                    {isPlatformSuperAdmin && (
-                      <SiteCorpButton onClick={() => setShowAddGroup(true)}>
-                        <Plus className="mr-2 h-4 w-4" /> Añadir grupo salarial
-                      </SiteCorpButton>
-                    )}
-                  </div>
-
-                  {/* Add group dialog */}
-                                    <SalaryGroupDialog
-                                      open={showAddGroup}
-                                      onOpenChange={setShowAddGroup}
-                                      onSubmit={handleAddGroup}
-                                    />
-                 
-                                    {/* Groups table */}
-                                    <div className="space-y-3">
-                                      <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
-                                      {groups.map((group) => (
-                                        <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary/10">
-                            <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-ink">
-                              Grupo {group.roman_numeral}
-                              {group.description && ` — ${group.description}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Secuencia: {group.sequence_number}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {group.current_value ? (
-                            <div className="text-right">
-                              <p className="text-sm font-medium text-ink">
-                                {group.current_value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} {group.current_value.currency_code}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Vigente desde: {group.current_value.effective_from}
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Sin valor asignado</span>
-                          )}
-                          <SiteCorpStatusBadge status={group.is_active ? "success" : "warning"}>
-                            {group.is_active ? "Activo" : "Inactivo"}
-                          </SiteCorpStatusBadge>
-                          {isPlatformSuperAdmin && (
-                                                      <SiteCorpButton
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => {
-                                                          setShowEditValue(showEditValue === group.id ? null : group.id)
-                                                          setNewAmount("")
-                                                          setNewEffectiveFrom("")
-                                                        }}
-                                                      >
-                                                        <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
-                                                      </SiteCorpButton>
-                                                    )}
-                          <SiteCorpButton
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewHistory(group.id)}
-                          >
-                            <Clock className="mr-1 h-3.5 w-3.5" /> Ver historial
-                          </SiteCorpButton>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Edit value form */}
-                  {showEditValue && (
-                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                      <h4 className="text-sm font-semibold text-ink">Editar salario del grupo</h4>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-muted-foreground">Nuevo salario</label>
-                          <SiteCorpInput
-                            type="number"
-                            placeholder="Monto"
-                            value={newAmount}
-                            onChange={(e) => setNewAmount(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-muted-foreground">Vigente desde</label>
-                          <SiteCorpInput
-                            type="date"
-                            value={newEffectiveFrom}
-                            onChange={(e) => setNewEffectiveFrom(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <SiteCorpButton onClick={() => handleEditValue(showEditValue)}>Guardar</SiteCorpButton>
-                        <SiteCorpButton variant="outline" onClick={() => setShowEditValue(null)}>Cancelar</SiteCorpButton>
-                      </div>
-                    </div>
-                  )}
+          <SiteCorpCard title={`Escala salarial de ${currentEntity.name}`} description={scale.description || "Escala salarial empresarial"}>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-ink">Moneda: {scale.currency_code}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {groups.filter(g => g.is_active).length} grupo(s) activo(s)
+                  </p>
                 </div>
-              </SiteCorpCard>
+                {isPlatformSuperAdmin && (
+                  <SiteCorpButton onClick={() => setShowAddGroup(true)}>
+                    <Plus className="mr-2 h-4 w-4" /> Añadir grupo salarial
+                  </SiteCorpButton>
+                )}
+              </div>
 
-              {/* Salary history */}
-              <SiteCorpCard title="Historial de salarios" description="Valores históricos por grupo">
-                <div className="space-y-3">
-                  {groups.map((group) => (
-                    <div key={group.id} className="rounded-lg border border-border bg-muted/30 p-3">
-                      <div className="flex items-center gap-2 mb-2">
+              {/* Add group dialog */}
+                                <SalaryGroupDialog
+                                  open={showAddGroup}
+                                  onOpenChange={setShowAddGroup}
+                                  onSubmit={handleAddGroup}
+                                />
+            
+                                {/* Groups table */}
+                                <div className="space-y-3">
+                                  <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
+                                  {groups.map((group) => (
+                                    <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary/10">
                         <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
-                        <span className="text-sm text-muted-foreground">Grupo {group.sequence_number}</span>
                       </div>
-                      <div className="space-y-1">
-                        {group.current_value && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span>Actual: {group.current_value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} {group.current_value.currency_code} desde {group.current_value.effective_from}</span>
-                          </div>
-                        )}
+                      <div>
+                        <p className="text-sm font-medium text-ink">
+                          Grupo {group.roman_numeral}
+                          {group.description && ` — ${group.description}`}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          Historial completo disponible en la sección de historial global.
+                          Secuencia: {group.sequence_number}
                         </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </SiteCorpCard>
-            </>
-          )}
-        </>
-      )}
+                    <div className="flex items-center gap-3">
+                      {group.current_value ? (
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-ink">
+                            {group.current_value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} {group.current_value.currency_code}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Vigente desde: {group.current_value.effective_from}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Sin valor asignado</span>
+                      )}
+                      <SiteCorpStatusBadge status={group.is_active ? "success" : "warning"}>
+                        {group.is_active ? "Activo" : "Inactivo"}
+                      </SiteCorpStatusBadge>
+                      {isPlatformSuperAdmin && (
+                                                  <SiteCorpButton
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                      setShowEditValue(showEditValue === group.id ? null : group.id)
+                                                      setNewAmount("")
+                                                      setNewEffectiveFrom("")
+                                                    }}
+                                                  >
+                                                    <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
+                                                  </SiteCorpButton>
+                                                )}
+                      <SiteCorpButton
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewHistory(group.id)}
+                      >
+                        <Clock className="mr-1 h-3.5 w-3.5" /> Ver historial
+                      </SiteCorpButton>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-      {/* Salary History Modal */}
+              {/* Edit value form */}
+              {showEditValue && (
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                  <h4 className="text-sm font-semibold text-ink">Editar salario del grupo</h4>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Nuevo salario</label>
+                      <SiteCorpInput
+                        type="number"
+                        placeholder="Monto"
+                        value={newAmount}
+                        onChange={(e) => setNewAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Vigente desde</label>
+                      <SiteCorpInput
+                        type="date"
+                        value={newEffectiveFrom}
+                        onChange={(e) => setNewEffectiveFrom(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <SiteCorpButton onClick={() => handleEditValue(showEditValue)}>Guardar</SiteCorpButton>
+                    <SiteCorpButton variant="outline" onClick={() => setShowEditValue(null)}>Cancelar</SiteCorpButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          </SiteCorpCard>
+
+          {/* Salary history */}
+          <SiteCorpCard title="Historial de salarios" description="Valores históricos por grupo">
+            <div className="space-y-3">
+              {groups.map((group) => (
+                <div key={group.id} className="rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
+                    <span className="text-sm text-muted-foreground">Grupo {group.sequence_number}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {group.current_value && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>Actual: {group.current_value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} {group.current_value.currency_code} desde {group.current_value.effective_from}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Historial completo disponible en la sección de historial global.
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SiteCorpCard>
+                  </>
+                )}
+          
+                {/* Create enterprise scale dialog */}
+                <CreateEnterpriseScaleDialog
+                  open={showCreateEnterpriseScale}
+                  onOpenChange={setShowCreateEnterpriseScale}
+                  onSubmit={handleCreateEnterpriseScale}
+                  loading={creatingScale}
+                  name={newScaleName}
+                  currency={newScaleCurrency}
+                  effectiveFrom={newScaleEffectiveFrom}
+                  onNameChange={setNewScaleName}
+                  onCurrencyChange={setNewScaleCurrency}
+                  onEffectiveFromChange={setNewScaleEffectiveFrom}
+                />
+              </>
+            )}
+          
+                {/* Salary History Modal */}
       <SalaryHistoryModal
         open={showHistoryModal}
         onOpenChange={(open) => setShowHistoryModal(open)}
@@ -714,6 +728,107 @@ const SalaryHistoryModal = ({
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const CreateEnterpriseScaleDialog = ({
+  open,
+  onOpenChange,
+  onSubmit,
+  loading,
+  name,
+  currency,
+  effectiveFrom,
+  onNameChange,
+  onCurrencyChange,
+  onEffectiveFromChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmit: () => void
+  loading: boolean
+  name: string
+  currency: string
+  effectiveFrom: string
+  onNameChange: (value: string) => void
+  onCurrencyChange: (value: string) => void
+  onEffectiveFromChange: (value: string) => void
+}) => {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="relative w-full max-w-md">
+        <div className="rounded-xl border border-border bg-white p-6 shadow-lg">
+          <div className="flex justify-between items-start mb-4">
+            <h2 className="text-xl font-bold text-ink">
+              Configurar escala salarial empresarial
+            </h2>
+            <button
+              onClick={() => onOpenChange(false)}
+              className="rounded-md p-1.5 hover:bg-muted/50"
+              disabled={loading}
+            >
+              <XIcon className="h-4 w-4 text-muted-foreground hover:text-ink" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ink">
+                Nombre de la escala
+              </label>
+              <SiteCorpInput
+                placeholder="Ej: Escala salarial 2025"
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ink">
+                Moneda
+              </label>
+              <SiteCorpInput
+                placeholder="Ej: CUP"
+                value={currency}
+                onChange={(e) => onCurrencyChange(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ink">
+                Vigente desde
+              </label>
+              <SiteCorpInput
+                type="date"
+                value={effectiveFrom}
+                onChange={(e) => onEffectiveFromChange(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <SiteCorpButton
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
+              >
+                Cancelar
+              </SiteCorpButton>
+              <SiteCorpButton
+                onClick={onSubmit}
+                disabled={loading || !name.trim()}
+              >
+                {loading ? "Creando..." : "Crear escala"}
+              </SiteCorpButton>
+            </div>
+          </div>
         </div>
       </div>
     </div>
