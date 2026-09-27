@@ -307,11 +307,11 @@ const EntitySettingsSalary = () => {
                 />
 
                 {/* Groups table */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
-                  {groups.length > 0 ? (
-                                      groups.map((group) => (
-                                        <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="space-y-3">
+                                  <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
+                                  {groups.length > 0 ? (
+                                    groups.map((group) => (
+                                      <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                                           <div className="flex items-center gap-3">
                                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary/10">
                                               <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
@@ -471,7 +471,7 @@ const EntitySettingsSalary = () => {
                                     <div className="space-y-3">
                                       <h4 className="text-sm font-semibold text-ink">Grupos salariales</h4>
                                       {groups.map((group) => (
-                      <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div key={group.id} className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary/10">
                             <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
