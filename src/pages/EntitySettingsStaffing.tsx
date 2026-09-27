@@ -41,7 +41,10 @@ import {
   Power,
   Briefcase,
   Network,
+  Trash2,
 } from "lucide-react"
+import { toRomanNumeral } from "@/utils/roman-numerals"
+import { JobForm } from "@/components/JobForm"
 
 interface OrganizationArea {
   id: string
@@ -58,6 +61,38 @@ interface OrganizationArea {
 
 interface AreaNode extends OrganizationArea {
   children: AreaNode[]
+}
+
+interface OrganizationJob {
+  id: string
+  organization_entity_id: string
+  area_id: string
+  code: string
+  name: string
+  description: string | null
+  salary_group_id: string
+  hierarchy_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  area: {
+    id: string
+    name: string
+    code: string
+    is_active: boolean
+    organization_entity_id: string
+  }
+  salary_group: {
+    id: string
+    salary_scale_id: string
+    sequence_number: number
+    description: string | null
+    is_active: boolean
+    current_value: {
+      amount: number
+      currency_code: string
+    } | null
+  } | null
 }
 
 type StatusFilter = "active" | "inactive" | "all"
@@ -107,21 +142,18 @@ const EntitySettingsStaffing = () => {
   const navigate = useNavigate()
 
   const [areas, setAreas] = React.useState<OrganizationArea[]>([])
+  const [jobs, setJobs] = React.useState<OrganizationJob[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [canManage, setCanManage] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("active")
+  const [areaFilter, setAreaFilter] = React.useState<string>("all")
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
   const [notice, setNotice] = React.useState<{ type: "success" | "danger"; message: string } | null>(null)
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [editingArea, setEditingArea] = React.useState<OrganizationArea | null>(null)
-  const [formName, setFormName] = React.useState("")
-  const [formCode, setFormCode] = React.useState("")
-  const [formDescription, setFormDescription] = React.useState("")
-  const [formParentId, setFormParentId] = React.useState<string>(ROOT_SENTINEL)
-  const [formOrder, setFormOrder] = React.useState("0")
+  const [editingJob, setEditingJob] = React.useState<OrganizationJob | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
 
@@ -130,7 +162,7 @@ const EntitySettingsStaffing = () => {
     setTimeout(() => setNotice(null), 5000)
   }
 
-  const loadAreas = React.useCallback(async () => {
+  const loadData = React.useCallback(async () => {
     if (!entityId) {
       setError("Parámetros de URL no válidos")
       setLoading(false)
@@ -143,38 +175,90 @@ const EntitySettingsStaffing = () => {
     try {
       const { data: canView } = await supabase.rpc("can_access_entity", {
         target_entity_id: entityId,
-        permission_code: "areas.view",
+        permission_code: "jobs.view",
       })
       if (!canView) {
-        setAreas([])
+        setJobs([])
         setError("No tiene permiso para ver la configuración de plantilla de esta entidad")
         return
       }
 
       const { data: canManageData } = await supabase.rpc("can_access_entity", {
         target_entity_id: entityId,
-        permission_code: "areas.manage",
+        permission_code: "jobs.manage",
       })
       setCanManage(!!canManageData)
 
-      const { data, error: fetchError } = await supabase
+      // Load areas
+      const { data: areasData, error: areasError } = await supabase
         .from("organization_areas")
         .select("*")
         .eq("organization_entity_id", entityId)
 
-      if (fetchError) throw fetchError
-      setAreas((data as OrganizationArea[]) || [])
+      if (areasError) throw areasError
+      setAreas((areasData as OrganizationArea[]) || [])
+
+      // Load jobs with area and salary group info
+      const { data: jobsData, error: jobsError } = await supabase
+        .from("organization_jobs")
+        .select(`
+          *,
+          area:organization_areas(id, name, code, is_active, organization_entity_id),
+          salary_group:salary_groups(
+            id,
+            salary_scale_id,
+            sequence_number,
+            description,
+            is_active,
+            salary_group_values(
+              id,
+              amount,
+              currency_code,
+              effective_from,
+              effective_to,
+              is_active
+            )
+          )
+        `)
+        .eq("organization_entity_id", entityId)
+        .order("hierarchy_order")
+
+      if (jobsError) throw jobsError
+
+      // Transform jobs to include current salary value
+      const jobsWithCurrentValue = (jobsData as any[])?.map((job: any) => {
+        const currentValue = job.salary_group?.salary_group_values?.length > 0
+          ? job.salary_group.salary_group_values[0]
+          : null
+
+        return {
+          ...job,
+          salary_group: job.salary_group
+            ? {
+                ...job.salary_group,
+                current_value: currentValue
+                  ? {
+                      amount: currentValue.amount,
+                      currency_code: currentValue.currency_code,
+                    }
+                  : null,
+              }
+            : null,
+        }
+      }) as OrganizationJob[]
+
+      setJobs(jobsWithCurrentValue || [])
     } catch (err) {
-      console.error("Error loading areas:", err)
-      setError(err instanceof Error ? err.message : "Error al cargar las áreas")
+      console.error("Error loading data:", err)
+      setError(err instanceof Error ? err.message : "Error al cargar los datos")
     } finally {
       setLoading(false)
     }
   }, [entityId])
 
   React.useEffect(() => {
-    loadAreas()
-  }, [loadAreas])
+    loadData()
+  }, [loadData])
 
   // Keep every node expanded by default when data changes
   React.useEffect(() => {
@@ -190,22 +274,35 @@ const EntitySettingsStaffing = () => {
     })
   }
 
-  const filteredAreas = React.useMemo(() => {
-    if (statusFilter === "all") return areas
-    return areas.filter(a => (statusFilter === "active" ? a.is_active : !a.is_active))
-  }, [areas, statusFilter])
+  const filteredJobs = React.useMemo(() => {
+    let result = jobs
 
-  const tree = React.useMemo(() => buildTree(filteredAreas), [filteredAreas])
+    // Filter by area
+    if (areaFilter !== "all") {
+      result = result.filter(j => j.area_id === areaFilter)
+    }
+
+    // Filter by status
+    if (statusFilter === "active") {
+      result = result.filter(j => j.is_active)
+    } else if (statusFilter === "inactive") {
+      result = result.filter(j => !j.is_active)
+    }
+
+    return result
+  }, [jobs, areaFilter, statusFilter])
+
+  const tree = React.useMemo(() => buildTree(areas), [areas])
 
   // Options for the parent selector: active areas of this entity.
   // When editing, exclude the area itself and all its descendants.
   const parentOptions = React.useMemo(() => {
-    const excluded = editingArea ? getDescendantIds(editingArea.id, areas) : new Set<string>()
+    const excluded = editingJob ? getDescendantIds(editingJob.id, areas) : new Set<string>()
     let options = areas.filter(a => a.is_active && !excluded.has(a.id))
 
     // If editing, always include the current parent so the value is visible
-    if (editingArea?.parent_area_id) {
-      const currentParent = areas.find(a => a.id === editingArea.parent_area_id)
+    if (editingJob?.area_id) {
+      const currentParent = areas.find(a => a.id === editingJob.area_id)
       if (currentParent && !options.some(o => o.id === currentParent.id)) {
         options = [...options, currentParent]
       }
@@ -213,135 +310,68 @@ const EntitySettingsStaffing = () => {
     return options.sort(
       (a, b) => a.hierarchy_order - b.hierarchy_order || a.name.localeCompare(b.name)
     )
-  }, [areas, editingArea])
+  }, [areas, editingJob])
 
-  const openCreateDialog = (presetParentId?: string) => {
-    setEditingArea(null)
-    setFormName("")
-    setFormCode("")
-    setFormDescription("")
-    setFormParentId(presetParentId || ROOT_SENTINEL)
-    setFormOrder("0")
+  const openCreateDialog = () => {
+    setEditingJob(null)
     setFormError(null)
     setDialogOpen(true)
   }
 
-  const openEditDialog = (area: OrganizationArea) => {
-    setEditingArea(area)
-    setFormName(area.name)
-    setFormCode(area.code)
-    setFormDescription(area.description || "")
-    setFormParentId(area.parent_area_id || ROOT_SENTINEL)
-    setFormOrder(String(area.hierarchy_order))
+  const openEditDialog = (job: OrganizationJob) => {
+    setEditingJob(job)
     setFormError(null)
     setDialogOpen(true)
-  }
-
-  const mapSaveError = (err: { code?: string; message: string }) => {
-    if (err.code === "23505" || err.message.includes("organization_areas_entity_code_unique")) {
-      return "Ya existe un área con ese código en esta entidad"
-    }
-    return err.message
   }
 
   const handleSave = async () => {
-    if (!entityId) return
-
-    setFormError(null)
-    if (!formName.trim()) {
-      setFormError("El nombre es obligatorio")
-      return
-    }
-    if (!formCode.trim()) {
-      setFormError("El código es obligatorio")
-      return
-    }
-
-    const duplicate = areas.find(
-      a =>
-        a.code.toLowerCase() === formCode.trim().toLowerCase() &&
-        a.id !== editingArea?.id
-    )
-    if (duplicate) {
-      setFormError("Ya existe un área con ese código en esta entidad")
-      return
-    }
-
-    const orderNum = parseInt(formOrder, 10)
-    const payload = {
-      parent_area_id: formParentId === ROOT_SENTINEL ? null : formParentId,
-      code: formCode.trim(),
-      name: formName.trim(),
-      description: formDescription.trim() || null,
-      hierarchy_order: isNaN(orderNum) ? 0 : orderNum,
-    }
-
-    setSubmitting(true)
-    try {
-      if (editingArea) {
-        const { error: updateError } = await supabase
-          .from("organization_areas")
-          .update(payload)
-          .eq("id", editingArea.id)
-        if (updateError) throw updateError
-        showNotice("success", "Área actualizada correctamente")
-      } else {
-        const { error: insertError } = await supabase.from("organization_areas").insert({
-          ...payload,
-          organization_entity_id: entityId,
-          is_active: true,
-        })
-        if (insertError) throw insertError
-        showNotice("success", "Área creada correctamente")
-      }
-
-      setDialogOpen(false)
-      await loadAreas()
-    } catch (err) {
-      console.error("Error saving area:", err)
-      const mapped = err instanceof Error ? mapSaveError(err as Error & { code?: string }) : "Error al guardar el área"
-      setFormError(mapped)
-    } finally {
-      setSubmitting(false)
-    }
+    await loadData()
+    setDialogOpen(false)
+    setEditingJob(null)
   }
 
-  const handleToggleActive = async (area: OrganizationArea) => {
-    if (area.is_active) {
-      const activeChildren = areas.filter(a => a.parent_area_id === area.id && a.is_active)
-      if (activeChildren.length > 0) {
-        showNotice(
-          "danger",
-          "Esta área contiene subáreas activas. Debes moverlas o desactivarlas antes de desactivar el área."
-        )
-        return
-      }
-      if (!confirm(`¿Desactivar el área "${area.name}"?`)) return
-    } else {
-      if (area.parent_area_id) {
-        const parent = areas.find(a => a.id === area.parent_area_id)
-        if (parent && !parent.is_active) {
-          showNotice(
-            "danger",
-            "No se puede reactivar esta área porque su área superior está inactiva. Reactiva primero el área superior."
-          )
+  const handleToggleActive = async (job: OrganizationJob) => {
+      if (job.is_active) {
+        if (!confirm(`¿Desactivar el cargo "${job.name}"?`)) return
+      } else {
+        // Validate that the area is active before allowing reactivation
+        const area = areas.find(a => a.id === job.area_id)
+        if (area && !area.is_active) {
+          showNotice("danger", "No se puede reactivar este cargo porque su área está inactiva. Reactiva primero el área.")
           return
         }
+        if (!confirm(`¿Reactivar el cargo "${job.name}"?`)) return
       }
-      if (!confirm(`¿Reactivar el área "${area.name}"?`)) return
+  
+      try {
+        const { error: updateError } = await supabase
+          .from("organization_jobs")
+          .update({ is_active: !job.is_active })
+          .eq("id", job.id)
+        if (updateError) throw updateError
+        await loadData()
+        showNotice("success", job.is_active ? "Cargo desactivado" : "Cargo reactivado")
+      } catch (err) {
+        console.error("Error toggling job state:", err)
+        const message = err instanceof Error ? err.message : "Error al cambiar el estado del cargo"
+        showNotice("danger", message)
+      }
     }
+
+  const handleDelete = async (job: OrganizationJob) => {
+    if (!confirm(`¿Desactivar el cargo "${job.name}"?`)) return
 
     try {
       const { error: updateError } = await supabase
-        .from("organization_areas")
-        .update({ is_active: !area.is_active })
-        .eq("id", area.id)
+        .from("organization_jobs")
+        .update({ is_active: false })
+        .eq("id", job.id)
       if (updateError) throw updateError
-      await loadAreas()
-      showNotice("success", area.is_active ? "Área desactivada" : "Área reactivada")
+      await loadData()
+      showNotice("success", "Cargo desactivado")
     } catch (err) {
-      console.error("Error toggling area state:", err)
-      const message = err instanceof Error ? err.message : "Error al cambiar el estado del área"
+      console.error("Error deactivating job:", err)
+      const message = err instanceof Error ? err.message : "Error al desactivar el cargo"
       showNotice("danger", message)
     }
   }
@@ -426,7 +456,7 @@ const EntitySettingsStaffing = () => {
                 {node.is_active && (
                   <button
                     type="button"
-                    onClick={() => openCreateDialog(node.id)}
+                    onClick={() => openCreateDialog()}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-ink hover:bg-muted"
                   >
                     <CornerDownRight className="h-4 w-4" /> Añadir subárea
@@ -469,7 +499,7 @@ const EntitySettingsStaffing = () => {
       <div className="space-y-6 p-6">
         <SiteCorpPageHeader
           title="Configuración de plantilla"
-          description="Cargando estructura de áreas..."
+          description="Cargando estructura de áreas y cargos..."
         />
         <SiteCorpLoading rows={4} />
       </div>
@@ -515,7 +545,7 @@ const EntitySettingsStaffing = () => {
             <TabsTrigger value="areas">
               <FolderTree className="mr-2 h-4 w-4" /> Áreas
             </TabsTrigger>
-            <TabsTrigger value="cargos" disabled>
+            <TabsTrigger value="cargos">
               <Briefcase className="mr-2 h-4 w-4" /> Cargos
             </TabsTrigger>
             <TabsTrigger value="puestos" disabled>
@@ -579,12 +609,151 @@ const EntitySettingsStaffing = () => {
             )}
           </TabsContent>
 
-          {/* Cargos and Puestos are intentionally NOT implemented in this phase */}
+          {/* ================= CARGOS ================= */}
           <TabsContent value="cargos" className="space-y-4">
-            <SiteCorpAlert type="info" title="Próximamente">
-              Los cargos se implementarán en una fase posterior.
-            </SiteCorpAlert>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-ink">Cargos</h3>
+                <p className="text-sm text-muted-foreground">
+                  Define los cargos de la entidad, su área y grupo salarial.
+                </p>
+              </div>
+              {canManage && (
+                <SiteCorpButton onClick={openCreateDialog}>
+                  <Plus className="mr-2 h-4 w-4" /> Nuevo cargo
+                </SiteCorpButton>
+              )}
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <SiteCorpSelect
+                value={areaFilter}
+                onValueChange={(value) => setAreaFilter(value)}
+              >
+                <SelectItem value="all">Todas las áreas</SelectItem>
+                {areas.filter(a => a.is_active).map(area => (
+                  <SelectItem key={area.id} value={area.id}>
+                    {area.name} ({area.code})
+                  </SelectItem>
+                ))}
+              </SiteCorpSelect>
+              <SiteCorpSelect
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+              >
+                <SelectItem value="active">Activos</SelectItem>
+                <SelectItem value="inactive">Inactivos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
+              </SiteCorpSelect>
+            </div>
+
+            {/* Empty state */}
+            {jobs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
+                <Briefcase className="mb-4 h-12 w-12 text-muted-foreground" />
+                <h4 className="mb-1 text-base font-semibold text-ink">No hay cargos configurados.</h4>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Comienza creando los cargos que conformarán la plantilla de esta entidad.
+                </p>
+                {canManage && (
+                  <SiteCorpButton onClick={openCreateDialog}>
+                    <Plus className="mr-2 h-4 w-4" /> Crear primer cargo
+                  </SiteCorpButton>
+                )}
+              </div>
+            ) : filteredJobs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
+                <p className="text-sm text-muted-foreground">
+                  {statusFilter === "inactive"
+                    ? "No hay cargos inactivos."
+                    : "No hay cargos que coincidan con el filtro seleccionado."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Group jobs by area */}
+                {areas.filter(a => a.is_active).map(area => {
+                  const areaJobs = filteredJobs.filter(j => j.area_id === area.id)
+                  if (areaJobs.length === 0) return null
+
+                  return (
+                    <div key={area.id} className="space-y-2">
+                      <h4 className="text-sm font-semibold text-ink">
+                        {area.name} ({area.code})
+                      </h4>
+                      <div className="space-y-2">
+                        {areaJobs.map(job => (
+                          <div
+                            key={job.id}
+                            className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="text-sm font-medium text-ink">
+                                {job.name}
+                              </span>
+                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                {job.code}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Grupo: {job.salary_group
+                                  ? toRomanNumeral(job.salary_group.sequence_number)
+                                  : "N/A"}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {job.salary_group?.current_value
+                                  ? `${job.salary_group.current_value.amount.toLocaleString("es-CU", {
+                                      minimumFractionDigits: 2,
+                                    })} ${job.salary_group.current_value.currency_code}`
+                                  : "Sin salario"}
+                              </span>
+                              <SiteCorpStatusBadge status={job.is_active ? "success" : "neutral"}>
+                                {job.is_active ? "Activo" : "Inactivo"}
+                              </SiteCorpStatusBadge>
+                            </div>
+
+                            {canManage && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDialog(job)}
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+                                  aria-label="Editar cargo"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                {job.is_active ? (
+                                                                  <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleActive(job)}
+                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-sitecorp-danger"
+                                                                    aria-label="Desactivar cargo"
+                                                                  >
+                                                                    <PowerOff className="h-4 w-4" />
+                                                                  </button>
+                                                                ) : (
+                                                                  <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleActive(job)}
+                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+                                                                    aria-label="Reactivar cargo"
+                                                                  >
+                                                                    <Power className="h-4 w-4" />
+                                                                  </button>
+                                                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </TabsContent>
+
+          {/* Puestos - not implemented yet */}
           <TabsContent value="puestos" className="space-y-4">
             <SiteCorpAlert type="info" title="Próximamente">
               Los puestos se implementarán en una fase posterior.
@@ -593,95 +762,36 @@ const EntitySettingsStaffing = () => {
         </Tabs>
       </SiteCorpCard>
 
-      {/* New / Edit Area Dialog */}
+      {/* New / Edit Job Dialog */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open)
-          if (!open) setFormError(null)
+          if (!open) {
+            setEditingJob(null)
+            setFormError(null)
+          }
         }}
       >
         <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingArea ? "Editar área" : "Nueva área"}</DialogTitle>
+            <DialogTitle>{editingJob ? "Editar cargo" : "Nuevo cargo"}</DialogTitle>
             <DialogDescription>
-              {editingArea
-                ? "Modifica los datos del área. Cambiar el área superior permite moverla dentro de la jerarquía."
-                : "Las áreas definen la estructura interna de la entidad. Deja el área superior vacía para crear un área raíz."}
+              {editingJob
+                ? "Modifica los datos del cargo."
+                : "Crea un nuevo cargo para esta entidad."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="area-name">Nombre *</Label>
-              <SiteCorpInput
-                id="area-name"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="Ej.: Recursos Humanos"
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="area-code">Código *</Label>
-                <SiteCorpInput
-                  id="area-code"
-                  value={formCode}
-                  onChange={(e) => setFormCode(e.target.value)}
-                  placeholder="Ej.: RRHH"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="area-order">Orden</Label>
-                <SiteCorpInput
-                  id="area-order"
-                  type="number"
-                  value={formOrder}
-                  onChange={(e) => setFormOrder(e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Área superior</Label>
-              <SiteCorpSelect
-                value={formParentId}
-                onValueChange={(value) => setFormParentId(value)}
-              >
-                <SelectItem value={ROOT_SENTINEL}>Sin área superior (área raíz)</SelectItem>
-                {parentOptions.map(area => (
-                  <SelectItem key={area.id} value={area.id}>
-                    {area.name} ({area.code}){!area.is_active ? " — inactiva" : ""}
-                  </SelectItem>
-                ))}
-              </SiteCorpSelect>
-              <p className="text-xs text-muted-foreground">
-                Solo se muestran áreas de esta entidad.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="area-description">Descripción</Label>
-              <Textarea
-                id="area-description"
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Descripción opcional del área"
-                rows={2}
-              />
-            </div>
-            {formError && <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>}
-          </div>
-          <DialogFooter>
-            <SiteCorpButton
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-              disabled={submitting}
-            >
-              Cancelar
-            </SiteCorpButton>
-            <SiteCorpButton onClick={handleSave} disabled={submitting}>
-              {submitting ? "Guardando..." : editingArea ? "Guardar cambios" : "Crear área"}
-            </SiteCorpButton>
-          </DialogFooter>
+          <JobForm
+            entityId={entityId!}
+            editingJob={editingJob}
+            onSuccess={handleSave}
+            onCancel={() => {
+              setDialogOpen(false)
+              setEditingJob(null)
+              setFormError(null)
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>
