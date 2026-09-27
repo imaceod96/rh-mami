@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useAuth } from "@/contexts/AuthContext"
+import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { supabase } from "@/lib/supabase"
 import { Button as SiteCorpButton } from "@/components/ui/button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
@@ -11,6 +12,7 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Building2, Factory, Layers, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { CUBA_PROVINCES, MUNICIPIOS_BY_PROVINCE } from "@/data/cuba-locations"
 
 interface Tenant {
   id: string
@@ -38,10 +40,27 @@ interface OrganizationEntity {
   account_code: string | null
 }
 
+interface OrganizationEntityFormData {
+  name: string
+  entity_type: "business_group" | "company" | "ueb"
+  regime_id: string | null
+  province: string | null
+  municipality: string | null
+  is_active: boolean
+  description: string | null
+  is_sitecorp_account: boolean
+  account_code: string | null
+}
+
 const entityTypeOptions = [
   { value: "business_group", label: "Grupo empresarial" },
   { value: "company", label: "Empresa" },
-  { value: "ueb", label: "UEB / Unidad Empresarial de Base" },
+  { value: "ueb", label: "UEB" },
+]
+
+const regimeOptions = [
+  { value: "presupuestada", label: "Presupuestada" },
+  { value: "empresarial", label: "Empresarial" },
 ]
 
 const statusOptions = [
@@ -49,24 +68,30 @@ const statusOptions = [
   { value: "inactive", label: "Inactivo" },
 ]
 
+// Generate automatic code based on entity type
+const generateCode = (entityType: "business_group" | "company" | "ueb"): string => {
+  const timestamp = Date.now().toString(36).toUpperCase().padStart(6, "0").substring(0, 6)
+  const prefixes: Record<string, string> = {
+    business_group: "GE",
+    company: "EMP",
+    ueb: "UEB",
+  }
+  return `${prefixes[entityType]}-${timestamp}`
+}
+
 const organizationEntitySchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
-  code: z.string().min(1, "El código es obligatorio"),
   entity_type: z.enum(["business_group", "company", "ueb"]),
-  tenant_id: z.string().min(1, "El tenant es obligatorio"),
-  parent_id: z.string().nullable(),
-  regime_id: z.string().nullable(),
-  status: z.enum(["active", "inactive"]),
-  description: z.string().nullable(),
-  address: z.string().nullable(),
-  municipality: z.string().nullable(),
+  regime_id: z.enum(["presupuestada", "empresarial"]).nullable(),
   province: z.string().nullable(),
-  postal_code: z.string().nullable(),
+  municipality: z.string().nullable(),
+  is_active: z.boolean().default(true),
+  description: z.string().nullable(),
   is_sitecorp_account: z.boolean().default(false),
   account_code: z.string().nullable(),
 })
 
-type OrganizationEntityFormData = z.infer<typeof organizationEntitySchema>
+type OrganizationEntityFormDataZod = z.infer<typeof organizationEntitySchema>
 
 interface OrganizationEntityDialogProps {
   open: boolean
@@ -75,9 +100,8 @@ interface OrganizationEntityDialogProps {
   tenants: Tenant[]
   entities: OrganizationEntity[]
   editingEntity: OrganizationEntity | null
-  defaultTenantId: string
-  defaultParentId?: string | null
   defaultEntityType?: OrganizationEntity["entity_type"]
+  defaultRegime?: OrganizationEntity["regime_id"]
 }
 
 export const OrganizationEntityDialog = ({
@@ -87,14 +111,19 @@ export const OrganizationEntityDialog = ({
   tenants,
   entities,
   editingEntity,
-  defaultTenantId,
-  defaultParentId = null,
-  defaultEntityType = "company",
+  defaultEntityType = "business_group",
+  defaultRegime = "presupuestada",
 }: OrganizationEntityDialogProps) => {
   const { user } = useAuth()
+  const { currentTenant } = useCurrentTenant()
   const { toast } = useToast()
   const [saving, setSaving] = React.useState(false)
-  
+
+  // Auto-assign tenant from current context, fallback to first tenant
+  const defaultTenantId = currentTenant?.id || tenants[0]?.id || ""
+
+  const [saving, setSaving] = React.useState(false)
+
   const {
     register,
     handleSubmit,
@@ -102,85 +131,84 @@ export const OrganizationEntityDialog = ({
     reset,
     watch,
     setValue,
-  } = useForm<OrganizationEntityFormData>({
+  } = useForm<OrganizationEntityFormDataZod>({
     resolver: zodResolver(organizationEntitySchema),
     defaultValues: {
       name: "",
-      code: "",
       entity_type: defaultEntityType,
-      tenant_id: defaultTenantId,
-      parent_id: defaultParentId,
-      regime_id: null,
-      status: "active",
-      description: null,
-      address: null,
-      municipality: null,
+      regime_id: defaultRegime,
       province: null,
-      postal_code: null,
+      municipality: null,
+      is_active: true,
+      description: null,
       is_sitecorp_account: false,
       account_code: null,
     },
   })
-  
+
   React.useEffect(() => {
     if (open) {
       if (editingEntity) {
         reset({
           name: editingEntity.name,
-          code: editingEntity.code,
           entity_type: editingEntity.entity_type,
-          tenant_id: editingEntity.tenant_id,
-          parent_id: editingEntity.parent_id,
           regime_id: editingEntity.regime_id,
-          status: editingEntity.status as "active" | "inactive",
-          description: editingEntity.description,
-          address: editingEntity.address,
-          municipality: editingEntity.municipality,
           province: editingEntity.province,
-          postal_code: editingEntity.postal_code,
+          municipality: editingEntity.municipality,
+          is_active: editingEntity.is_active,
+          description: editingEntity.description,
           is_sitecorp_account: editingEntity.is_sitecorp_account,
           account_code: editingEntity.account_code,
         })
+        // When editing, keep the code unchanged
       } else {
         reset({
           name: "",
-          code: "",
           entity_type: defaultEntityType,
-          tenant_id: defaultTenantId,
-          parent_id: defaultParentId,
-          regime_id: null,
-          status: "active",
-          description: null,
-          address: null,
-          municipality: null,
+          regime_id: defaultRegime,
           province: null,
-          postal_code: null,
+          municipality: null,
+          is_active: true,
+          description: null,
           is_sitecorp_account: false,
           account_code: null,
         })
       }
     }
-  }, [open, editingEntity, reset, defaultTenantId, defaultParentId, defaultEntityType])
-  
-  const onSubmit = async (data: OrganizationEntityFormData) => {
+  }, [open, editingEntity, reset, defaultEntityType, defaultRegime])
+
+  // When entity type changes, filter parent entities accordingly
+  React.useEffect(() => {
+    const entityType = watch("entity_type")
+    if (entityType === "business_group") {
+      // Business groups cannot have parents, clear any existing parent
+      setValue("parent_id", null)
+    }
+  }, [watch("entity_type"), setValue])
+
+  const onSubmit = async (data: OrganizationEntityFormDataZod) => {
     if (!user) return
-    
+
     try {
       setSaving(true)
-      
+
+      // Generate automatic code if not provided and not editing
       const entityData = {
         ...data,
+        tenant_id: defaultTenantId,
+        code: data.entity_type === "business_group" || !editingEntity ? generateCode(data.entity_type) : editingEntity?.code || generateCode(data.entity_type),
         updated_by: user.id,
+        parent_id: data.entity_type === "business_group" ? null : (editingEntity?.parent_id || null),
       }
-      
+
       if (editingEntity) {
         const { error } = await supabase
           .from("organization_entities")
           .update(entityData)
           .eq("id", editingEntity.id)
-        
+
         if (error) throw error
-        
+
         toast({
           title: "Entidad actualizada",
           description: `La entidad "${data.name}" ha sido actualizada correctamente.`,
@@ -191,15 +219,15 @@ export const OrganizationEntityDialog = ({
           .insert([entityData])
           .select()
           .single()
-        
+
         if (error) throw error
-        
+
         toast({
           title: "Entidad creada",
           description: `La entidad "${data.name}" ha sido creada correctamente.`,
         })
       }
-      
+
       onSaved()
       onOpenChange(false)
     } catch (err) {
@@ -212,9 +240,36 @@ export const OrganizationEntityDialog = ({
       setSaving(false)
     }
   }
-  
-  const parentEntities = entities.filter(e => e.id !== editingEntity?.id)
-  
+
+  // Filter parent entities based on entity type and tenant
+  const parentEntities = entities.filter(
+    (e) => e.id !== editingEntity?.id && e.tenant_id === defaultTenantId
+  )
+
+  // When entity type is business_group, no parents allowed
+  // When entity type is company, only business_groups as parents
+  // When entity type is ueb, only companies as parents
+  const filteredParentEntities = React.useMemo(() => {
+    const entityType = watch("entity_type")
+    if (!entityType) return parentEntities
+
+    return parentEntities.filter((e) => {
+      if (entityType === "business_group") return false // No parents for business groups
+
+      if (entityType === "company") {
+        // Only business groups can be parents
+        return e.entity_type === "business_group"
+      }
+
+      if (entityType === "ueb") {
+        // Only companies can be parents
+        return e.entity_type === "company"
+      }
+
+      return true
+    })
+  }, [watch("entity_type"), parentEntities])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl rounded-2xl">
@@ -236,7 +291,7 @@ export const OrganizationEntityDialog = ({
             {editingEntity ? "Modifica los datos de la entidad." : "Completa los datos para crear una nueva entidad."}
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -246,65 +301,90 @@ export const OrganizationEntityDialog = ({
                 {...register("name")}
               />
             </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Código *</label>
-              <SiteCorpInput
-                              placeholder="Código de la entidad"
-                              {...register("code")}
-                            />
-            </div>
-            
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-ink">Tipo *</label>
               <SiteCorpSelect
                 value={watch("entity_type")}
-                onValueChange={(value) => setValue("entity_type", value as OrganizationEntityFormData["entity_type"])}
+                onValueChange={(value) =>
+                  setValue("entity_type", value as OrganizationEntityFormDataZod["entity_type"])
+                }
               >
-                {entityTypeOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {entityTypeOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
               </SiteCorpSelect>
             </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Tenant *</label>
+
+            {/* Tenant is auto-assigned, not shown in form */}
+            {/* Regime selector */}
+            <div className="space-y-2 sm:col-span-full">
+              <label className="text-sm font-medium text-ink">Régimen *</label>
               <SiteCorpSelect
-                value={watch("tenant_id")}
-                onValueChange={(value) => setValue("tenant_id", value)}
+                value={watch("regime_id")}
+                onValueChange={(value) =>
+                  setValue(
+                    "regime_id",
+                    value as OrganizationEntityFormDataZod["regime_id"]
+                  )
+                }
               >
-                {tenants.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                {regimeOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
                 ))}
               </SiteCorpSelect>
             </div>
-            
+
             <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Entidad padre</label>
+              <label className="text-sm font-medium text-ink">Provincia *</label>
               <SiteCorpSelect
-                value={watch("parent_id") || ""}
-                onValueChange={(value) => setValue("parent_id", value || null)}
+                value={watch("province")}
+                onValueChange={(value) =>
+                  setValue("province", value as OrganizationEntityFormDataZod["province"])
+                }
               >
-                <option value="">Sin padre</option>
-                {parentEntities.map(e => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
+                <option value="" disabled>
+                  Seleccionar provincia
+                </option>
+                {CUBA_PROVINCES.map((province) => (
+                  <option key={province.id} value={province.id}>
+                    {province.name}
+                  </option>
                 ))}
               </SiteCorpSelect>
             </div>
-            
+
             <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Estado</label>
+              <label className="text-sm font-medium text-ink">Municipio *</label>
               <SiteCorpSelect
-                value={watch("status")}
-                onValueChange={(value) => setValue("status", value as OrganizationEntityFormData["status"])}
+                value={watch("municipality")}
+                onValueChange={(value) =>
+                  setValue(
+                    "municipality",
+                    value as OrganizationEntityFormDataZod["municipality"]
+                  )
+                }
+                disabled={!watch("province")}
               >
-                {statusOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option value="" disabled>
+                  Seleccionar municipio
+                </option>
+                {watch("province") &&
+                MUNICIPIOS_BY_PROVINCE[watch("province")] &&
+                MUNICIPIOS_BY_PROVINCE[watch("province")].map((municipio) => (
+                  <option key={municipio} value={municipio}>
+                    {municipio}
+                  </option>
                 ))}
               </SiteCorpSelect>
             </div>
           </div>
-          
+
+          {/* Description and sitecorp account are conditional */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-ink">Descripción</label>
             <SiteCorpInput
@@ -312,54 +392,25 @@ export const OrganizationEntityDialog = ({
               {...register("description")}
             />
           </div>
-          
-          <div className="grid gap-4 sm:grid-cols-2">
+
+          {watch("is_sitecorp_account") && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Dirección</label>
-              <SiteCorpInput
-                placeholder="Dirección"
-                {...register("address")}
+              <label className="text-sm font-medium text-ink">Es cuenta SiteCorp</label>
+              <input
+                type="checkbox"
+                id="is_sitecorp_account"
+                checked={watch("is_sitecorp_account")}
+                onChange={(e) =>
+                  setValue("is_sitecorp_account", e.target.checked)
+                }
+                className="h-4 w-4 rounded border-input text-sitecorp-primary focus:ring-sitecorp-primary"
               />
+              <label htmlFor="is_sitecorp_account" className="text-sm font-medium text-ink">
+                Es cuenta SiteCorp
+              </label>
             </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Municipio</label>
-              <SiteCorpInput
-                placeholder="Municipio"
-                {...register("municipality")}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Provincia</label>
-              <SiteCorpInput
-                placeholder="Provincia"
-                {...register("province")}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Código postal</label>
-              <SiteCorpInput
-                placeholder="Código postal"
-                {...register("postal_code")}
-              />
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is_sitecorp_account"
-              checked={watch("is_sitecorp_account")}
-              onChange={(e) => setValue("is_sitecorp_account", e.target.checked)}
-              className="h-4 w-4 rounded border-input text-sitecorp-primary focus:ring-sitecorp-primary"
-            />
-            <label htmlFor="is_sitecorp_account" className="text-sm font-medium text-ink">
-              Es cuenta SiteCorp
-            </label>
-          </div>
-          
+          )}
+
           {watch("is_sitecorp_account") && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-ink">Código de cuenta</label>
@@ -369,7 +420,7 @@ export const OrganizationEntityDialog = ({
               />
             </div>
           )}
-          
+
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <SiteCorpButton
               type="button"

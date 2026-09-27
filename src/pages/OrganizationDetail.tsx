@@ -679,20 +679,19 @@ const OrganizationDetail = () => {
       
       {/* Modals */}
       <OrganizationEntityDialog
-        open={entityDialogOpen}
-        onOpenChange={setEntityDialogOpen}
-        onSaved={loadEntityData}
-        tenants={currentTenant ? [currentTenant as Tenant] : []}
-        entities={tenantEntities}
-        editingEntity={editingEntity}
-        defaultTenantId={currentTenant?.id || ""}
-        defaultParentId={entity?.id || undefined}
-        defaultEntityType={
-          entity?.entity_type === "business_group" ? "company" :
-          entity?.entity_type === "company" ? "ueb" :
-          "business_group"
-        }
-      />
+              open={entityDialogOpen}
+              onOpenChange={setEntityDialogOpen}
+              onSaved={loadEntityData}
+              tenants={currentTenant ? [currentTenant as Tenant] : []}
+              entities={tenantEntities}
+              editingEntity={editingEntity}
+              defaultEntityType={
+                entity?.entity_type === "business_group" ? "company" :
+                entity?.entity_type === "company" ? "ueb" :
+                "business_group"
+              }
+              defaultRegime="presupuestada"
+            />
       
       <EntityUsersDialog
         entity={usersEntity}

@@ -659,9 +659,8 @@ const Organizations = () => {
         tenants={tenants}
         entities={entities}
         editingEntity={editingEntity}
-        defaultTenantId={entityDefaultTenant || tenants[0]?.id || ""}
-        defaultParentId={entityDefaultParent}
         defaultEntityType={entityDefaultType}
+        defaultRegime="presupuestada"
       />
 
       <EntityUsersDialog

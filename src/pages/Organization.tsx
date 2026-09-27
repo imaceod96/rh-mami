@@ -275,14 +275,15 @@ const Organization = () => {
       )}
       
       <OrganizationEntityDialog
-        open={entityDialogOpen}
-        onOpenChange={setEntityDialogOpen}
-        onSaved={loadEntities}
-        tenants={currentTenant ? [currentTenant as Tenant] : []}
-        entities={entities}
-        editingEntity={editingEntity}
-        defaultTenantId={currentTenant?.id || ""}
-      />
+              open={entityDialogOpen}
+              onOpenChange={setEntityDialogOpen}
+              onSaved={loadEntities}
+              tenants={currentTenant ? [currentTenant as Tenant] : []}
+              entities={entities}
+              editingEntity={editingEntity}
+              defaultEntityType="company"
+              defaultRegime="presupuestada"
+            />
       
       <Dialog
         open={Boolean(deleteEntity)}
