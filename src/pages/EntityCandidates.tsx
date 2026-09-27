@@ -153,6 +153,24 @@ const RETIRED_REHIRED_OPTIONS = [
   { id: "no", name: "No" },
 ]
 
+// Convert dd/mm/aaaa display format to ISO yyyy-mm-dd for storage
+const convertDisplayDateToISO = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed)
+  if (match) {
+    const day = Number(match[1])
+    const month = Number(match[2])
+    const year = Number(match[3])
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    }
+    return null
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  return null
+}
+
 const EntityCandidates = () => {
   const { currentEntity } = useCurrentEntity()
   const entityId = currentEntity?.id
@@ -337,9 +355,8 @@ const EntityCandidates = () => {
   
         if (year >= 0 && year <= 99 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
           const fullYear = year >= 50 ? 1900 + year : 2000 + year
-          const date = new Date(fullYear, month - 1, day)
-          const dateStr = date.toISOString().split("T")[0]
-          setFormData(prev => ({ ...prev, birth_date: dateStr }))
+          const formatted = `${dayStr}/${monthStr}/${fullYear}`
+          setFormData(prev => ({ ...prev, birth_date: formatted }))
         }
       }
     }
@@ -418,6 +435,16 @@ const EntityCandidates = () => {
       }
     }
 
+    // Validar y convertir fecha de nacimiento si se proporciona
+    let birthDateISO: string | null = null
+    if (formData.birth_date.trim()) {
+      birthDateISO = convertDisplayDateToISO(formData.birth_date)
+      if (!birthDateISO) {
+        setFormError("El formato de la fecha de nacimiento no es válido (dd/mm/aaaa)")
+        return
+      }
+    }
+
     setFormSubmitting(true)
     setFormError(null)
 
@@ -444,7 +471,7 @@ const EntityCandidates = () => {
               first_surname: formData.first_surname.trim(),
               second_surname: formData.second_surname.trim() || null,
               identification: formData.identification.trim(),
-              birth_date: formData.birth_date || null,
+              birth_date: birthDateISO,
               gender_id: formData.gender_id || null,
               marital_status_id: formData.marital_status_id || null,
               phone: formData.phone.trim() || null,
