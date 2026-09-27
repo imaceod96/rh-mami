@@ -119,11 +119,6 @@ export const OrganizationEntityDialog = ({
   const { toast } = useToast()
   const [saving, setSaving] = React.useState(false)
 
-  // Auto-assign tenant from current context, fallback to first tenant
-  const defaultTenantId = currentTenant?.id || tenants[0]?.id || ""
-
-  const [saving, setSaving] = React.useState(false)
-
   const {
     register,
     handleSubmit,

@@ -1,34 +1,35 @@
+// Cuba provinces and municipalities data
 export const CUBA_PROVINCES = [
   "Artemisa",
-  "Mayabeque",
+  "Mayabeque", 
   "Matanzas",
   "Cienfuegos",
   "Villa Clara",
-  "Sancti Spíritus",
-  "Ciego de Ávila",
-  "Camagüey",
+  "Sancti Spiritus",
+  "Ciego de Avila",
+  "Camaguey",
   "Las Tunas",
-  "Holguín",
+  "Holguin",
   "Granma",
   "Santiago de Cuba",
-  "Guantánamo"
-].map((name) => ({ id: name, name }));
+  "Guantanamo"
+].map(name => ({ id: name, name }));
 
-export const MUNICIPIOS_BY_PROVINCE: Record<string, string[]> = {
-  Artemisa: ["Artemisa", "Guanajay", "San Antonio de los Baños"],
-  Mayabeque: ["San José de las Lajas", "Santa Cruz del Norte", "Calimete"],
-  Matanzas: ["Matanzas", "Cárdenas", "Colón", "Jagüey Grande", "Pedro Betancourt", "Unión de Reyes"],
+export const MUNICIPIOS_BY_PROVINCE = {
+  Artemisa: ["Artemisa", "Guanajay", "San Antonio de los Banos"],
+  Mayabeque: ["San Jose de las Lajas", "Santa Cruz del Norte", "Calimete"],
+  Matanzas: ["Matanzas", "Cardenas", "Colon", "Jaguey Grande", "Pedro Betancourt", "Union de Reyes"],
   Cienfuegos: ["Cienfuegos", "Rodas", "Cruces", "Lajas", "Palmira"],
-  Villa Clara: ["Santa Clara", "Remedios", "Sagua la Grande", "Camajuaní", "Manicaragua", "Placetas", "Quemado de Güines"],
-  Sancti Spíritus: ["Sancti Spíritus", "Yaguajay", "Trinidad", "Cumanayagua", "Fomento", "Jatibonico"],
-  Ciego de Ávila: ["Ciego de Ávila", "Morón", "Chambas", "Florencia", "Majagua", "Baraguá"],
-  Camagüey: ["Camagüey", "Las Tunas", "Santa Cruz del Sur", "Guáimaro", "Nuevitas", "Florida"],
-  Las Tunas: ["Las Tunas", "Manatí", "Colombia", "Jobabo", "Calixto García", "Puerto Padre"],
-  Holguín: ["Holguín", "Báguanos", "Frank País", "Mayarí", "Cueto", "Moa", "Rafael Freyre"],
-  Granma: ["Bayamo", "Manzanillo", "Niquero", "Pilón", "Yara", "Cauto Cristo", "Jiguaní"],
-  Santiago de Cuba: ["Santiago de Cuba", "San Luis", "Songo-La Maya", "Contramaestre", "Palma Soriano", "Tercer Frente", "Guamá"],
-  Guantánamo: ["Guantánamo", "Baracoa", "Maisí", "Moa", "Niceto Pérez", "Caimanera"],
-};
+  "Villa Clara": ["Santa Clara", "Remedios", "Sagua la Grande", "Camajuani", "Manicaragua", "Placetas", "Quemado de Guines"],
+  "Sancti Spiritus": ["Sancti Spiritus", "Yaguajay", "Trinidad", "Cumanayagua", "Fomento", "Jatibonico"],
+  "Ciego de Avila": ["Ciego de Avila", "Moron", "Chambas", "Florencia", "Majagua", "Baragua"],
+  Camaguey: ["Camaguey", "Las Tunas", "Santa Cruz del Sur", "Guaimaro", "Nuevitas", "Florida"],
+  "Las Tunas": ["Las Tunas", "Manati", "Colombia", "Jobabo", "Calixto Garcia", "Puerto Padre"],
+  Holguin: ["Holguin", "Baguanos", "Frank Pais", "Mayari", "Cueto", "Moa", "Rafael Freyre"],
+  Granma: ["Bayamo", "Manzanillo", "Niquero", "Pilon", "Yara", "Cauto Cristo", "Jiguaní"],
+  "Santiago de Cuba": ["Santiago de Cuba", "San Luis", "Songo-La Maya", "Contramaestre", "Palma Soriano", "Tercer Frente", "Guama"],
+  Guantanamo: ["Guantanamo", "Baracoa", "Maisi", "Moa", "Niceto Perez", "Caimanera"]
+} as const;
 
-export type Province = (typeof CUBA_PROVINCES)[0];
+export type Province = typeof CUBA_PROVINCES[0];
 export type Municipality = string;
