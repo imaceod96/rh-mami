@@ -119,6 +119,20 @@ interface WorkExperience {
   updated_at: string
 }
 
+interface AcademicFormation {
+  id: string
+  candidate_id: string
+  organization_entity_id: string
+  program_name: string
+  start_date: string
+  end_date: string | null
+  is_studying: boolean | null
+  document_id: string | null
+  document: { id: string; original_file_name: string; storage_path: string } | null
+  created_at: string
+  updated_at: string
+}
+
 interface CandidateNote {
   id: string
   candidate_id: string
@@ -177,6 +191,7 @@ const CandidateDetail = () => {
   const [documentTypes, setDocumentTypes] = React.useState<DocumentType[]>([])
   const [documents, setDocuments] = React.useState<CandidateDocument[]>([])
   const [workExperiences, setWorkExperiences] = React.useState<WorkExperience[]>([])
+  const [formations, setFormations] = React.useState<AcademicFormation[]>([])
   const [notes, setNotes] = React.useState<CandidateNote[]>([])
   const [additionalInfo, setAdditionalInfo] = React.useState<AdditionalInfoItem[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -207,6 +222,16 @@ const CandidateDetail = () => {
   const [expIsCurrent, setExpIsCurrent] = React.useState(false)
   const [expDescription, setExpDescription] = React.useState("")
   const [expFormError, setExpFormError] = React.useState<string | null>(null)
+
+  // Academic formation dialog state
+  const [formationDialogOpen, setFormationDialogOpen] = React.useState(false)
+  const [formationSubmitting, setFormationSubmitting] = React.useState(false)
+  const [formationProgramName, setFormationProgramName] = React.useState("")
+  const [formationStartDate, setFormationStartDate] = React.useState("")
+  const [formationEndDate, setFormationEndDate] = React.useState("")
+  const [formationIsStudying, setFormationIsStudying] = React.useState(false)
+  const [formationFile, setFormationFile] = React.useState<File | null>(null)
+  const [formationFormError, setFormationFormError] = React.useState<string | null>(null)
 
   // Additional info dialog state
   const [infoDialogOpen, setInfoDialogOpen] = React.useState(false)
@@ -335,7 +360,7 @@ const CandidateDetail = () => {
     if (!candidateId || !entityId) return
 
     try {
-      const [docsRes, expRes, notesRes, infoRes] = await Promise.all([
+      const [docsRes, expRes, formationsRes, notesRes, infoRes] = await Promise.all([
         supabase
           .from("candidate_documents")
           .select("*")
@@ -345,6 +370,11 @@ const CandidateDetail = () => {
         supabase
           .from("candidate_work_experiences")
           .select("*")
+          .eq("candidate_id", candidateId)
+          .order("start_date", { ascending: false }),
+        supabase
+          .from("candidate_academic_formations")
+          .select("*, document:candidate_documents(id, original_file_name, storage_path)")
           .eq("candidate_id", candidateId)
           .order("start_date", { ascending: false }),
         supabase
@@ -361,6 +391,7 @@ const CandidateDetail = () => {
 
       if (docsRes.data) setDocuments(docsRes.data as CandidateDocument[])
       if (expRes.data) setWorkExperiences(expRes.data as WorkExperience[])
+      if (formationsRes.data) setFormations(formationsRes.data as AcademicFormation[])
       if (notesRes.data) setNotes(notesRes.data as CandidateNote[])
       if (infoRes.data) setAdditionalInfo(infoRes.data as AdditionalInfoItem[])
     } catch (err) {
@@ -417,18 +448,17 @@ const CandidateDetail = () => {
     return `${(size / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  // Calculate time worked in a position (years, months, days)
-  const calculateDuration = (exp: WorkExperience) => {
-    const start = parseDateParts(exp.start_date)
+  // Calculate elapsed time between two dates (years, months, days)
+  const calculateDurationBetween = (startDate: string, endDate: string | null, isOngoing: boolean | null) => {
+    const start = parseDateParts(startDate)
     if (!start) return "—"
     const end =
-      exp.is_current || !exp.end_date ? new Date() : parseDateParts(exp.end_date)
+      isOngoing || !endDate ? new Date() : parseDateParts(endDate)
     if (!end) return "—"
 
     const diffMs = end.getTime() - start.getTime()
     if (diffMs < 0) return "—"
-    const totalDays = Math.floor(diffMs / 86400000)
-    return formatDurationFromDays(totalDays)
+    return formatDurationFromDays(Math.floor(diffMs / 86400000))
   }
 
   // Calculate total accumulated experience across all positions
@@ -551,7 +581,7 @@ const CandidateDetail = () => {
   }
 
   // Download document function
-  const handleDownloadDocument = async (doc: CandidateDocument) => {
+  const handleDownloadDocument = async (doc: { storage_path: string; original_file_name: string }) => {
     try {
       const { data, error } = await supabase.storage
         .from("documents")
@@ -644,6 +674,113 @@ const CandidateDetail = () => {
     } catch (err) {
       console.error("Error deleting work experience:", err)
       showNotice("danger", "Error al eliminar la experiencia laboral")
+    }
+  }
+
+  // Add academic formation (with optional title document)
+  const handleAddFormation = async () => {
+    if (!candidateId || !entityId) return
+
+    setFormationFormError(null)
+    if (!formationProgramName.trim()) {
+      setFormationFormError("Indique qué estudió (carrera o programa)")
+      return
+    }
+    if (!formationStartDate) {
+      setFormationFormError("La fecha de inicio es obligatoria")
+      return
+    }
+    if (!formationIsStudying && !formationEndDate) {
+      setFormationFormError("Indique la fecha de fin o marque «Estudios en curso»")
+      return
+    }
+    if (!formationIsStudying && formationEndDate && formationEndDate < formationStartDate) {
+      setFormationFormError("La fecha de fin no puede ser anterior a la fecha de inicio")
+      return
+    }
+
+    setFormationSubmitting(true)
+    try {
+      // Upload the title document (optional) and register it in candidate_documents
+      let documentId: string | null = null
+      if (formationFile) {
+        const { data: { user } } = await supabase.auth.getUser()
+        const fileExt = formationFile.name.split(".").pop() || "pdf"
+        const fileName = `candidate_${candidateId}_academic_${Date.now()}.${fileExt}`
+
+        const { error: uploadError } = await supabase.storage
+          .from("documents")
+          .upload(fileName, formationFile, {
+            cacheControl: "3600",
+            upsert: false
+          })
+        if (uploadError) throw uploadError
+
+        const { data: docData, error: docError } = await supabase
+          .from("candidate_documents")
+          .insert({
+            candidate_id: candidateId,
+            document_type_id: "ACADEMIC_CERTIFICATE",
+            original_file_name: formationFile.name,
+            storage_path: fileName,
+            mime_type: formationFile.type,
+            file_size: formationFile.size,
+            description: `Título de ${formationProgramName.trim()}`,
+            uploaded_by: user?.id || null
+          })
+          .select("id")
+          .single()
+        if (docError) throw docError
+        documentId = docData.id
+      }
+
+      const { error } = await supabase.from("candidate_academic_formations").insert({
+        candidate_id: candidateId,
+        organization_entity_id: entityId,
+        program_name: formationProgramName.trim(),
+        start_date: formationStartDate,
+        end_date: formationIsStudying ? null : formationEndDate,
+        is_studying: formationIsStudying,
+        document_id: documentId
+      })
+      if (error) throw error
+
+      setFormationDialogOpen(false)
+      setFormationProgramName("")
+      setFormationStartDate("")
+      setFormationEndDate("")
+      setFormationIsStudying(false)
+      setFormationFile(null)
+
+      await fetchRelatedData()
+      showNotice("success", "Formación académica añadida correctamente")
+    } catch (err) {
+      console.error("Error adding academic formation:", err)
+      setFormationFormError(err instanceof Error ? err.message : "Error al guardar la formación académica")
+    } finally {
+      setFormationSubmitting(false)
+    }
+  }
+
+  // Delete academic formation (and its linked title document)
+  const handleDeleteFormation = async (formation: AcademicFormation) => {
+    const message = formation.document
+      ? "¿Está seguro de que desea eliminar esta formación académica? El título asociado también se eliminará de los documentos."
+      : "¿Está seguro de que desea eliminar esta formación académica?"
+    if (!confirm(message)) return
+
+    try {
+      if (formation.document) {
+        await supabase.storage.from("documents").remove([formation.document.storage_path])
+        await supabase.from("candidate_documents").delete().eq("id", formation.document.id)
+      }
+      const { error } = await supabase.from("candidate_academic_formations").delete().eq("id", formation.id)
+      if (error) throw error
+      await fetchRelatedData()
+      showNotice("success", "Formación académica eliminada")
+    } catch (err) {
+      console.error("Error deleting academic formation:", err)
+      showNotice("danger", "Error al eliminar la formación académica")
     }
   }
 
@@ -1235,7 +1372,7 @@ const CandidateDetail = () => {
                       </span>
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-sitecorp-primary/10 px-3 py-1 text-xs font-medium text-sitecorp-primary">
                         <Clock className="h-3.5 w-3.5" />
-                        {calculateDuration(exp)}
+                        {calculateDurationBetween(exp.start_date, exp.end_date, exp.is_current)}
                       </span>
                     </div>
                     {exp.description && (
@@ -1249,13 +1386,73 @@ const CandidateDetail = () => {
 
           {/* Formación Tab */}
           <TabsContent value="formacion" className="space-y-6">
-            <div className="flex flex-col items-center justify-center py-12">
-              <GraduationCap className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold text-ink mb-2">No hay formación adicional registrada</h3>
-              <p className="text-sm text-muted-foreground text-center max-w-md">
-                La formación detallada se implementará en la siguiente fase (Candidatos 2.2).
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-ink">Formación académica</h3>
+              {hasManagePermission && (
+                <SiteCorpButton size="sm" onClick={() => setFormationDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Añadir formación
+                </SiteCorpButton>
+              )}
             </div>
+
+            {formations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <GraduationCap className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-ink mb-2">No hay formación académica registrada</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  {hasManagePermission
+                    ? "Añada los estudios realizados por este candidato."
+                    : "Este candidato no tiene formación académica registrada."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {formations.map((formation) => (
+                  <div key={formation.id} className="rounded-lg border border-border p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <p className="font-semibold text-ink">{formation.program_name}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <CalendarIcon className="h-4 w-4" />
+                            {formatMonthYear(formation.start_date)} –{" "}
+                            {formation.is_studying || !formation.end_date ? "Actualidad" : formatMonthYear(formation.end_date)}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-sitecorp-primary/10 px-3 py-1 text-xs font-medium text-sitecorp-primary">
+                            <Clock className="h-3.5 w-3.5" />
+                            {calculateDurationBetween(formation.start_date, formation.end_date, formation.is_studying)}
+                          </span>
+                        </div>
+                      </div>
+                      {hasManagePermission && (
+                        <SiteCorpButton
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteFormation(formation)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </SiteCorpButton>
+                      )}
+                    </div>
+                    {formation.document && (
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2">
+                        <span className="flex items-center gap-2 text-sm text-ink">
+                          <FileType className="h-4 w-4 text-muted-foreground" />
+                          {formation.document.original_file_name}
+                        </span>
+                        <SiteCorpButton
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadDocument(formation.document!)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </SiteCorpButton>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           {/* Documentos Tab */}
@@ -1578,6 +1775,99 @@ const CandidateDetail = () => {
             </SiteCorpButton>
             <SiteCorpButton onClick={handleAddExperience} disabled={expSubmitting}>
               {expSubmitting ? "Guardando..." : "Añadir experiencia"}
+            </SiteCorpButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Academic Formation Dialog */}
+      <Dialog open={formationDialogOpen} onOpenChange={(open) => {
+        setFormationDialogOpen(open)
+        if (!open) setFormationFormError(null)
+      }}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Añadir formación académica</DialogTitle>
+            <DialogDescription>
+              Indique qué estudió, el periodo y opcionalmente suba el título obtenido.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="formation-program">Qué estudió (carrera o programa) *</Label>
+              <SiteCorpInput
+                id="formation-program"
+                value={formationProgramName}
+                onChange={(e) => setFormationProgramName(e.target.value)}
+                placeholder="Ej.: Licenciatura en Contabilidad"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="formation-start-date">Fecha de inicio *</Label>
+                <input
+                  type="date"
+                  id="formation-start-date"
+                  value={formationStartDate}
+                  max={formationIsStudying ? undefined : formationEndDate || undefined}
+                  onChange={(e) => setFormationStartDate(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-ink shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="formation-end-date">
+                  Fecha de fin {formationIsStudying ? "" : "*"}
+                </Label>
+                <input
+                  type="date"
+                  id="formation-end-date"
+                  value={formationEndDate}
+                  min={formationStartDate || undefined}
+                  disabled={formationIsStudying}
+                  onChange={(e) => setFormationEndDate(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-ink shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="formation-is-studying"
+                checked={formationIsStudying}
+                onChange={(e) => setFormationIsStudying(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              <Label htmlFor="formation-is-studying" className="cursor-pointer">
+                Estudios en curso (sin fecha de fin)
+              </Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="formation-file">Documento del título (opcional)</Label>
+              <input
+                type="file"
+                id="formation-file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={(e) => setFormationFile(e.target.files?.[0] || null)}
+                className="w-full px-3 py-2 border border-border rounded-md bg-background text-ink file:mr-2 file:py-1 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+              />
+              <p className="text-xs text-muted-foreground">
+                El archivo subido quedará disponible en la sección de Documentos como «Título / Certificado académico».
+              </p>
+            </div>
+            {formationFormError && (
+              <SiteCorpAlert type="danger">{formationFormError}</SiteCorpAlert>
+            )}
+          </div>
+          <DialogFooter>
+            <SiteCorpButton
+              variant="outline"
+              onClick={() => setFormationDialogOpen(false)}
+              disabled={formationSubmitting}
+            >
+              Cancelar
+            </SiteCorpButton>
+            <SiteCorpButton onClick={handleAddFormation} disabled={formationSubmitting}>
+              {formationSubmitting ? "Guardando..." : "Añadir formación"}
             </SiteCorpButton>
           </DialogFooter>
         </DialogContent>
