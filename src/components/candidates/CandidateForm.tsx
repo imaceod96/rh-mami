@@ -13,6 +13,8 @@ import { Users, ArrowLeft, Save } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ciToBirthDate } from "@/utils/ci"
+import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 
 export interface Candidate {
   id: string
@@ -111,32 +113,6 @@ export const emptyFormData: CandidateFormData = {
   driving_license_ids: [],
 }
 
-const CUBA_PROVINCES = [
-  "Pinar del Río", "Artemisa", "La Habana", "Mayabeque", "Matanzas",
-  "Cienfuegos", "Villa Clara", "Sancti Spíritus", "Ciego de Ávila",
-  "Camagüey", "Las Tunas", "Holguín", "Granma", "Santiago de Cuba",
-  "Guantánamo", "Isla de la Juventud",
-]
-
-const MUNICIPIOS_BY_PROVINCE: Record<string, string[]> = {
-  "Pinar del Río": ["Pinar del Río", "San Luis", "Sandino", "Consolación del Sur", "Guane", "Mantua", "Viñales", "La Palma", "Los Palacios", "San Juan y Martínez", "San Cristóbal"],
-  "Artemisa": ["Artemisa", "Bauta", "Caimito", "Guanajay", "Güines", "Mariel", "San Antonio de los Baños", "San José de las Lajas"],
-  "La Habana": ["La Habana Vieja", "Centro Habana", "Plaza de la Revolución", "Cerro", "Marianao", "10 de Octubre", "La Lisa", "Playa", "Miramar", "Regla", "Guanabacoa", "San Miguel del Padrón", "Diez de Octubre", "Boyeros", "Cotorro", "San José de las Lajas"],
-  "Mayabeque": ["San José de las Lajas", "Güines", "Batabanó", "Bejucal", "San Nicolás de Bari", "Santa Cruz del Norte", "Nueva Paz", "San Nicolás", "Madruga", "Melena del Sur", "Quivicán"],
-  "Matanzas": ["Matanzas", "Cárdenas", "Colón", "Jagüey Grande", "Jovellanos", "Pedro Betancourt", "Unión de Reyes", "Calimete", "Corralillo", "Guaguasi", "Limonar", "Perico", "Martí"],
-  "Cienfuegos": ["Cienfuegos", "Abreus", "Aguada de Pasajeros", "Cumanayagua", "Lajas", "Palmira", "Rodas", "Cumanayagua"],
-  "Villa Clara": ["Santa Clara", "Camajuaní", "Caibarién", "Placetas", "Sagua la Grande", "Manicaragua", "Remedios", "Cifuentes", "Santo Domingo", "Zulueta"],
-  "Sancti Spíritus": ["Sancti Spíritus", "Trinidad", "Fomento", "Yaguajay", "Zaza del Medio", "Jatibonico", "La Sierpe", "Taguasco", "Tuinicú"],
-  "Ciego de Ávila": ["Ciego de Ávila", "Morón", "Baraguá", "Chambas", "Majagua", "Ciro Redondo", "Venezuela", "Florencia"],
-  "Camagüey": ["Camagüey", "Nuevitas", "Florida", "Sierra de Cubitas", "Esmeralda", "Vertientes", "Jimaguayú", "Najasa", "Santa Cruz del Sur", "Sibanicú", "Guáimaro"],
-  "Las Tunas": ["Las Tunas", "Manatí", "Puerto Padre", "Colombia", "Jesús Menéndez", "Jobabo", "Amancio", "Cauto Cristo"],
-  "Holguín": ["Holguín", "Banes", "Frank País", "Mayarí", "Antilla", "Báguanos", "Cacocum", "Cueto", "Gibara", "Rafael Freyre", "Río Cauto", "Sagua de Tánamo"],
-  "Granma": ["Bayamo", "Manzanillo", "Jiguaní", "Buey Arriba", "Campechuela", "Cauto Cristo", "Guisa", "Jiguaní", "Niquero", "Pilón", "Yara"],
-  "Santiago de Cuba": ["Santiago de Cuba", "Contramaestre", "Guamá", "Mella", "Palma Soriano", "San Luis", "Siboney", "Tercer Frente", "Segundo Frente", "Baconao"],
-  "Guantánamo": ["Guantánamo", "Baracoa", "Caimanera", "El Salvador", "Maisí", "Manuel Tames", "Niceto Pérez", "San Antonio del Sur", "Yateras"],
-  "Isla de la Juventud": ["Nueva Gerona", "Santa Fe"],
-}
-
 const POLITICAL_AFFILIATIONS = [
   { id: "pcc", name: "PCC" },
   { id: "ujc", name: "UJC" },
@@ -204,7 +180,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
         setSkinColors(skinColorsData.data || [])
         setDrivingLicenseCategories(drivingLicenseData.data || [])
 
-        setProvinces(CUBA_PROVINCES.map(name => ({ id: name, name })))
+        setProvinces(CUBA_PROVINCES_FULL.map(name => ({ id: name, name })))
       } catch (err) {
         console.error("Error fetching reference data:", err)
         setError("Error al cargar datos de referencia")
@@ -281,8 +257,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           driving_license_ids: licenseIds,
         })
 
-        if (data.province && MUNICIPIOS_BY_PROVINCE[data.province]) {
-          setMunicipalities(MUNICIPIOS_BY_PROVINCE[data.province].map(name => ({ id: name, name })))
+        if (data.province && MUNICIPIOS_BY_PROVINCE_FULL[data.province]) {
+          setMunicipalities(MUNICIPIOS_BY_PROVINCE_FULL[data.province].map(name => ({ id: name, name })))
         }
       } catch (err) {
         console.error("Error fetching candidate:", err)
@@ -319,21 +295,9 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     const cleaned = value.replace(/\D/g, "")
     setFormData(prev => ({ ...prev, identification: cleaned }))
 
-    if (cleaned.length >= 6) {
-      const yearStr = cleaned.substring(0, 2)
-      const monthStr = cleaned.substring(2, 4)
-      const dayStr = cleaned.substring(4, 6)
-
-      const year = parseInt(yearStr, 10)
-      const month = parseInt(monthStr, 10)
-      const day = parseInt(dayStr, 10)
-
-      if (year >= 0 && year <= 99 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        const fullYear = year >= 50 ? 1900 + year : 2000 + year
-        const date = new Date(fullYear, month - 1, day)
-        const dateStr = date.toISOString().split("T")[0]
-        setFormData(prev => ({ ...prev, birth_date: dateStr }))
-      }
+    const derived = ciToBirthDate(cleaned)
+    if (derived) {
+      setFormData(prev => ({ ...prev, birth_date: derived }))
     }
   }
 
@@ -341,8 +305,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     setFormData(prev => ({ ...prev, province, municipality: "" }))
     setMunicipalities([])
 
-    if (province && MUNICIPIOS_BY_PROVINCE[province]) {
-      setMunicipalities(MUNICIPIOS_BY_PROVINCE[province].map(name => ({ id: name, name })))
+    if (province && MUNICIPIOS_BY_PROVINCE_FULL[province]) {
+      setMunicipalities(MUNICIPIOS_BY_PROVINCE_FULL[province].map(name => ({ id: name, name })))
     }
   }
 

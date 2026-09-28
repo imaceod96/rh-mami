@@ -1,34 +1,824 @@
 import * as React from "react"
-import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
+import { useParams, useNavigate, Link } from "react-router-dom"
+import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
-import { Briefcase } from "lucide-react"
+import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
+import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
+import { SiteCorpInput } from "@/components/ui/sitecorp-input"
+import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
+import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
+import { SelectItem } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  ArrowLeft,
+  Users,
+  Network,
+  Plus,
+  Pencil,
+  Search,
+  Settings,
+  UserCheck,
+  Briefcase,
+} from "lucide-react"
+import { toRomanNumeral } from "@/utils/roman-numerals"
+import {
+  WorkerForm,
+  type WorkerPositionOption,
+  type WorkerEditingData,
+} from "@/components/workers/WorkerForm"
+
+interface OrganizationArea {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+}
+
+interface SalaryGroupRef {
+  id: string
+  salary_scale_id: string
+  sequence_number: number
+}
+
+interface JobRef {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  area: { id: string; name: string } | null
+  salary_group: SalaryGroupRef | null
+}
+
+interface PositionRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  job_id: string
+  job: JobRef | null
+}
+
+interface WorkerRow {
+  id: string
+  code: string
+  first_name: string
+  first_surname: string
+  second_surname: string | null
+  identification: string
+  hire_date: string
+  employment_status: string
+  assignments: {
+    id: string
+    position_id: string
+    start_date: string
+    end_date: string | null
+    is_current: boolean
+    position: PositionRow | null
+  }[] | null
+}
+
+interface SalaryValue {
+  amount: number
+  currency_code: string
+}
+
+type WorkerStatusFilter = "active" | "inactive" | "all"
+
+const fullName = (w: WorkerRow) =>
+  [w.first_name, w.first_surname, w.second_surname].filter(Boolean).join(" ")
+
+const formatSalary = (v: SalaryValue) =>
+  `${v.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${v.currency_code}`
 
 const EntityStaffing = () => {
-  const { currentEntity } = useCurrentEntity()
+  const { entityId } = useParams<{ entityId: string }>()
+  const navigate = useNavigate()
+
+  const [areas, setAreas] = React.useState<OrganizationArea[]>([])
+  const [jobs, setJobs] = React.useState<JobRef[]>([])
+  const [positions, setPositions] = React.useState<PositionRow[]>([])
+  const [workers, setWorkers] = React.useState<WorkerRow[]>([])
+  const [applicableScaleId, setApplicableScaleId] = React.useState<string | null>(null)
+  const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<Record<string, SalaryValue | null>>({})
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [canManage, setCanManage] = React.useState(false)
+  const [notice, setNotice] = React.useState<{ type: "success" | "danger"; message: string } | null>(null)
+
+  const [workerSearch, setWorkerSearch] = React.useState("")
+  const [areaFilter, setAreaFilter] = React.useState("all")
+  const [jobFilter, setJobFilter] = React.useState("all")
+  const [positionFilter, setPositionFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = React.useState<WorkerStatusFilter>("active")
+
+  const [workerDialogOpen, setWorkerDialogOpen] = React.useState(false)
+  const [editingWorker, setEditingWorker] = React.useState<WorkerEditingData | null>(null)
+
+  const showNotice = (type: "success" | "danger", message: string) => {
+    setNotice({ type, message })
+    setTimeout(() => setNotice(null), 5000)
+  }
+
+  const currentAssignment = (w: WorkerRow) =>
+    (w.assignments || []).find(a => a.is_current && !a.end_date && a.position) || null
+
+  const loadData = React.useCallback(async () => {
+    if (!entityId) {
+      setError("Parámetros de URL no válidos")
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data: canView } = await supabase.rpc("can_access_entity", {
+        target_entity_id: entityId,
+        permission_code: "workers.view",
+      })
+      const { data: canViewManage } = await supabase.rpc("can_access_entity", {
+        target_entity_id: entityId,
+        permission_code: "workers.manage",
+      })
+      if (!canView && !canViewManage) {
+        setError("No tiene permiso para ver la plantilla operativa de esta entidad")
+        return
+      }
+      setCanManage(!!canViewManage)
+
+      const { data: areasData, error: areasError } = await supabase
+        .from("organization_areas")
+        .select("id, name, code, is_active")
+        .eq("organization_entity_id", entityId)
+        .order("hierarchy_order")
+      if (areasError) throw areasError
+      setAreas((areasData as OrganizationArea[]) || [])
+
+      const { data: jobsData, error: jobsError } = await supabase
+              .from("organization_jobs")
+              .select(`
+                id, name, code, is_active, area_id,
+                area:organization_areas(id, name),
+                salary_group:salary_groups(id, salary_scale_id, sequence_number)
+              `)
+              .eq("organization_entity_id", entityId)
+              .order("name")
+            if (jobsError) throw jobsError
+            const jobsRows = ((jobsData as any[])?.map((j: any) => ({
+              ...j,
+              area: j.area ? { id: j.area[0]?.id || null, name: j.area[0]?.name || null } : null,
+            })) as unknown as JobRef[]) || []
+            setJobs(jobsRows)
+
+      const { data: positionsData, error: positionsError } = await supabase
+              .from("organization_positions")
+              .select(`
+                id, name, code, is_active, job_id,
+                job:organization_jobs(
+                  id, name, code, is_active, area_id,
+                  area:organization_areas(id, name),
+                  salary_group:salary_groups(id, salary_scale_id, sequence_number)
+                )
+              `)
+              .eq("organization_entity_id", entityId)
+              .order("name")
+            if (positionsError) throw positionsError
+            const positionsRows = ((positionsData as any[])?.map((p: any) => ({
+              ...p,
+              job: p.job
+                ? {
+                    ...p.job,
+                    area: p.job.area
+                      ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
+                      : null,
+                  }
+                : null,
+            })) as unknown as PositionRow[]) || []
+            setPositions(positionsRows)
+
+      const { data: workersData, error: workersError } = await supabase
+        .from("workers")
+        .select(`
+          *,
+          assignments:worker_position_assignments(
+            id, position_id, start_date, end_date, is_current,
+            position:organization_positions(
+              id, name, code, is_active, job_id,
+              job:organization_jobs(
+                id, name, code, is_active, area_id,
+                area:organization_areas(id, name),
+                salary_group:salary_groups(id, salary_scale_id, sequence_number)
+              )
+            )
+          )
+        `)
+        .eq("organization_entity_id", entityId)
+        .order("created_at", { ascending: false })
+      if (workersError) throw workersError
+      setWorkers((workersData as WorkerRow[]) || [])
+
+      // Escala aplicable (PRESUPUESTADA global / EMPRESARIAL de la entidad)
+      const { data: scaleIdData, error: scaleError } = await supabase.rpc(
+        "resolve_salary_scale_for_entity",
+        { entity_id: entityId }
+      )
+      if (scaleError) throw scaleError
+      setApplicableScaleId((scaleIdData as string | null) || null)
+
+      const groupIds = Array.from(
+        new Set(
+          jobsRows
+            .map(j => j.salary_group?.id)
+            .filter((id): id is string => !!id)
+        )
+      )
+      const valuesMap: Record<string, SalaryValue | null> = {}
+      if (groupIds.length > 0) {
+        const { data: valuesData, error: valuesError } = await supabase
+          .from("salary_group_values")
+          .select("salary_group_id, amount, currency_code, effective_from")
+          .in("salary_group_id", groupIds)
+          .eq("is_active", true)
+          .order("effective_from", { ascending: false })
+        if (valuesError) throw valuesError
+        ;(valuesData as any[])?.forEach(v => {
+          if (valuesMap[v.salary_group_id] === undefined) {
+            valuesMap[v.salary_group_id] = { amount: v.amount, currency_code: v.currency_code }
+          }
+        })
+      }
+      setSalaryValuesByGroup(valuesMap)
+    } catch (err) {
+      console.error("Error loading plantilla operativa:", err)
+      setError(err instanceof Error ? err.message : "Error al cargar la plantilla operativa")
+    } finally {
+      setLoading(false)
+    }
+  }, [entityId])
+
+  React.useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // ---------- Derivaciones ----------
+
+  const activeWorkers = React.useMemo(
+    () => workers.filter(w => w.employment_status === "active"),
+    [workers]
+  )
+
+  // Ocupación: asignación actual con trabajador activo
+  const occupiedPositionIds = React.useMemo(() => {
+    const ids = new Set<string>()
+    activeWorkers.forEach(w => {
+      const a = currentAssignment(w)
+      if (a) ids.add(a.position_id)
+    })
+    return ids
+  }, [activeWorkers])
+
+  const activePositions = React.useMemo(
+    () => positions.filter(p => p.is_active),
+    [positions]
+  )
+
+  const kpis = React.useMemo(() => {
+    const occupied = activePositions.filter(p => occupiedPositionIds.has(p.id)).length
+    return {
+      activeWorkers: activeWorkers.length,
+      activePositions: activePositions.length,
+      occupied,
+      vacant: activePositions.length - occupied,
+    }
+  }, [activePositions, occupiedPositionIds, activeWorkers])
+
+  const isOccupied = (positionId: string) => occupiedPositionIds.has(positionId)
+
+  // Salario de referencia: Grupo → escala aplicable → valor vigente
+  const salaryForPosition = React.useCallback(
+    (position: PositionRow | null): SalaryValue | null => {
+      if (!applicableScaleId || !position?.job?.salary_group) return null
+      const group = position.job.salary_group
+      if (group.salary_scale_id !== applicableScaleId) return null
+      return salaryValuesByGroup[group.id] || null
+    },
+    [applicableScaleId, salaryValuesByGroup]
+  )
+
+  const positionOptions: WorkerPositionOption[] = React.useMemo(
+    () =>
+      positions.map(p => ({
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        is_active: p.is_active,
+        occupied: isOccupied(p.id),
+        job: p.job
+          ? {
+              id: p.job.id,
+              name: p.job.name,
+              area: p.job.area ? { id: p.job.area.id, name: p.job.area.name } : null,
+              salary_group: p.job.salary_group
+                ? {
+                    id: p.job.salary_group.id,
+                    salary_scale_id: p.job.salary_group.salary_scale_id,
+                    sequence_number: p.job.salary_group.sequence_number,
+                  }
+                : null,
+            }
+          : null,
+      })),
+    [positions, occupiedPositionIds]
+  )
+
+  // ---------- Filtros en cascada ----------
+
+  const jobFilterOptions = React.useMemo(() => {
+    if (areaFilter !== "all") return jobs.filter(j => j.area_id === areaFilter)
+    return jobs
+  }, [jobs, areaFilter])
+
+  const positionFilterOptions = React.useMemo(() => {
+    let list = positions
+    if (jobFilter !== "all") list = list.filter(p => p.job_id === jobFilter)
+    else if (areaFilter !== "all") list = list.filter(p => p.job?.area_id === areaFilter)
+    return list
+  }, [positions, jobFilter, areaFilter])
+
+  const filteredWorkers = React.useMemo(() => {
+    const search = workerSearch.trim().toLowerCase()
+    let list = workers
+
+    const aFilter = areaFilter !== "all" ? areaFilter : null
+    const jFilter = jobFilter !== "all" ? jobFilter : null
+    const pFilter = positionFilter !== "all" ? positionFilter : null
+
+    if (statusFilter === "active") list = list.filter(w => w.employment_status === "active")
+    else if (statusFilter === "inactive") list = list.filter(w => w.employment_status !== "active")
+
+    list = list.filter(w => {
+      const a = currentAssignment(w)
+      const position = a?.position || null
+      if (aFilter && position?.job?.area_id !== aFilter) return false
+      if (jFilter && position?.job_id !== jFilter) return false
+      if (pFilter && position?.id !== pFilter) return false
+      if (search) {
+        const haystack = [
+          w.first_name,
+          w.first_surname,
+          w.second_surname,
+          w.identification,
+          w.code,
+          position?.name,
+          position?.job?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+        if (!haystack.includes(search)) return false
+      }
+      return true
+    })
+
+    return list.sort((a, b) =>
+      fullName(a).localeCompare(fullName(b))
+    )
+  }, [workers, workerSearch, areaFilter, jobFilter, positionFilter, statusFilter])
+
+  // ---------- Handlers ----------
+
+  const openCreateWorkerDialog = () => {
+    setEditingWorker(null)
+    setWorkerDialogOpen(true)
+  }
+
+  const openEditWorkerDialog = (w: WorkerRow) => {
+    setEditingWorker({
+      id: w.id,
+      code: w.code,
+      first_name: w.first_name,
+      first_surname: w.first_surname,
+      second_surname: w.second_surname,
+      identification: w.identification,
+      birth_date: (w as any).birth_date || null,
+      gender_id: (w as any).gender_id || null,
+      marital_status_id: (w as any).marital_status_id || null,
+      education_level_id: (w as any).education_level_id || null,
+      specialty: (w as any).specialty || null,
+      skin_color_id: (w as any).skin_color_id || null,
+      address: (w as any).address || null,
+      province: (w as any).province || null,
+      municipality: (w as any).municipality || null,
+      phone: (w as any).phone || null,
+      email: (w as any).email || null,
+      hire_date: w.hire_date,
+      employment_status: w.employment_status,
+    })
+    setWorkerDialogOpen(true)
+  }
+
+  const handleWorkerSaved = async (createdNew: boolean) => {
+    await loadData()
+    setWorkerDialogOpen(false)
+    setEditingWorker(null)
+    showNotice("success", createdNew ? "Trabajador creado correctamente" : "Trabajador actualizado correctamente")
+  }
+
+  // ---------- Render ----------
+
+  if (loading) {
+    return (
+      <div className="space-y-6 p-6">
+        <SiteCorpPageHeader
+          title="Plantilla"
+          description="Cargando plantilla operativa..."
+        />
+        <SiteCorpLoading rows={4} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6 p-6">
+        <SiteCorpPageHeader
+          title="Plantilla"
+          description="Gestiona los trabajadores y la ocupación actual de los puestos de la entidad."
+        />
+        <SiteCorpAlert type="danger" title="Error">
+          {error}
+        </SiteCorpAlert>
+        <div className="flex justify-end">
+          <SiteCorpButton variant="outline" onClick={() => navigate(`/entity/${entityId}/summary`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+          </SiteCorpButton>
+        </div>
+      </div>
+    )
+  }
+
+  const vacantCount = positionOptions.filter(p => p.is_active && !p.occupied).length
+
+  const kpiCards = [
+    { label: "Trabajadores activos", value: kpis.activeWorkers, icon: Users, accent: "text-sitecorp-primary" },
+    { label: "Puestos activos", value: kpis.activePositions, icon: Network, accent: "text-sitecorp-primary" },
+    { label: "Puestos ocupados", value: kpis.occupied, icon: UserCheck, accent: "text-emerald-600" },
+    { label: "Puestos vacantes", value: kpis.vacant, icon: Briefcase, accent: "text-amber-600" },
+  ]
 
   return (
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Plantilla"
-        description="Situación operativa de la plantilla: puestos ocupados y vacantes"
+        description="Gestiona los trabajadores y la ocupación actual de los puestos de la entidad."
+        actions={
+          canManage && activePositions.length > 0 && (
+            <SiteCorpButton onClick={openCreateWorkerDialog} disabled={vacantCount === 0}>
+              <Plus className="mr-2 h-4 w-4" /> Nuevo trabajador
+            </SiteCorpButton>
+          )
+        }
       />
 
-      <SiteCorpAlert type="info" title="Módulo en desarrollo">
-        Aquí se gestionará la plantilla operativa de esta entidad: áreas, cargos, puestos y el trabajador que ocupa cada puesto.
-      </SiteCorpAlert>
+      {notice && <SiteCorpAlert type={notice.type}>{notice.message}</SiteCorpAlert>}
 
-      <SiteCorpCard title="Contexto actual">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Entidad actual: <strong className="text-ink">{currentEntity?.name || "No seleccionada"}</strong>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            organization_entity_id: {currentEntity?.id || "N/A"}
-          </p>
-        </div>
-      </SiteCorpCard>
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {kpiCards.map(kpi => (
+          <SiteCorpCard key={kpi.label}>
+            <div className="flex items-center gap-3">
+              <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl bg-muted", kpi.accent)}>
+                <kpi.icon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-ink">{kpi.value}</p>
+                <p className="text-xs text-muted-foreground">{kpi.label}</p>
+              </div>
+            </div>
+          </SiteCorpCard>
+        ))}
+      </div>
+
+      {/* Sin puestos configurados */}
+      {activePositions.length === 0 ? (
+        <SiteCorpCard>
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
+            <Network className="mb-4 h-12 w-12 text-muted-foreground" />
+            <h4 className="mb-1 text-base font-semibold text-ink">No hay puestos configurados.</h4>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Configura primero la estructura de plantilla de esta entidad.
+            </p>
+            <SiteCorpButton onClick={() => navigate(`/entity/${entityId}/settings/staffing`)}>
+              <Settings className="mr-2 h-4 w-4" /> Configurar plantilla
+            </SiteCorpButton>
+          </div>
+        </SiteCorpCard>
+      ) : (
+        <SiteCorpCard>
+          <Tabs defaultValue="workers" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="workers">
+                <Users className="mr-2 h-4 w-4" /> Trabajadores
+              </TabsTrigger>
+              <TabsTrigger value="estructura">
+                <Network className="mr-2 h-4 w-4" /> Estructura de plantilla
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ============ TRABAJADORES ============ */}
+            <TabsContent value="workers" className="space-y-4">
+              {canManage && vacantCount === 0 && (
+                <SiteCorpAlert type="info" title="Sin puestos vacantes">
+                  No hay puestos vacantes disponibles. Configura un puesto antes de añadir un trabajador.{" "}
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/entity/${entityId}/settings/staffing`)}
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Ir a Configuración de plantilla
+                  </button>
+                </SiteCorpAlert>
+              )}
+
+              {/* Búsqueda + filtros en cascada */}
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <SiteCorpInput
+                    value={workerSearch}
+                    onChange={(e) => setWorkerSearch(e.target.value)}
+                    placeholder="Buscar por nombre, CI, código, puesto o cargo..."
+                    className="pl-9"
+                  />
+                </div>
+                <SiteCorpSelect
+                  value={areaFilter}
+                  onValueChange={(v) => {
+                    setAreaFilter(v)
+                    setJobFilter("all")
+                    setPositionFilter("all")
+                  }}
+                >
+                  <SelectItem value="all">Todas las áreas</SelectItem>
+                  {areas.filter(a => a.is_active).map(a => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  ))}
+                </SiteCorpSelect>
+                <SiteCorpSelect
+                  value={jobFilter}
+                  onValueChange={(v) => {
+                    setJobFilter(v)
+                    setPositionFilter("all")
+                  }}
+                >
+                  <SelectItem value="all">Todos los cargos</SelectItem>
+                  {jobFilterOptions.map(j => (
+                    <SelectItem key={j.id} value={j.id}>{j.name}</SelectItem>
+                  ))}
+                </SiteCorpSelect>
+                <SiteCorpSelect
+                  value={positionFilter}
+                  onValueChange={setPositionFilter}
+                >
+                  <SelectItem value="all">Todos los puestos</SelectItem>
+                  {positionFilterOptions.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SiteCorpSelect>
+                <SiteCorpSelect
+                  value={statusFilter}
+                  onValueChange={(v) => setStatusFilter(v as WorkerStatusFilter)}
+                >
+                  <SelectItem value="active">Activos</SelectItem>
+                  <SelectItem value="inactive">Inactivos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                </SiteCorpSelect>
+              </div>
+
+              {filteredWorkers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
+                  <Users className="mb-4 h-12 w-12 text-muted-foreground" />
+                  <h4 className="mb-1 text-base font-semibold text-ink">
+                    {workers.length === 0 ? "No hay trabajadores en la plantilla." : "Sin resultados"}
+                  </h4>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {workers.length === 0
+                      ? "Añade trabajadores para ocupar los puestos configurados."
+                      : "Ningún trabajador coincide con la búsqueda o los filtros."}
+                  </p>
+                  {canManage && workers.length === 0 && vacantCount > 0 && (
+                    <SiteCorpButton onClick={openCreateWorkerDialog}>
+                      <Plus className="mr-2 h-4 w-4" /> Añadir primer trabajador
+                    </SiteCorpButton>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredWorkers.map(w => {
+                    const assignment = currentAssignment(w)
+                    const position = assignment?.position || null
+                    const job = position?.job || null
+                    const group = job?.salary_group || null
+                    const salary = salaryForPosition(position)
+                    return (
+                      <div
+                        key={w.id}
+                        className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 lg:flex-row lg:items-center lg:justify-between"
+                      >
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                          <Link
+                            to={`/entity/${entityId}/staffing/workers/${w.id}`}
+                            className="text-sm font-medium text-ink underline-offset-2 hover:text-sitecorp-primary hover:underline"
+                          >
+                            {fullName(w)}
+                          </Link>
+                          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                            {w.code}
+                          </span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            CI: {w.identification}
+                          </span>
+                          {job?.area && (
+                            <span className="text-xs text-muted-foreground">Área: {job.area.name}</span>
+                          )}
+                          {job && (
+                            <span className="text-xs text-muted-foreground">Cargo: {job.name}</span>
+                          )}
+                          {position && (
+                            <span className="text-xs text-muted-foreground">Puesto: {position.name}</span>
+                          )}
+                          {group && (
+                            <span className="text-xs text-muted-foreground">
+                              Grupo: {toRomanNumeral(group.sequence_number)}
+                            </span>
+                          )}
+                          <span className="text-sm text-muted-foreground">
+                            {salary ? (
+                              formatSalary(salary)
+                            ) : (
+                              <span className="italic">
+                                {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Alta: {w.hire_date}
+                          </span>
+                          <SiteCorpStatusBadge status={w.employment_status === "active" ? "success" : "neutral"}>
+                            {w.employment_status === "active" ? "Activo" : "Inactivo"}
+                          </SiteCorpStatusBadge>
+                        </div>
+
+                        {canManage && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditWorkerDialog(w)}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+                              aria-label="Editar trabajador"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ============ ESTRUCTURA ============ */}
+            <TabsContent value="estructura" className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Área → Cargo → Puesto, con su ocupante actual. La estructura se configura en
+                {" "}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/entity/${entityId}/settings/staffing`)}
+                  className="font-medium text-sitecorp-primary underline underline-offset-2"
+                >
+                  Ajustes → Configuración de plantilla
+                </button>
+                .
+              </p>
+
+              <div className="space-y-4">
+                {areas.filter(a => a.is_active).map(area => {
+                  const areaJobs = jobs.filter(j => j.is_active && j.area_id === area.id)
+                  if (areaJobs.length === 0) return null
+
+                  return (
+                    <div key={area.id} className="space-y-2">
+                      <h4 className="text-sm font-semibold text-ink">
+                        {area.name} ({area.code})
+                      </h4>
+                      {areaJobs.map(job => {
+                        const jobPositions = activePositions.filter(p => p.job_id === job.id)
+                        if (jobPositions.length === 0) return null
+
+                        return (
+                          <div key={job.id} className="rounded-xl border border-border bg-white p-4">
+                            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="text-sm font-medium text-ink">{job.name}</span>
+                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                {job.code}
+                              </span>
+                              {job.salary_group && (
+                                <span className="text-xs text-muted-foreground">
+                                  Grupo: {toRomanNumeral(job.salary_group.sequence_number)}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                {jobPositions.filter(p => isOccupied(p.id)).length}/{jobPositions.length} ocupados
+                              </span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {jobPositions.map(position => {
+                                const occupant = activeWorkers.find(w => currentAssignment(w)?.position_id === position.id)
+                                const salary = salaryForPosition(position)
+                                return (
+                                  <div
+                                    key={position.id}
+                                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted/30 px-3 py-2"
+                                  >
+                                    <span className="text-sm text-ink">{position.name}</span>
+                                    <span className="rounded bg-white px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                      {position.code}
+                                    </span>
+                                    {occupant ? (
+                                      <>
+                                        <Link
+                                          to={`/entity/${entityId}/staffing/workers/${occupant.id}`}
+                                          className="text-sm font-medium text-sitecorp-primary underline-offset-2 hover:underline"
+                                        >
+                                          {fullName(occupant)}
+                                        </Link>
+                                        <SiteCorpStatusBadge status="success">OCUPADO</SiteCorpStatusBadge>
+                                      </>
+                                    ) : (
+                                      <SiteCorpStatusBadge status="warning">VACANTE</SiteCorpStatusBadge>
+                                    )}
+                                    <span className="ml-auto text-xs text-muted-foreground">
+                                      {salary ? (
+                                        formatSalary(salary)
+                                      ) : (
+                                        <span className="italic">Salario no configurado</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </SiteCorpCard>
+      )}
+
+      {/* Nuevo / Editar Trabajador */}
+      <Dialog
+        open={workerDialogOpen}
+        onOpenChange={(open) => {
+          setWorkerDialogOpen(open)
+          if (!open) setEditingWorker(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingWorker ? "Editar trabajador" : "Nuevo trabajador"}</DialogTitle>
+            <DialogDescription>
+              {editingWorker
+                ? "Modifica los datos personales y laborales del trabajador."
+                : "Crea un trabajador y ocupe un puesto vacante de esta entidad."}
+            </DialogDescription>
+          </DialogHeader>
+          <WorkerForm
+            entityId={entityId!}
+            positions={positionOptions}
+            applicableScaleId={applicableScaleId}
+            salaryValuesByGroup={salaryValuesByGroup}
+            editingWorker={editingWorker}
+            onSuccess={() => handleWorkerSaved(!editingWorker)}
+            onCancel={() => {
+              setWorkerDialogOpen(false)
+              setEditingWorker(null)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
