@@ -22,6 +22,8 @@ import {
   UserCheck,
   FileText,
   ArrowRightLeft,
+  UserMinus,
+  UserPlus,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
@@ -30,6 +32,8 @@ import { WorkerDocumentsTab } from "@/components/workers/WorkerDocumentsTab"
 import ChangePositionDialog, {
   type WorkerCurrentSituation,
 } from "@/components/workers/ChangePositionDialog"
+import SeparateWorkerDialog from "@/components/workers/SeparateWorkerDialog"
+import ReincorporateWorkerDialog from "@/components/workers/ReincorporateWorkerDialog"
 import { SelectItem } from "@/components/ui/select"
 import {
   resolveApplicableScaleId,
@@ -107,6 +111,18 @@ interface Catalog {
   name: string
 }
 
+interface WorkerMovement {
+  id: string
+  movement_type: string
+  effective_date: string
+  reason: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  separation_reason: { name: string } | null
+  authorName: string | null
+}
+
 const WorkerDetail = () => {
   const { entityId, workerId } = useParams<{ entityId: string; workerId: string }>()
   const navigate = useNavigate()
@@ -125,6 +141,9 @@ const WorkerDetail = () => {
   const [contractTypes, setContractTypes] = React.useState<{ id: string; name: string; code: string }[]>([])
   const [contractDialogOpen, setContractDialogOpen] = React.useState(false)
   const [changePositionOpen, setChangePositionOpen] = React.useState(false)
+  const [separateOpen, setSeparateOpen] = React.useState(false)
+  const [reincorporateOpen, setReincorporateOpen] = React.useState(false)
+  const [movements, setMovements] = React.useState<WorkerMovement[]>([])
   const [contractForm, setContractForm] = React.useState({ contractTypeId: "", startDate: "", endDate: "" })
   const [contractSubmitting, setContractSubmitting] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
@@ -149,9 +168,12 @@ const WorkerDetail = () => {
     return [...worker.contracts].sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
   }, [worker])
 
-  const position = currentAssignment?.position
+  const lastAssignment = sortedAssignments[0] ?? null
+  // Para un trabajador inactivo mostramos su ÚLTIMA situación laboral (assignment histórico más reciente).
+  const position = currentAssignment?.position ?? lastAssignment?.position ?? null
   const job = position?.job
   const group = job?.salary_group
+  const isInactive = worker?.employment_status !== "active"
 
   const [editForm, setEditForm] = React.useState<Partial<WorkerDetail>>({})
 
@@ -249,6 +271,43 @@ const WorkerDetail = () => {
       setSkinColors((s.data as Catalog[]) || [])
       setContractTypes((ct.data as { id: string; name: string; code: string }[]) || [])
 
+      // Bitácora de movimientos laborales (bajas, reincorporaciones, cambios de puesto)
+      const { data: movData } = await supabase
+        .from("worker_employment_movements")
+        .select(
+          `id, movement_type, effective_date, reason, notes, created_by, created_at,
+           separation_reason:worker_separation_reasons(name)`
+        )
+        .eq("worker_id", workerId)
+        .order("created_at", { ascending: false })
+
+      const movRows = ((movData as any[]) || []).map((m: any) => ({
+        ...m,
+        separation_reason: Array.isArray(m.separation_reason)
+          ? m.separation_reason[0] || null
+          : m.separation_reason,
+      }))
+
+      const authorIds = Array.from(
+        new Set(movRows.map((m) => m.created_by).filter((id): id is string => !!id))
+      )
+      const authorMap: Record<string, string> = {}
+      if (authorIds.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", authorIds)
+        ;(profs || []).forEach((p: any) => {
+          authorMap[p.id] = p.full_name
+        })
+      }
+      setMovements(
+        movRows.map((m) => ({
+          ...m,
+          authorName: m.created_by ? authorMap[m.created_by] || null : null,
+        })) as WorkerMovement[]
+      )
+
       // Escala aplicable y salario de referencia (derivado del assignment actual).
       // Se calcula a partir de los datos recién cargados (locales), NO del estado
       // `worker`, que aún no se ha actualizado en este punto del mismo ciclo async.
@@ -258,7 +317,15 @@ const WorkerDetail = () => {
       const localAssignments = (mappedWorker.assignments || []) as any[]
       const localCurrentAssignment =
         localAssignments.find((a) => a.is_current && !a.end_date) || null
-      const localGroup = localCurrentAssignment?.position?.job?.salary_group || null
+      // Si el trabajador está inactivo no hay assignment actual: usamos su última
+      // situación laboral (assignment histórico más reciente) para el salario de referencia.
+      const localLastAssignment = localAssignments
+        .slice()
+        .sort((a, b) => (a.start_date < b.start_date ? 1 : -1))[0] || null
+      const localGroup =
+        localCurrentAssignment?.position?.job?.salary_group ||
+        localLastAssignment?.position?.job?.salary_group ||
+        null
 
       if (localGroup?.id) {
         setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups([localGroup.id]))
@@ -355,6 +422,11 @@ const WorkerDetail = () => {
     [w.first_name, w.first_surname, w.second_surname].filter(Boolean).join(" ")
 
   const salary = salaryForGroup(applicableScaleId, group, salaryValuesByGroup)
+
+  const lastBaja = React.useMemo(
+    () => movements.find((m) => m.movement_type === "BAJA") || null,
+    [movements]
+  )
 
   const currentSituation: WorkerCurrentSituation = React.useMemo(
     () => ({
@@ -525,16 +597,34 @@ const WorkerDetail = () => {
         {/* Datos laborales */}
         <SiteCorpCard>
           <div className="p-6">
-            <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-lg font-semibold text-ink">Datos laborales</h3>
-              {canManage && currentAssignment && (
-                <SiteCorpButton
-                  type="button"
-                  variant="outline"
-                  onClick={() => setChangePositionOpen(true)}
-                >
-                  <ArrowRightLeft className="mr-2 h-4 w-4" /> Cambiar de puesto
-                </SiteCorpButton>
+              {canManage && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isInactive && currentAssignment && (
+                    <>
+                      <SiteCorpButton
+                        type="button"
+                        variant="outline"
+                        onClick={() => setChangePositionOpen(true)}
+                      >
+                        <ArrowRightLeft className="mr-2 h-4 w-4" /> Cambiar de puesto
+                      </SiteCorpButton>
+                      <SiteCorpButton
+                        type="button"
+                        variant="outline"
+                        onClick={() => setSeparateOpen(true)}
+                      >
+                        <UserMinus className="mr-2 h-4 w-4" /> Dar de baja
+                      </SiteCorpButton>
+                    </>
+                  )}
+                  {isInactive && (
+                    <SiteCorpButton type="button" onClick={() => setReincorporateOpen(true)}>
+                      <UserPlus className="mr-2 h-4 w-4" /> Reincorporar
+                    </SiteCorpButton>
+                  )}
+                </div>
               )}
             </div>
 
@@ -555,7 +645,9 @@ const WorkerDetail = () => {
               {position ? (
                 <>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Puesto actual</dt>
+                    <dt className="text-xs text-muted-foreground">
+                      {isInactive ? "Último puesto" : "Puesto actual"}
+                    </dt>
                     <dd className="text-sm font-medium text-ink">{position.name}</dd>
                     <dd className="text-xs text-muted-foreground">{position.code}</dd>
                   </div>
@@ -600,6 +692,7 @@ const WorkerDetail = () => {
                   <dt className="text-xs text-muted-foreground">Puesto actual</dt>
                   <dd className="text-sm text-muted-foreground">— Sin asignación —</dd>
                 </div>
+
               )}
             </dl>
 
@@ -661,6 +754,47 @@ const WorkerDetail = () => {
           </div>
         </SiteCorpCard>
       </div>
+
+      {/* Información de baja (trabajador inactivo) */}
+      {isInactive && (
+        <SiteCorpCard>
+          <div className="p-6">
+            <h3 className="mb-4 text-lg font-semibold text-ink">Información de baja</h3>
+            {lastBaja ? (
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Fecha</dt>
+                  <dd className="text-sm font-medium text-ink">{lastBaja.effective_date}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Motivo</dt>
+                  <dd className="text-sm font-medium text-ink">
+                    {lastBaja.separation_reason?.name || lastBaja.reason || "—"}
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">Observaciones</dt>
+                  <dd className="text-sm text-ink">{lastBaja.notes || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Registrado por</dt>
+                  <dd className="text-sm text-ink">{lastBaja.authorName || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Registrado el</dt>
+                  <dd className="text-sm text-ink">
+                    {new Date(lastBaja.created_at).toLocaleString("es-CU")}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Sin información de baja registrada.
+              </p>
+            )}
+          </div>
+        </SiteCorpCard>
+      )}
 
       {/* Historial laboral */}
       <SiteCorpCard>
@@ -968,6 +1102,24 @@ const WorkerDetail = () => {
         workerId={worker.id}
         entityId={entityId as string}
         current={currentSituation}
+        onSuccess={loadWorker}
+      />
+
+      {/* Diálogo de baja */}
+      <SeparateWorkerDialog
+        open={separateOpen}
+        onOpenChange={setSeparateOpen}
+        workerId={worker.id}
+        current={currentSituation}
+        onSuccess={loadWorker}
+      />
+
+      {/* Diálogo de reincorporación */}
+      <ReincorporateWorkerDialog
+        open={reincorporateOpen}
+        onOpenChange={setReincorporateOpen}
+        workerId={worker.id}
+        entityId={entityId as string}
         onSuccess={loadWorker}
       />
     </div>
