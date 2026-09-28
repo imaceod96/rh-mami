@@ -30,6 +30,12 @@ import {
   type WorkerPositionOption,
   type WorkerEditingData,
 } from "@/components/workers/WorkerForm"
+import {
+  resolveApplicableScaleId,
+  fetchActiveSalaryValuesForGroups,
+  salaryForGroup,
+  formatSalary,
+} from "@/lib/salary"
 
 interface OrganizationArea {
   id: string
@@ -92,9 +98,6 @@ type WorkerStatusFilter = "active" | "inactive" | "all"
 
 const fullName = (w: WorkerRow) =>
   [w.first_name, w.first_surname, w.second_surname].filter(Boolean).join(" ")
-
-const formatSalary = (v: SalaryValue) =>
-  `${v.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${v.currency_code}`
 
 const EntityStaffing = () => {
   const { entityId } = useParams<{ entityId: string }>()
@@ -225,36 +228,12 @@ const EntityStaffing = () => {
       setWorkers((workersData as WorkerRow[]) || [])
 
       // Escala aplicable (PRESUPUESTADA global / EMPRESARIAL de la entidad)
-      const { data: scaleIdData, error: scaleError } = await supabase.rpc(
-        "resolve_salary_scale_for_entity",
-        { entity_id: entityId }
-      )
-      if (scaleError) throw scaleError
-      setApplicableScaleId((scaleIdData as string | null) || null)
+      setApplicableScaleId(await resolveApplicableScaleId(entityId))
 
-      const groupIds = Array.from(
-        new Set(
-          jobsRows
-            .map(j => j.salary_group?.id)
-            .filter((id): id is string => !!id)
-        )
-      )
-      const valuesMap: Record<string, SalaryValue | null> = {}
-      if (groupIds.length > 0) {
-        const { data: valuesData, error: valuesError } = await supabase
-          .from("salary_group_values")
-          .select("salary_group_id, amount, currency_code, effective_from")
-          .in("salary_group_id", groupIds)
-          .eq("is_active", true)
-          .order("effective_from", { ascending: false })
-        if (valuesError) throw valuesError
-        ;(valuesData as any[])?.forEach(v => {
-          if (valuesMap[v.salary_group_id] === undefined) {
-            valuesMap[v.salary_group_id] = { amount: v.amount, currency_code: v.currency_code }
-          }
-        })
-      }
-      setSalaryValuesByGroup(valuesMap)
+      const groupIds = jobsRows
+        .map(j => j.salary_group?.id)
+        .filter((id): id is string => !!id)
+      setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups(groupIds))
     } catch (err) {
       console.error("Error loading plantilla operativa:", err)
       setError(err instanceof Error ? err.message : "Error al cargar la plantilla operativa")
@@ -327,12 +306,8 @@ const EntityStaffing = () => {
 
   // Salario de referencia: Grupo → escala aplicable → valor vigente
   const salaryForPosition = React.useCallback(
-    (position: PositionRow | null): SalaryValue | null => {
-      if (!applicableScaleId || !position?.job?.salary_group) return null
-      const group = position.job.salary_group
-      if (group.salary_scale_id !== applicableScaleId) return null
-      return salaryValuesByGroup[group.id] || null
-    },
+    (position: PositionRow | null): SalaryValue | null =>
+      salaryForGroup(applicableScaleId, position?.job?.salary_group, salaryValuesByGroup),
     [applicableScaleId, salaryValuesByGroup]
   )
 
@@ -689,9 +664,7 @@ const EntityStaffing = () => {
                             {salary ? (
                               formatSalary(salary)
                             ) : (
-                              <span className="italic">
-                                {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
-                              </span>
+                              <span className="italic">Salario no configurado</span>
                             )}
                           </span>
                           <span className="text-xs text-muted-foreground">

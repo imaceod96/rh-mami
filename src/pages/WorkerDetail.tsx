@@ -25,6 +25,13 @@ import {
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { WorkerForm } from "@/components/workers/WorkerForm"
 import { SelectItem } from "@/components/ui/select"
+import {
+  resolveApplicableScaleId,
+  fetchActiveSalaryValuesForGroups,
+  salaryForGroup,
+  formatSalary,
+  type SalaryValue,
+} from "@/lib/salary"
 
 interface WorkerDetail {
   id: string
@@ -89,18 +96,10 @@ interface WorkerDetail {
   }[] | null
 }
 
-interface SalaryValue {
-  amount: number
-  currency_code: string
-}
-
 interface Catalog {
   id: string
   name: string
 }
-
-const formatSalary = (v: SalaryValue) =>
-  `${v.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${v.currency_code}`
 
 const WorkerDetail = () => {
   const { entityId, workerId } = useParams<{ entityId: string; workerId: string }>()
@@ -243,32 +242,22 @@ const WorkerDetail = () => {
       setSkinColors((s.data as Catalog[]) || [])
       setContractTypes((ct.data as { id: string; name: string; code: string }[]) || [])
 
-      // Escala aplicable y valores salariales
-      const { data: scaleIdData, error: scaleError } = await supabase.rpc(
-        "resolve_salary_scale_for_entity",
-        { entity_id: entityId }
-      )
-      if (scaleError) throw scaleError
-      setApplicableScaleId((scaleIdData as string | null) || null)
+      // Escala aplicable y salario de referencia (derivado del assignment actual).
+      // Se calcula a partir de los datos recién cargados (locales), NO del estado
+      // `worker`, que aún no se ha actualizado en este punto del mismo ciclo async.
+      const applicableScale = await resolveApplicableScaleId(entityId)
+      setApplicableScaleId(applicableScale)
 
-      if (group?.salary_scale_id) {
-              const { data: valuesData, error: valuesError } = await supabase
-                .from("salary_group_values")
-                .select("salary_group_id, amount, currency_code, effective_from")
-                .eq("salary_group_id", group.id)
-                .eq("is_active", true)
-                .order("effective_from", { ascending: false })
-                .limit(1)
-                .single()
-              if (!valuesError && valuesData) {
-                setSalaryValuesByGroup({
-                  [group.id]: {
-                    amount: valuesData.amount,
-                    currency_code: valuesData.currency_code,
-                  },
-                })
-              }
-            }
+      const localAssignments = (mappedWorker.assignments || []) as any[]
+      const localCurrentAssignment =
+        localAssignments.find((a) => a.is_current && !a.end_date) || null
+      const localGroup = localCurrentAssignment?.position?.job?.salary_group || null
+
+      if (localGroup?.id) {
+        setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups([localGroup.id]))
+      } else {
+        setSalaryValuesByGroup({})
+      }
     } catch (err) {
       console.error("Error loading worker:", err)
       setError(err instanceof Error ? err.message : "Error al cargar el trabajador")
@@ -358,7 +347,7 @@ const WorkerDetail = () => {
   const fullName = (w: WorkerDetail) =>
     [w.first_name, w.first_surname, w.second_surname].filter(Boolean).join(" ")
 
-  const salary = group ? salaryValuesByGroup[group.id] : null
+  const salary = salaryForGroup(applicableScaleId, group, salaryValuesByGroup)
 
   if (loading) {
     return (
@@ -560,7 +549,7 @@ const WorkerDetail = () => {
                         <div>
                           <dt className="text-xs text-muted-foreground">Salario de referencia</dt>
                           <dd className="text-sm text-muted-foreground italic">
-                            {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
+                            Salario no configurado
                           </dd>
                         </div>
                       )}
