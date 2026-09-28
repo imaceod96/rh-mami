@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
@@ -59,13 +60,18 @@ export const JobForm: React.FC<JobFormProps> = ({
   const [scaleInfo, setScaleInfo] = React.useState<{
     scaleId: string | null
     scaleName: string
+    scopeType: string | null
+    regime: string | null
   } | null>(null)
+
+  const navigate = useNavigate()
 
   const loadData = React.useCallback(async () => {
     if (!entityId) return
 
     setLoading(true)
     setError(null)
+    let stage: "areas" | "escala" | "grupos" = "areas"
 
     try {
       // Load active areas of this entity
@@ -79,7 +85,20 @@ export const JobForm: React.FC<JobFormProps> = ({
       if (areasError) throw areasError
       setAreas((areasData as OrganizationArea[]) || [])
 
-      // Load the entity's salary scale
+      stage = "escala"
+
+      // Régimen de la entidad (para mensajes específicos por régimen)
+      const { data: entityData, error: entityError } = await supabase
+        .from("organization_entities")
+        .select("id, regime_id")
+        .eq("id", entityId)
+        .maybeSingle()
+
+      if (entityError) throw entityError
+      const regime = ((entityData?.regime_id as string | null) || "").toUpperCase() || null
+
+      // Escala aplicable a la entidad (RPC SECURITY DEFINER):
+      // PRESUPUESTADA → escala global; EMPRESARIAL → escala de esta entidad (sin fallback)
       const { data: scaleData, error: scaleError } = await supabase.rpc(
         "resolve_salary_scale_for_entity",
         { entity_id: entityId }
@@ -87,29 +106,36 @@ export const JobForm: React.FC<JobFormProps> = ({
 
       if (scaleError) throw scaleError
 
-      if (!scaleData) {
-        setScaleInfo({ scaleId: null, scaleName: "" })
+      const resolvedScaleId = (scaleData as string | null) || null
+
+      stage = "grupos"
+
+      if (!resolvedScaleId) {
+        setScaleInfo({ scaleId: null, scaleName: "", scopeType: null, regime })
         setGroups([])
       } else {
-        // Fetch scale details
-        const { data: scaleDetails, error: scaleDetailsError } = await supabase
+        // Detalles de la escala (tolerante a RLS: el nombre es solo informativo)
+        const { data: scaleRows, error: scaleDetailsError } = await supabase
           .from("salary_scales")
           .select("id, name, scope_type")
-          .eq("id", scaleData)
-          .single()
+          .eq("id", resolvedScaleId)
 
         if (scaleDetailsError) throw scaleDetailsError
 
+        const scaleDetails = (scaleRows as any[] | null)?.[0] || null
+
         setScaleInfo({
-          scaleId: scaleDetails.id,
-          scaleName: scaleDetails.name,
+          scaleId: resolvedScaleId,
+          scaleName: scaleDetails?.name || "Escala aplicable",
+          scopeType: scaleDetails?.scope_type || null,
+          regime,
         })
 
-        // Fetch groups for this scale
+        // Grupos pertenecientes a ESA escala (relación real: salary_groups.salary_scale_id)
         const { data: groupsData, error: groupsError } = await supabase
           .from("salary_groups")
           .select("*")
-          .eq("salary_scale_id", scaleData)
+          .eq("salary_scale_id", resolvedScaleId)
           .eq("is_active", true)
           .order("sequence_number")
 
@@ -138,7 +164,11 @@ export const JobForm: React.FC<JobFormProps> = ({
       }
     } catch (err) {
       console.error("Error loading data:", err)
-      setError(err instanceof Error ? err.message : "Error al cargar los datos")
+      setError(
+        stage === "areas"
+          ? "No se pudieron cargar las áreas."
+          : "No se pudieron cargar los grupos salariales."
+      )
     } finally {
       setLoading(false)
     }
@@ -372,6 +402,7 @@ export const JobForm: React.FC<JobFormProps> = ({
                 value={selectedGroup}
                 onValueChange={handleGroupChange}
                 required
+                disabled={!!scaleInfo && !scaleInfo.scaleId}
               >
           <option value="">Seleccionar grupo salarial</option>
           {groups.map((g) => (
@@ -381,19 +412,41 @@ export const JobForm: React.FC<JobFormProps> = ({
                 ? ` — ${g.current_value.amount.toLocaleString("es-CU", {
                     minimumFractionDigits: 2,
                   })} ${g.current_value.currency_code}`
-                : " — Sin valor vigente"}
+                : " — Salario no configurado"}
             </option>
           ))}
         </SiteCorpSelect>
         {scaleInfo && scaleInfo.scaleId ? (
-          <p className="text-xs text-muted-foreground">
-            Escala: {scaleInfo.scaleName}
-          </p>
-        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Escala: {scaleInfo.scaleName}
+            </p>
+            {groups.length === 0 && (
+              <p className="text-xs text-sitecorp-danger">
+                {scaleInfo.scopeType === "PRESUPUESTADA_GLOBAL"
+                  ? "La escala salarial presupuestada todavía no tiene grupos configurados."
+                  : "La escala salarial de esta entidad todavía no tiene grupos configurados."}
+              </p>
+            )}
+          </>
+        ) : scaleInfo && scaleInfo.regime === "EMPRESARIAL" ? (
+          <div className="space-y-1">
+            <p className="text-xs text-sitecorp-danger">
+              No hay escala salarial empresarial configurada para esta entidad.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(`/entity/${entityId}/settings/salary`)}
+              className="text-xs font-medium text-sitecorp-primary underline underline-offset-2 hover:opacity-80"
+            >
+              Ir a Ajustes → Escala salarial
+            </button>
+          </div>
+        ) : scaleInfo ? (
           <p className="text-xs text-sitecorp-danger">
-            No hay una escala salarial configurada para esta entidad.
+            La escala salarial presupuestada todavía no tiene grupos configurados.
           </p>
-        )}
+        ) : null}
       </div>
 
       {salaryVigente && (
