@@ -60,6 +60,7 @@ interface PositionRow {
   code: string
   is_active: boolean
   job_id: string
+  authorized_quantity: number
   job: JobRef | null
 }
 
@@ -177,30 +178,30 @@ const EntityStaffing = () => {
             setJobs(jobsRows)
 
       const { data: positionsData, error: positionsError } = await supabase
-              .from("organization_positions")
-              .select(`
-                id, name, code, is_active, job_id,
-                job:organization_jobs(
-                  id, name, code, is_active, area_id,
-                  area:organization_areas(id, name),
-                  salary_group:salary_groups(id, salary_scale_id, sequence_number)
-                )
-              `)
-              .eq("organization_entity_id", entityId)
-              .order("name")
-            if (positionsError) throw positionsError
-            const positionsRows = ((positionsData as any[])?.map((p: any) => ({
-              ...p,
-              job: p.job
-                ? {
-                    ...p.job,
-                    area: p.job.area
-                      ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
+                    .from("organization_positions")
+                    .select(`
+                      id, name, code, is_active, job_id, authorized_quantity,
+                      job:organization_jobs(
+                        id, name, code, is_active, area_id,
+                        area:organization_areas(id, name),
+                        salary_group:salary_groups(id, salary_scale_id, sequence_number)
+                      )
+                    `)
+                    .eq("organization_entity_id", entityId)
+                    .order("name")
+                  if (positionsError) throw positionsError
+                  const positionsRows = ((positionsData as any[])?.map((p: any) => ({
+                    ...p,
+                    job: p.job
+                      ? {
+                          ...p.job,
+                          area: p.job.area
+                            ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
+                            : null,
+                        }
                       : null,
-                  }
-                : null,
-            })) as unknown as PositionRow[]) || []
-            setPositions(positionsRows)
+                  })) as unknown as PositionRow[]) || []
+                  setPositions(positionsRows)
 
       const { data: workersData, error: workersError } = await supabase
         .from("workers")
@@ -312,30 +313,31 @@ const EntityStaffing = () => {
   )
 
   const positionOptions: WorkerPositionOption[] = React.useMemo(
-    () =>
-      positions.map(p => ({
-        id: p.id,
-        name: p.name,
-        code: p.code,
-        is_active: p.is_active,
-        occupied: isOccupied(p.id),
-        job: p.job
-          ? {
-              id: p.job.id,
-              name: p.job.name,
-              area: p.job.area ? { id: p.job.area.id, name: p.job.area.name } : null,
-              salary_group: p.job.salary_group
-                ? {
-                    id: p.job.salary_group.id,
-                    salary_scale_id: p.job.salary_group.salary_scale_id,
-                    sequence_number: p.job.salary_group.sequence_number,
-                  }
-                : null,
-            }
-          : null,
-      })),
-    [positions, occupiedPositionIds]
-  )
+      () =>
+        positions.map(p => ({
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          is_active: p.is_active,
+          occupied: isOccupied(p.id),
+          authorized_quantity: p.authorized_quantity,
+          job: p.job
+            ? {
+                id: p.job.id,
+                name: p.job.name,
+                area: p.job.area ? { id: p.job.area.id, name: p.job.area.name } : null,
+                salary_group: p.job.salary_group
+                  ? {
+                      id: p.job.salary_group.id,
+                      salary_scale_id: p.job.salary_group.salary_scale_id,
+                      sequence_number: p.job.salary_group.sequence_number,
+                    }
+                  : null,
+              }
+            : null,
+        })),
+      [positions, occupiedPositionIds]
+    )
 
   // ---------- Filtros en cascada ----------
 

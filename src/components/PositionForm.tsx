@@ -32,6 +32,7 @@ export interface PositionEditingData {
   code: string
   name: string
   description: string | null
+  authorized_quantity: number
 }
 
 interface PositionFormProps {
@@ -44,7 +45,7 @@ interface PositionFormProps {
   onCancel: () => void
 }
 
-const MAX_BATCH = 50
+const MAX_QUANTITY = 9999
 
 // Alfabeto sin caracteres ambiguos (0/O, 1/I) para códigos legibles
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -77,7 +78,9 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     editingPosition?.job_id || ""
   )
   const [baseName, setBaseName] = React.useState<string>(editingPosition?.name || "")
-  const [quantity, setQuantity] = React.useState<string>("1")
+  const [authorizedQuantity, setAuthorizedQuantity] = React.useState<string>(
+    editingPosition?.authorized_quantity?.toString() || "1"
+  )
   const [description, setDescription] = React.useState<string>(
     editingPosition?.description || ""
   )
@@ -156,13 +159,14 @@ export const PositionForm: React.FC<PositionFormProps> = ({
       return
     }
 
-    let qty = 1
-    if (!isEditing) {
-      qty = parseInt(quantity, 10)
-      if (isNaN(qty) || qty < 1 || qty > MAX_BATCH) {
-        setFormError(`La cantidad debe estar entre 1 y ${MAX_BATCH}`)
-        return
-      }
+    const qty = parseInt(authorizedQuantity, 10)
+    if (isNaN(qty) || qty < 1) {
+      setFormError("La cantidad de puestos debe ser un número entero mayor o igual a 1")
+      return
+    }
+    if (qty > MAX_QUANTITY) {
+      setFormError(`La cantidad de puestos no puede superar ${MAX_QUANTITY}`)
+      return
     }
 
     setSubmitting(true)
@@ -175,21 +179,29 @@ export const PositionForm: React.FC<PositionFormProps> = ({
             job_id: selectedJobId,
             name,
             description: description.trim() || null,
+            authorized_quantity: qty,
           })
           .eq("id", editingPosition!.id)
 
         if (updateError) throw updateError
         onSuccess()
       } else {
-        // Generación masiva: N puestos con nombres/códigos únicos en un
-        // único INSERT atómico (si falla, no queda creación parcial).
-        await insertPositions({
-          entityId,
-          jobId: selectedJobId,
-          baseName: name,
-          quantity: qty,
-          description: description.trim() || null,
-        })
+        // Un solo registro con authorized_quantity
+        const code = generatePositionCode()
+        const { error: insertError } = await supabase
+          .from("organization_positions")
+          .insert({
+            organization_entity_id: entityId,
+            job_id: selectedJobId,
+            code,
+            name,
+            description: description.trim() || null,
+            position_order: 0,
+            is_active: true,
+            authorized_quantity: qty,
+          })
+
+        if (insertError) throw insertError
         onSuccess()
       }
     } catch (err) {
@@ -206,50 +218,6 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const insertPositions = async (params: {
-    entityId: string
-    jobId: string
-    baseName: string
-    quantity: number
-    description: string | null
-  }) => {
-    const buildRows = () => {
-      const usedCodes = new Set<string>()
-      return Array.from({ length: params.quantity }, (_, index) => {
-        let code = generatePositionCode()
-        while (usedCodes.has(code)) {
-          code = generatePositionCode()
-        }
-        usedCodes.add(code)
-        return {
-          organization_entity_id: params.entityId,
-          job_id: params.jobId,
-          code,
-          name:
-            params.quantity === 1
-              ? params.baseName
-              : `${params.baseName} ${String(index + 1).padStart(2, "0")}`,
-          description: params.description,
-          position_order: index + 1,
-          is_active: true,
-        }
-      })
-    }
-
-    // Reintento con códigos nuevos si hubiera colisión de unicidad (23505)
-    let lastError: unknown = null
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { error } = await supabase
-        .from("organization_positions")
-        .insert(buildRows())
-      if (!error) return
-      lastError = error
-      const code = (error as { code?: string }).code || ""
-      if (code !== "23505") throw error
-    }
-    throw lastError
   }
 
   return (
@@ -305,40 +273,31 @@ export const PositionForm: React.FC<PositionFormProps> = ({
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="position-name">
-          {isEditing ? "Nombre del puesto *" : "Nombre base del puesto *"}
-        </Label>
+        <Label htmlFor="position-name">Nombre del puesto *</Label>
         <SiteCorpInput
           id="position-name"
           value={baseName}
           onChange={(e) => setBaseName(e.target.value)}
-          placeholder="Ej.: Técnico de mantenimiento"
+          placeholder="Ej.: Almacenero"
           required
         />
-        {!isEditing && parseInt(quantity, 10) > 1 && (
-          <p className="text-xs text-muted-foreground">
-            Se crearán puestos con el patrón «{baseName || "…"} 01», «{baseName || "…"} 02»…
-          </p>
-        )}
       </div>
 
-      {!isEditing && (
-        <div className="space-y-2">
-          <Label htmlFor="position-quantity">Cantidad *</Label>
-          <SiteCorpInput
-            id="position-quantity"
-            type="number"
-            min={1}
-            max={MAX_BATCH}
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            required
-          />
-          <p className="text-xs text-muted-foreground">
-            Cantidad de puestos a crear (1–{MAX_BATCH}). El código se genera automáticamente.
-          </p>
-        </div>
-      )}
+      <div className="space-y-2">
+        <Label htmlFor="position-quantity">Cantidad de puestos *</Label>
+        <SiteCorpInput
+          id="position-quantity"
+          type="number"
+          min={1}
+          max={MAX_QUANTITY}
+          value={authorizedQuantity}
+          onChange={(e) => setAuthorizedQuantity(e.target.value)}
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Número máximo de trabajadores que pueden ocupar este puesto simultáneamente.
+        </p>
+      </div>
 
       {isEditing && (
         <div className="space-y-2">
@@ -374,9 +333,7 @@ export const PositionForm: React.FC<PositionFormProps> = ({
             ? "Guardando..."
             : isEditing
               ? "Guardar cambios"
-              : parseInt(quantity, 10) > 1
-                ? `Crear ${parseInt(quantity, 10) || 1} puestos`
-                : "Crear puesto"}
+              : "Crear puesto"}
         </SiteCorpButton>
       </div>
     </form>

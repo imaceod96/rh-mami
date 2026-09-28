@@ -111,6 +111,7 @@ interface OrganizationPosition {
   is_active: boolean
   created_at: string
   updated_at: string
+  authorized_quantity: number
   job: {
     id: string
     name: string
@@ -490,16 +491,17 @@ const EntitySettingsStaffing = () => {
   }
 
   const openEditPositionDialog = (position: OrganizationPosition) => {
-    setEditingPosition({
-      id: position.id,
-      job_id: position.job_id,
-      code: position.code,
-      name: position.name,
-      description: position.description,
-    })
-    setFormError(null)
-    setPositionDialogOpen(true)
-  }
+      setEditingPosition({
+        id: position.id,
+        job_id: position.job_id,
+        code: position.code,
+        name: position.name,
+        description: position.description,
+        authorized_quantity: position.authorized_quantity,
+      })
+      setFormError(null)
+      setPositionDialogOpen(true)
+    }
 
   const handlePositionSave = async () => {
     await loadData()
@@ -1161,19 +1163,22 @@ const EntitySettingsStaffing = () => {
                                 : "N/A"}
                             </span>
                             <span className="text-sm text-muted-foreground">
-                              {salary ? (
-                                `${salary.amount.toLocaleString("es-CU", {
-                                  minimumFractionDigits: 2,
-                                })} ${salary.currency_code}`
-                              ) : (
-                                <span className="italic">
-                                  {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
-                                </span>
-                              )}
-                            </span>
-                            <SiteCorpStatusBadge status={position.is_active ? "success" : "neutral"}>
-                              {position.is_active ? "Activo" : "Inactivo"}
-                            </SiteCorpStatusBadge>
+                                                          {salary ? (
+                                                            `${salary.amount.toLocaleString("es-CU", {
+                                                              minimumFractionDigits: 2,
+                                                            })} ${salary.currency_code}`
+                                                          ) : (
+                                                            <span className="italic">
+                                                              {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
+                                                            </span>
+                                                          )}
+                                                        </span>
+                                                        <span className="font-medium text-ink">
+                                                          {position.authorized_quantity}
+                                                        </span>
+                                                        <SiteCorpStatusBadge status={position.is_active ? "success" : "neutral"}>
+                                                          {position.is_active ? "Activo" : "Inactivo"}
+                                                        </SiteCorpStatusBadge>
                           </div>
 
                           {canManage && (
