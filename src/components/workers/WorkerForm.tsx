@@ -15,6 +15,8 @@ export interface WorkerPositionOption {
   code: string
   is_active: boolean
   occupied: boolean
+  authorized_quantity: number
+  currentAssignments: number
   job: {
     id: string
     name: string
@@ -171,11 +173,11 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     [form.province]
   )
 
-  // Solo puestos ACTIVOS y VACANTES de la entidad actual
-  const vacantPositions = React.useMemo(
-    () => positions.filter(p => p.is_active && !p.occupied),
-    [positions]
-  )
+  // Solo puestos ACTIVOS con plazas disponibles (currentAssignments < authorized_quantity)
+    const vacantPositions = React.useMemo(
+      () => positions.filter(p => p.is_active && p.currentAssignments < p.authorized_quantity),
+      [positions]
+    )
 
   const selectedPosition = React.useMemo(
     () => positions.find(p => p.id === positionId) || null,
@@ -239,9 +241,9 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       return
     }
     if (!isEditing && !vacantPositions.some(p => p.id === positionId)) {
-      setFormError("El puesto seleccionado ya no está disponible. Selecciona otro puesto.")
-      return
-    }
+          setFormError("El puesto seleccionado ya no tiene plazas disponibles. Selecciona otro puesto.")
+          return
+        }
 
     setSubmitting(true)
 

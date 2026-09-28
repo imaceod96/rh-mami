@@ -289,15 +289,39 @@ const EntityStaffing = () => {
     [positions]
   )
 
+  // Cantidad total de plazas autorizadas (SUM de authorized_quantity)
+  const totalAuthorized = React.useMemo(
+    () => activePositions.reduce((sum, p) => sum + (p.authorized_quantity || 0), 0),
+    [activePositions]
+  )
+
+  // Conteo de asignaciones activas por puesto (para calcular vacantes reales)
+    const assignmentsPerPosition = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    activeWorkers.forEach(w => {
+      const a = currentAssignment(w)
+      if (a) {
+        counts.set(a.position_id, (counts.get(a.position_id) || 0) + 1)
+      }
+    })
+    return counts
+  }, [activeWorkers])
+
+  // Número de trabajadores con asignación activa
+  const occupiedCount = React.useMemo(
+    () => activeWorkers.filter(w => currentAssignment(w) !== null).length,
+    [activeWorkers]
+  )
+
   const kpis = React.useMemo(() => {
-    const occupied = activePositions.filter(p => occupiedPositionIds.has(p.id)).length
     return {
       activeWorkers: activeWorkers.length,
       activePositions: activePositions.length,
-      occupied,
-      vacant: activePositions.length - occupied,
+      totalAuthorized,
+      occupied: occupiedCount,
+      vacant: totalAuthorized - occupiedCount,
     }
-  }, [activePositions, occupiedPositionIds, activeWorkers])
+  }, [activePositions, totalAuthorized, occupiedCount, activeWorkers])
 
   const isOccupied = (positionId: string) => occupiedPositionIds.has(positionId)
 
@@ -313,31 +337,32 @@ const EntityStaffing = () => {
   )
 
   const positionOptions: WorkerPositionOption[] = React.useMemo(
-      () =>
-        positions.map(p => ({
-          id: p.id,
-          name: p.name,
-          code: p.code,
-          is_active: p.is_active,
-          occupied: isOccupied(p.id),
-          authorized_quantity: p.authorized_quantity,
-          job: p.job
-            ? {
-                id: p.job.id,
-                name: p.job.name,
-                area: p.job.area ? { id: p.job.area.id, name: p.job.area.name } : null,
-                salary_group: p.job.salary_group
-                  ? {
-                      id: p.job.salary_group.id,
-                      salary_scale_id: p.job.salary_group.salary_scale_id,
-                      sequence_number: p.job.salary_group.sequence_number,
-                    }
-                  : null,
-              }
-            : null,
-        })),
-      [positions, occupiedPositionIds]
-    )
+        () =>
+          positions.map(p => ({
+            id: p.id,
+            name: p.name,
+            code: p.code,
+            is_active: p.is_active,
+            occupied: isOccupied(p.id),
+            authorized_quantity: p.authorized_quantity,
+            currentAssignments: assignmentsPerPosition.get(p.id) || 0,
+            job: p.job
+              ? {
+                  id: p.job.id,
+                  name: p.job.name,
+                  area: p.job.area ? { id: p.job.area.id, name: p.job.area.name } : null,
+                  salary_group: p.job.salary_group
+                    ? {
+                        id: p.job.salary_group.id,
+                        salary_scale_id: p.job.salary_group.salary_scale_id,
+                        sequence_number: p.job.salary_group.sequence_number,
+                      }
+                    : null,
+                }
+              : null,
+          })),
+        [positions, occupiedPositionIds, assignmentsPerPosition]
+      )
 
   // ---------- Filtros en cascada ----------
 
@@ -465,14 +490,14 @@ const EntityStaffing = () => {
     )
   }
 
-  const vacantCount = positionOptions.filter(p => p.is_active && !p.occupied).length
-
-  const kpiCards = [
-    { label: "Trabajadores activos", value: kpis.activeWorkers, icon: Users, accent: "text-sitecorp-primary" },
-    { label: "Puestos activos", value: kpis.activePositions, icon: Network, accent: "text-sitecorp-primary" },
-    { label: "Puestos ocupados", value: kpis.occupied, icon: UserCheck, accent: "text-emerald-600" },
-    { label: "Puestos vacantes", value: kpis.vacant, icon: Briefcase, accent: "text-amber-600" },
-  ]
+  const vacantCount = kpis.vacant
+  
+    const kpiCards = [
+      { label: "Trabajadores activos", value: kpis.activeWorkers, icon: Users, accent: "text-sitecorp-primary" },
+      { label: "Plazas autorizadas", value: kpis.totalAuthorized, icon: Network, accent: "text-sitecorp-primary" },
+      { label: "Ocupados", value: kpis.occupied, icon: UserCheck, accent: "text-emerald-600" },
+      { label: "Vacantes", value: kpis.vacant, icon: Briefcase, accent: "text-amber-600" },
+    ]
 
   return (
     <div className="space-y-6 p-6">
