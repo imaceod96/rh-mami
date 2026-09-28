@@ -24,6 +24,7 @@ import {
   ArrowRightLeft,
   UserMinus,
   UserPlus,
+  FileSignature,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
@@ -34,6 +35,9 @@ import ChangePositionDialog, {
 } from "@/components/workers/ChangePositionDialog"
 import SeparateWorkerDialog from "@/components/workers/SeparateWorkerDialog"
 import ReincorporateWorkerDialog from "@/components/workers/ReincorporateWorkerDialog"
+import ChangeContractDialog, {
+  type CurrentContractInfo,
+} from "@/components/workers/ChangeContractDialog"
 import { SelectItem } from "@/components/ui/select"
 import {
   resolveApplicableScaleId,
@@ -97,6 +101,7 @@ interface WorkerDetail {
     contract_type_id: string
     start_date: string
     end_date: string | null
+    actual_end_date: string | null
     is_current: boolean
     contract_type: {
       id: string
@@ -143,6 +148,7 @@ const WorkerDetail = () => {
   const [changePositionOpen, setChangePositionOpen] = React.useState(false)
   const [separateOpen, setSeparateOpen] = React.useState(false)
   const [reincorporateOpen, setReincorporateOpen] = React.useState(false)
+  const [changeContractOpen, setChangeContractOpen] = React.useState(false)
   const [movements, setMovements] = React.useState<WorkerMovement[]>([])
   const [contractForm, setContractForm] = React.useState({ contractTypeId: "", startDate: "", endDate: "" })
   const [contractSubmitting, setContractSubmitting] = React.useState(false)
@@ -218,7 +224,7 @@ const WorkerDetail = () => {
                   )
                 ),
                 contracts:employment_contracts(
-                  id, assignment_id, contract_type_id, start_date, end_date, is_current,
+                  id, assignment_id, contract_type_id, start_date, end_date, actual_end_date, is_current,
                   contract_type:employment_contract_types(id, name, code)
                 )
               `)
@@ -427,6 +433,17 @@ const WorkerDetail = () => {
     () => movements.find((m) => m.movement_type === "BAJA") || null,
     [movements]
   )
+
+  const currentContractInfo: CurrentContractInfo | null = React.useMemo(() => {
+    if (!currentContract) return null
+    return {
+      id: currentContract.id,
+      typeName: currentContract.contract_type?.name ?? null,
+      typeCode: currentContract.contract_type?.code ?? null,
+      startDate: currentContract.start_date,
+      endDate: currentContract.end_date,
+    }
+  }, [currentContract])
 
   const currentSituation: WorkerCurrentSituation = React.useMemo(
     () => ({
@@ -698,25 +715,36 @@ const WorkerDetail = () => {
 
             {/* Contratación */}
             <div className="mt-5 border-t border-border pt-4">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-sm font-semibold text-ink">Contratación</h4>
-                {canManage && currentAssignment && !currentContract && (
-                  <SiteCorpButton
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setActionError(null)
-                      setContractForm({
-                        contractTypeId: "",
-                        startDate: worker.hire_date || "",
-                        endDate: "",
-                      })
-                      setContractDialogOpen(true)
-                    }}
-                  >
-                    <FileText className="mr-2 h-4 w-4" /> Registrar contrato
-                  </SiteCorpButton>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {canManage && currentAssignment && !currentContract && (
+                    <SiteCorpButton
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setActionError(null)
+                        setContractForm({
+                          contractTypeId: "",
+                          startDate: worker.hire_date || "",
+                          endDate: "",
+                        })
+                        setContractDialogOpen(true)
+                      }}
+                    >
+                      <FileText className="mr-2 h-4 w-4" /> Registrar contrato
+                    </SiteCorpButton>
+                  )}
+                  {canManage && !isInactive && currentContract && (
+                    <SiteCorpButton
+                      type="button"
+                      variant="outline"
+                      onClick={() => setChangeContractOpen(true)}
+                    >
+                      <FileSignature className="mr-2 h-4 w-4" /> Cambiar contrato
+                    </SiteCorpButton>
+                  )}
+                </div>
               </div>
               {currentContract ? (
                 <dl className="grid gap-4 sm:grid-cols-3">
@@ -737,7 +765,7 @@ const WorkerDetail = () => {
                     <dd className="text-sm text-ink">{currentContract.start_date}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Fin</dt>
+                    <dt className="text-xs text-muted-foreground">Finalización prevista</dt>
                     <dd className="text-sm text-ink">
                       {currentContract.end_date || (
                         <span className="text-muted-foreground">Sin fecha de fin</span>
@@ -850,9 +878,22 @@ const WorkerDetail = () => {
                       {c.contract_type?.name || "Contrato"}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {c.start_date} → {c.end_date || "sin fecha de fin"}
+                      {c.start_date} →{" "}
+                      {c.is_current
+                        ? c.end_date
+                          ? `previsto hasta ${c.end_date}`
+                          : "sin fecha de fin"
+                        : c.actual_end_date
+                          ? `hasta ${c.actual_end_date}`
+                          : c.end_date
+                            ? `previsto hasta ${c.end_date}`
+                            : "sin fecha de fin"}
                     </span>
-                    {c.is_current && <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>}
+                    {c.is_current ? (
+                      <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>
+                    ) : (
+                      <SiteCorpStatusBadge status="neutral">Finalizado</SiteCorpStatusBadge>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -1122,6 +1163,17 @@ const WorkerDetail = () => {
         entityId={entityId as string}
         onSuccess={loadWorker}
       />
+
+      {/* Diálogo de cambio de contrato */}
+      {currentContractInfo && (
+        <ChangeContractDialog
+          open={changeContractOpen}
+          onOpenChange={setChangeContractOpen}
+          workerId={worker.id}
+          current={currentContractInfo}
+          onSuccess={loadWorker}
+        />
+      )}
     </div>
   )
 }
