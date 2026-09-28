@@ -22,8 +22,10 @@ import {
   UserCheck,
   FileText,
 } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { WorkerForm } from "@/components/workers/WorkerForm"
+import { WorkerDocumentsTab } from "@/components/workers/WorkerDocumentsTab"
 import { SelectItem } from "@/components/ui/select"
 import {
   resolveApplicableScaleId,
@@ -383,6 +385,13 @@ const WorkerDetail = () => {
         }
       />
 
+      <Tabs defaultValue="resumen" className="w-full">
+        <TabsList className="mb-4 grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="resumen">Resumen</TabsTrigger>
+          <TabsTrigger value="documentos">Documentos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="resumen" className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Datos personales */}
         <SiteCorpCard>
@@ -687,6 +696,15 @@ const WorkerDetail = () => {
           )}
         </div>
       </SiteCorpCard>
+
+        </TabsContent>
+
+        <TabsContent value="documentos" className="space-y-6">
+          <SiteCorpCard>
+            <WorkerDocumentsTab workerId={worker.id} canManage={canManage} />
+          </SiteCorpCard>
+        </TabsContent>
+      </Tabs>
 
       {/* Diálogo de edición */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
