@@ -701,7 +701,7 @@ const SalaryHistoryModal = ({
                           </div>
                           <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                              {value.effective_to || "Indefinido"}
+                              {value.effective_to || "Sin fecha de fin"}
                             </p>
                             <p className="text-xs text-muted-foreground">Vigente hasta</p>
                           </div>

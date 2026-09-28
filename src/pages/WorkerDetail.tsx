@@ -326,12 +326,12 @@ const WorkerDetail = () => {
       setActionError("La fecha de inicio del contrato es obligatoria")
       return
     }
-    if (selectedType?.code === "temporary" && !contractForm.endDate) {
-      setActionError("El contrato temporal requiere una fecha de fin")
+    if (selectedType?.code === "DETERMINADO" && !contractForm.endDate) {
+      setActionError("El contrato por tiempo determinado requiere una fecha de fin")
       return
     }
-    if (contractForm.endDate && contractForm.endDate < start) {
-      setActionError("La fecha de fin no puede ser anterior al inicio")
+    if (contractForm.endDate && contractForm.endDate <= start) {
+      setActionError("La fecha de fin debe ser posterior al inicio")
       return
     }
 
@@ -341,7 +341,7 @@ const WorkerDetail = () => {
         p_worker_id: worker.id,
         p_contract_type_id: contractForm.contractTypeId,
         p_contract_start_date: start,
-        p_contract_end_date: selectedType?.code === "temporary" ? contractForm.endDate || null : null,
+        p_contract_end_date: selectedType?.code === "DETERMINADO" ? contractForm.endDate || null : null,
       })
       if (rpcError) throw rpcError
       setContractDialogOpen(false)
@@ -604,7 +604,7 @@ const WorkerDetail = () => {
                     <dd>
                       <SiteCorpStatusBadge
                         status={
-                          currentContract.contract_type?.code === "temporary" ? "warning" : "info"
+                          currentContract.contract_type?.code === "DETERMINADO" ? "warning" : "info"
                         }
                       >
                         {currentContract.contract_type?.name || "—"}
@@ -619,7 +619,7 @@ const WorkerDetail = () => {
                     <dt className="text-xs text-muted-foreground">Fin</dt>
                     <dd className="text-sm text-ink">
                       {currentContract.end_date || (
-                        <span className="text-muted-foreground">Indefinido</span>
+                        <span className="text-muted-foreground">Sin fecha de fin</span>
                       )}
                     </dd>
                   </div>
@@ -688,7 +688,7 @@ const WorkerDetail = () => {
                       {c.contract_type?.name || "Contrato"}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {c.start_date} → {c.end_date || "indefinido"}
+                      {c.start_date} → {c.end_date || "sin fecha de fin"}
                     </span>
                     {c.is_current && <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>}
                   </li>
@@ -893,7 +893,7 @@ const WorkerDetail = () => {
               <div className="space-y-2">
                 <Label>
                   Fin del contrato
-                  {contractTypes.find(t => t.id === contractForm.contractTypeId)?.code === "temporary"
+                  {contractTypes.find(t => t.id === contractForm.contractTypeId)?.code === "DETERMINADO"
                     ? " *"
                     : ""}
                 </Label>
@@ -902,7 +902,7 @@ const WorkerDetail = () => {
                   value={contractForm.endDate}
                   onChange={(e) => setContractForm(f => ({ ...f, endDate: e.target.value }))}
                   disabled={
-                    contractTypes.find(t => t.id === contractForm.contractTypeId)?.code !== "temporary"
+                    contractTypes.find(t => t.id === contractForm.contractTypeId)?.code !== "DETERMINADO"
                   }
                 />
               </div>

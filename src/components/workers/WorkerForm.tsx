@@ -201,7 +201,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     [contractTypes, contractTypeId]
   )
 
-  const isTemporaryContract = selectedContractType?.code === "temporary"
+  // La lógica contractual se basa en el código estable del catálogo global, no en el texto visible.
+  const isDeterminedContract = selectedContractType?.code === "DETERMINADO"
 
   // Información derivada de solo lectura: Área / Cargo / Grupo / Salario referencia
   const derivedInfo = React.useMemo(() => {
@@ -267,8 +268,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       setFormError("Debes seleccionar un tipo de contrato")
       return
     }
-    if (!isEditing && isTemporaryContract && !contractEndDate) {
-      setFormError("El contrato temporal requiere una fecha de fin")
+    if (!isEditing && isDeterminedContract && !contractEndDate) {
+      setFormError("El contrato por tiempo determinado requiere una fecha de fin")
       return
     }
     const effectiveContractStart = contractStartDate || form.hire_date
@@ -276,9 +277,9 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       !isEditing &&
       contractEndDate &&
       effectiveContractStart &&
-      contractEndDate < effectiveContractStart
+      contractEndDate <= effectiveContractStart
     ) {
-      setFormError("La fecha de fin del contrato no puede ser anterior a su inicio")
+      setFormError("La fecha de fin del contrato debe ser posterior a su inicio")
       return
     }
 
@@ -336,7 +337,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           p_hire_date: form.hire_date,
           p_contract_type_id: contractTypeId || null,
           p_contract_start_date: effectiveContractStart || null,
-          p_contract_end_date: isTemporaryContract ? contractEndDate || null : null,
+          p_contract_end_date: isDeterminedContract ? contractEndDate || null : null,
         })
 
         if (rpcError) throw rpcError
@@ -630,19 +631,19 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="worker-contract-end">
-                  Fin del contrato {isTemporaryContract ? "*" : ""}
+                  Fin del contrato {isDeterminedContract ? "*" : ""}
                 </Label>
                 <SiteCorpInput
                   id="worker-contract-end"
                   type="date"
                   value={contractEndDate}
                   onChange={(e) => setContractEndDate(e.target.value)}
-                  disabled={!isTemporaryContract}
+                  disabled={!isDeterminedContract}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {isTemporaryContract
-                    ? "Obligatorio para contratos temporales."
-                    : "Solo aplica a contratos temporales."}
+                  {isDeterminedContract
+                    ? "Obligatorio para contratos por tiempo determinado."
+                    : "Solo aplica a contratos por tiempo determinado."}
                 </p>
               </div>
             </div>
