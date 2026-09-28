@@ -747,61 +747,92 @@ const EntityStaffing = () => {
                         {area.name} ({area.code})
                       </h4>
                       {areaJobs.map(job => {
-                        const jobPositions = activePositions.filter(p => p.job_id === job.id)
-                        if (jobPositions.length === 0) return null
-
-                        return (
-                          <div key={job.id} className="rounded-xl border border-border bg-white p-4">
-                            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <span className="text-sm font-medium text-ink">{job.name}</span>
-                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                                {job.code}
-                              </span>
-                              {job.salary_group && (
-                                <span className="text-xs text-muted-foreground">
-                                  Grupo: {toRomanNumeral(job.salary_group.sequence_number)}
-                                </span>
-                              )}
-                              <span className="text-xs text-muted-foreground">
-                                {jobPositions.filter(p => isOccupied(p.id)).length}/{jobPositions.length} ocupados
-                              </span>
-                            </div>
+                                              const jobPositions = activePositions.filter(p => p.job_id === job.id)
+                                              if (jobPositions.length === 0) return null
+                      
+                                              // Suma de autorizados y ocupados para la cabecera del Cargo
+                                              const jobAuthorized = jobPositions.reduce((s, p) => s + (p.authorized_quantity || 0), 0)
+                                              const jobOccupied = jobPositions.reduce((s, p) => s + (assignmentsPerPosition.get(p.id) || 0), 0)
+                      
+                                              return (
+                                                <div key={job.id} className="rounded-xl border border-border bg-white p-4">
+                                                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                    <span className="text-sm font-medium text-ink">{job.name}</span>
+                                                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                                      {job.code}
+                                                    </span>
+                                                    {job.salary_group && (
+                                                      <span className="text-xs text-muted-foreground">
+                                                        Grupo: {toRomanNumeral(job.salary_group.sequence_number)}
+                                                      </span>
+                                                    )}
+                                                    <span className="text-xs text-muted-foreground">
+                                                      {jobOccupied}/{jobAuthorized} ocupados
+                                                    </span>
+                                                  </div>
                             <div className="space-y-1.5">
                               {jobPositions.map(position => {
-                                const occupant = activeWorkers.find(w => currentAssignment(w)?.position_id === position.id)
-                                const salary = salaryForPosition(position)
-                                return (
-                                  <div
-                                    key={position.id}
-                                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted/30 px-3 py-2"
-                                  >
-                                    <span className="text-sm text-ink">{position.name}</span>
-                                    <span className="rounded bg-white px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                                      {position.code}
-                                    </span>
-                                    {occupant ? (
-                                      <>
-                                        <Link
-                                          to={`/entity/${entityId}/staffing/workers/${occupant.id}`}
-                                          className="text-sm font-medium text-sitecorp-primary underline-offset-2 hover:underline"
-                                        >
-                                          {fullName(occupant)}
-                                        </Link>
-                                        <SiteCorpStatusBadge status="success">OCUPADO</SiteCorpStatusBadge>
-                                      </>
-                                    ) : (
-                                      <SiteCorpStatusBadge status="warning">VACANTE</SiteCorpStatusBadge>
-                                    )}
-                                    <span className="ml-auto text-xs text-muted-foreground">
-                                      {salary ? (
-                                        formatSalary(salary)
-                                      ) : (
-                                        <span className="italic">Salario no configurado</span>
-                                      )}
-                                    </span>
-                                  </div>
-                                )
-                              })}
+                                                              const positionOccupied = assignmentsPerPosition.get(position.id) || 0
+                                                              const positionAuthorized = position.authorized_quantity || 0
+                                                              const positionVacant = positionAuthorized - positionOccupied
+                                                              const positionWorkers = activeWorkers.filter(w => currentAssignment(w)?.position_id === position.id)
+                                                              const salary = salaryForPosition(position)
+                              
+                                                              let statusLabel: string
+                                                              let statusVariant: "success" | "warning" | "neutral"
+                                                              if (positionOccupied === 0) {
+                                                                statusLabel = "VACÍO"
+                                                                statusVariant = "warning"
+                                                              } else if (positionOccupied < positionAuthorized) {
+                                                                statusLabel = "CON VACANTES"
+                                                                statusVariant = "success"
+                                                              } else {
+                                                                statusLabel = "COMPLETO"
+                                                                statusVariant = "neutral"
+                                                              }
+                              
+                                                              return (
+                                                                <div
+                                                                  key={position.id}
+                                                                  className="rounded-lg bg-muted/30 px-3 py-2"
+                                                                >
+                                                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                                    <span className="text-sm text-ink">{position.name}</span>
+                                                                    <span className="rounded bg-white px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                                                      {position.code}
+                                                                    </span>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                      {positionOccupied}/{positionAuthorized} ocupados
+                                                                    </span>
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                      {positionVacant} vacantes
+                                                                    </span>
+                                                                    <SiteCorpStatusBadge status={statusVariant}>{statusLabel}</SiteCorpStatusBadge>
+                                                                    <span className="ml-auto text-xs text-muted-foreground">
+                                                                      {salary ? (
+                                                                        formatSalary(salary)
+                                                                      ) : (
+                                                                        <span className="italic">Salario no configurado</span>
+                                                                      )}
+                                                                    </span>
+                                                                  </div>
+                                                                  {positionWorkers.length > 0 && (
+                                                                    <div className="mt-2 space-y-1 border-t border-border pt-2">
+                                                                      <p className="text-xs font-medium text-muted-foreground">Trabajadores asignados:</p>
+                                                                      {positionWorkers.map(w => (
+                                                                        <Link
+                                                                          key={w.id}
+                                                                          to={`/entity/${entityId}/staffing/workers/${w.id}`}
+                                                                          className="block text-sm text-sitecorp-primary underline-offset-2 hover:underline"
+                                                                        >
+                                                                          {fullName(w)}
+                                                                        </Link>
+                                                                      ))}
+                                                                    </div>
+                                                                  )}
+                                                                </div>
+                                                              )
+                                                            })}
                             </div>
                           </div>
                         )
