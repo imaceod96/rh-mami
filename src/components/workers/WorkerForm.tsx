@@ -67,6 +67,12 @@ interface Catalog {
   name: string
 }
 
+interface ContractType {
+  id: string
+  name: string
+  code: string
+}
+
 interface WorkerFormState {
   first_name: string
   first_surname: string
@@ -146,21 +152,27 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const [maritalStatuses, setMaritalStatuses] = React.useState<Catalog[]>([])
   const [educationLevels, setEducationLevels] = React.useState<Catalog[]>([])
   const [skinColors, setSkinColors] = React.useState<Catalog[]>([])
+  const [contractTypes, setContractTypes] = React.useState<ContractType[]>([])
+  const [contractTypeId, setContractTypeId] = React.useState<string>("")
+  const [contractStartDate, setContractStartDate] = React.useState<string>("")
+  const [contractEndDate, setContractEndDate] = React.useState<string>("")
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     const load = async () => {
-      const [g, m, e, s] = await Promise.all([
+      const [g, m, e, s, ct] = await Promise.all([
         supabase.from("genders").select("id, name").order("name"),
         supabase.from("marital_statuses").select("id, name").order("name"),
         supabase.from("education_levels").select("id, name").order("name"),
         supabase.from("skin_colors").select("id, name").order("name"),
+        supabase.from("employment_contract_types").select("id, name, code").eq("is_active", true).order("name"),
       ])
       setGenders((g.data as Catalog[]) || [])
       setMaritalStatuses((m.data as Catalog[]) || [])
       setEducationLevels((e.data as Catalog[]) || [])
       setSkinColors((s.data as Catalog[]) || [])
+      setContractTypes((ct.data as ContractType[]) || [])
     }
     load().catch(err => {
       console.error("Error loading catalogs:", err)
@@ -183,6 +195,13 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     () => positions.find(p => p.id === positionId) || null,
     [positions, positionId]
   )
+
+  const selectedContractType = React.useMemo(
+    () => contractTypes.find(t => t.id === contractTypeId) || null,
+    [contractTypes, contractTypeId]
+  )
+
+  const isTemporaryContract = selectedContractType?.code === "temporary"
 
   // Información derivada de solo lectura: Área / Cargo / Grupo / Salario referencia
   const derivedInfo = React.useMemo(() => {
@@ -244,6 +263,24 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           setFormError("El puesto seleccionado ya no tiene plazas disponibles. Selecciona otro puesto.")
           return
         }
+    if (!isEditing && !contractTypeId) {
+      setFormError("Debes seleccionar un tipo de contrato")
+      return
+    }
+    if (!isEditing && isTemporaryContract && !contractEndDate) {
+      setFormError("El contrato temporal requiere una fecha de fin")
+      return
+    }
+    const effectiveContractStart = contractStartDate || form.hire_date
+    if (
+      !isEditing &&
+      contractEndDate &&
+      effectiveContractStart &&
+      contractEndDate < effectiveContractStart
+    ) {
+      setFormError("La fecha de fin del contrato no puede ser anterior a su inicio")
+      return
+    }
 
     setSubmitting(true)
 
@@ -297,6 +334,9 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           },
           p_position_id: positionId,
           p_hire_date: form.hire_date,
+          p_contract_type_id: contractTypeId || null,
+          p_contract_start_date: effectiveContractStart || null,
+          p_contract_end_date: isTemporaryContract ? contractEndDate || null : null,
         })
 
         if (rpcError) throw rpcError
@@ -558,6 +598,57 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             </div>
           )}
         </div>
+
+        {/* Datos de contratación */}
+        {!isEditing && (
+          <div className="mt-4 rounded-lg border border-border bg-muted/20 p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Datos de contratación</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="worker-contract-type">Tipo de contrato *</Label>
+                <SiteCorpSelect
+                  value={contractTypeId}
+                  onValueChange={setContractTypeId}
+                >
+                  <option value="">Seleccionar tipo</option>
+                  {contractTypes.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </SiteCorpSelect>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="worker-contract-start">Inicio del contrato</Label>
+                <SiteCorpInput
+                  id="worker-contract-start"
+                  type="date"
+                  value={contractStartDate}
+                  onChange={(e) => setContractStartDate(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Si se deja vacío, se usa la fecha de incorporación.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="worker-contract-end">
+                  Fin del contrato {isTemporaryContract ? "*" : ""}
+                </Label>
+                <SiteCorpInput
+                  id="worker-contract-end"
+                  type="date"
+                  value={contractEndDate}
+                  onChange={(e) => setContractEndDate(e.target.value)}
+                  disabled={!isTemporaryContract}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {isTemporaryContract
+                    ? "Obligatorio para contratos temporales."
+                    : "Solo aplica a contratos temporales."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isEditing && (
           <p className="mt-2 text-xs text-muted-foreground">
             El trabajador se crea con estado Activo; los cambios de estado laboral se gestionarán en fases posteriores.

@@ -20,6 +20,7 @@ import {
   Calendar,
   Briefcase,
   UserCheck,
+  FileText,
 } from "lucide-react"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { WorkerForm } from "@/components/workers/WorkerForm"
@@ -73,6 +74,19 @@ interface WorkerDetail {
       } | null
     } | null
   }[] | null
+  contracts: {
+    id: string
+    assignment_id: string
+    contract_type_id: string
+    start_date: string
+    end_date: string | null
+    is_current: boolean
+    contract_type: {
+      id: string
+      name: string
+      code: string
+    } | null
+  }[] | null
 }
 
 interface SalaryValue {
@@ -103,10 +117,30 @@ const WorkerDetail = () => {
   const [error, setError] = React.useState<string | null>(null)
   const [canManage, setCanManage] = React.useState(false)
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
+  const [contractTypes, setContractTypes] = React.useState<{ id: string; name: string; code: string }[]>([])
+  const [contractDialogOpen, setContractDialogOpen] = React.useState(false)
+  const [contractForm, setContractForm] = React.useState({ contractTypeId: "", startDate: "", endDate: "" })
+  const [contractSubmitting, setContractSubmitting] = React.useState(false)
+  const [actionError, setActionError] = React.useState<string | null>(null)
 
   const currentAssignment = React.useMemo(() => {
     if (!worker?.assignments) return null
     return worker.assignments.find(a => a.is_current && !a.end_date) || null
+  }, [worker])
+
+  const currentContract = React.useMemo(() => {
+    if (!worker?.contracts) return null
+    return worker.contracts.find(c => c.is_current) || null
+  }, [worker])
+
+  const sortedAssignments = React.useMemo(() => {
+    if (!worker?.assignments) return []
+    return [...worker.assignments].sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
+  }, [worker])
+
+  const sortedContracts = React.useMemo(() => {
+    if (!worker?.contracts) return []
+    return [...worker.contracts].sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
   }, [worker])
 
   const position = currentAssignment?.position
@@ -154,6 +188,10 @@ const WorkerDetail = () => {
                       salary_group:salary_groups(id, salary_scale_id, sequence_number)
                     )
                   )
+                ),
+                contracts:employment_contracts(
+                  id, assignment_id, contract_type_id, start_date, end_date, is_current,
+                  contract_type:employment_contract_types(id, name, code)
                 )
               `)
               .eq("id", workerId)
@@ -161,8 +199,16 @@ const WorkerDetail = () => {
               .single()
       
             if (workerError) throw workerError
-            // Map nested area arrays to objects
-            const mappedWorker = workerData as any
+                  // Map nested area arrays to objects
+                  const mappedWorker = workerData as any
+                  if (mappedWorker.contracts) {
+                    mappedWorker.contracts = mappedWorker.contracts.map((c: any) => ({
+                      ...c,
+                      contract_type: Array.isArray(c.contract_type)
+                        ? c.contract_type[0] || null
+                        : c.contract_type,
+                    }))
+                  }
             if (mappedWorker.assignments) {
               mappedWorker.assignments = mappedWorker.assignments.map((a: any) => ({
                 ...a,
@@ -184,16 +230,18 @@ const WorkerDetail = () => {
             setWorker(mappedWorker as WorkerDetail)
 
       // Cargar catálogos
-      const [g, m, e, s] = await Promise.all([
+      const [g, m, e, s, ct] = await Promise.all([
         supabase.from("genders").select("id, name").order("name"),
         supabase.from("marital_statuses").select("id, name").order("name"),
         supabase.from("education_levels").select("id, name").order("name"),
         supabase.from("skin_colors").select("id, name").order("name"),
+        supabase.from("employment_contract_types").select("id, name, code").eq("is_active", true).order("name"),
       ])
       setGenders((g.data as Catalog[]) || [])
       setMaritalStatuses((m.data as Catalog[]) || [])
       setEducationLevels((e.data as Catalog[]) || [])
       setSkinColors((s.data as Catalog[]) || [])
+      setContractTypes((ct.data as { id: string; name: string; code: string }[]) || [])
 
       // Escala aplicable y valores salariales
       const { data: scaleIdData, error: scaleError } = await supabase.rpc(
@@ -261,6 +309,49 @@ const WorkerDetail = () => {
     } else {
       setEditDialogOpen(false)
       loadWorker()
+    }
+  }
+
+  const handleRegisterContract = async () => {
+    if (!worker) return
+    setActionError(null)
+
+    if (!contractForm.contractTypeId) {
+      setActionError("Selecciona un tipo de contrato")
+      return
+    }
+    const selectedType = contractTypes.find(t => t.id === contractForm.contractTypeId)
+    const start = contractForm.startDate || worker.hire_date
+    if (!start) {
+      setActionError("La fecha de inicio del contrato es obligatoria")
+      return
+    }
+    if (selectedType?.code === "temporary" && !contractForm.endDate) {
+      setActionError("El contrato temporal requiere una fecha de fin")
+      return
+    }
+    if (contractForm.endDate && contractForm.endDate < start) {
+      setActionError("La fecha de fin no puede ser anterior al inicio")
+      return
+    }
+
+    setContractSubmitting(true)
+    try {
+      const { error: rpcError } = await supabase.rpc("complete_worker_contract", {
+        p_worker_id: worker.id,
+        p_contract_type_id: contractForm.contractTypeId,
+        p_contract_start_date: start,
+        p_contract_end_date: selectedType?.code === "temporary" ? contractForm.endDate || null : null,
+      })
+      if (rpcError) throw rpcError
+      setContractDialogOpen(false)
+      setContractForm({ contractTypeId: "", startDate: "", endDate: "" })
+      loadWorker()
+    } catch (err) {
+      console.error("Error registering contract:", err)
+      setActionError(err instanceof Error ? err.message : "Error al registrar el contrato")
+    } finally {
+      setContractSubmitting(false)
     }
   }
 
@@ -483,9 +574,130 @@ const WorkerDetail = () => {
                 </div>
               )}
             </dl>
+
+            {/* Contratación */}
+            <div className="mt-5 border-t border-border pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-ink">Contratación</h4>
+                {canManage && currentAssignment && !currentContract && (
+                  <SiteCorpButton
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setActionError(null)
+                      setContractForm({
+                        contractTypeId: "",
+                        startDate: worker.hire_date || "",
+                        endDate: "",
+                      })
+                      setContractDialogOpen(true)
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" /> Registrar contrato
+                  </SiteCorpButton>
+                )}
+              </div>
+              {currentContract ? (
+                <dl className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Tipo de contrato</dt>
+                    <dd>
+                      <SiteCorpStatusBadge
+                        status={
+                          currentContract.contract_type?.code === "temporary" ? "warning" : "info"
+                        }
+                      >
+                        {currentContract.contract_type?.name || "—"}
+                      </SiteCorpStatusBadge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Inicio</dt>
+                    <dd className="text-sm text-ink">{currentContract.start_date}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Fin</dt>
+                    <dd className="text-sm text-ink">
+                      {currentContract.end_date || (
+                        <span className="text-muted-foreground">Indefinido</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Sin contrato registrado para este trabajador.
+                </p>
+              )}
+            </div>
           </div>
         </SiteCorpCard>
       </div>
+
+      {/* Historial laboral */}
+      <SiteCorpCard>
+        <div className="p-6">
+          <h3 className="mb-4 text-lg font-semibold text-ink">Trayectoria laboral</h3>
+          {sortedAssignments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin movimientos registrados.</p>
+          ) : (
+            <ol className="relative space-y-4 border-l border-border pl-5">
+              {sortedAssignments.map((a) => (
+                <li key={a.id} className="relative">
+                  <span
+                    className={`absolute -left-[26px] top-1.5 h-3 w-3 rounded-full border-2 border-background ${
+                      a.is_current && !a.end_date ? "bg-sitecorp-success" : "bg-muted-foreground/50"
+                    }`}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-ink">
+                      {a.position?.name || "Puesto"}
+                    </span>
+                    {a.position?.code && (
+                      <span className="text-xs text-muted-foreground">{a.position.code}</span>
+                    )}
+                    {a.is_current && !a.end_date && (
+                      <SiteCorpStatusBadge status="success">Actual</SiteCorpStatusBadge>
+                    )}
+                  </div>
+                  {a.position?.job && (
+                    <p className="text-xs text-muted-foreground">
+                      {a.position.job.name}
+                      {a.position.job.area?.name ? ` · ${a.position.job.area.name}` : ""}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Desde {a.start_date}
+                    {a.end_date ? ` hasta ${a.end_date}` : " · en curso"}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {sortedContracts.length > 0 && (
+            <div className="mt-6 border-t border-border pt-4">
+              <h4 className="mb-3 text-sm font-semibold text-ink">Historial de contratos</h4>
+              <ul className="space-y-2">
+                {sortedContracts.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                  >
+                    <span className="text-sm text-ink">
+                      {c.contract_type?.name || "Contrato"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {c.start_date} → {c.end_date || "indefinido"}
+                    </span>
+                    {c.is_current && <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </SiteCorpCard>
 
       {/* Diálogo de edición */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -633,6 +845,80 @@ const WorkerDetail = () => {
                 Cancelar
               </SiteCorpButton>
               <SiteCorpButton type="submit">Guardar cambios</SiteCorpButton>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de registro de contrato */}
+      <Dialog open={contractDialogOpen} onOpenChange={setContractDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Registrar contrato</DialogTitle>
+            <DialogDescription>
+              Registra un contrato de trabajo para el puesto actual del trabajador.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleRegisterContract()
+            }}
+            className="space-y-4"
+          >
+            {actionError && <SiteCorpAlert type="danger">{actionError}</SiteCorpAlert>}
+
+            <div className="space-y-2">
+              <Label>Tipo de contrato *</Label>
+              <SiteCorpSelect
+                value={contractForm.contractTypeId}
+                onValueChange={(v) => setContractForm(f => ({ ...f, contractTypeId: v }))}
+              >
+                <option value="">Seleccionar tipo</option>
+                {contractTypes.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </SiteCorpSelect>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Inicio del contrato</Label>
+                <SiteCorpInput
+                  type="date"
+                  value={contractForm.startDate}
+                  onChange={(e) => setContractForm(f => ({ ...f, startDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Fin del contrato
+                  {contractTypes.find(t => t.id === contractForm.contractTypeId)?.code === "temporary"
+                    ? " *"
+                    : ""}
+                </Label>
+                <SiteCorpInput
+                  type="date"
+                  value={contractForm.endDate}
+                  onChange={(e) => setContractForm(f => ({ ...f, endDate: e.target.value }))}
+                  disabled={
+                    contractTypes.find(t => t.id === contractForm.contractTypeId)?.code !== "temporary"
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <SiteCorpButton
+                variant="outline"
+                type="button"
+                onClick={() => setContractDialogOpen(false)}
+              >
+                Cancelar
+              </SiteCorpButton>
+              <SiteCorpButton type="submit" disabled={contractSubmitting}>
+                {contractSubmitting ? "Registrando..." : "Registrar contrato"}
+              </SiteCorpButton>
             </div>
           </form>
         </DialogContent>
