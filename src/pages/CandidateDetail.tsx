@@ -40,7 +40,9 @@ import {
   Info,
   Clock,
   Building2,
+  UserPlus,
 } from "lucide-react"
+import HireCandidateDialog from "@/components/candidates/HireCandidateDialog"
 
 interface Candidate {
   id: string
@@ -64,6 +66,7 @@ interface Candidate {
   is_retired_or_rehired: boolean | null
   has_disciplinary_measures: boolean | null
   status: "active" | "archived"
+  worker_id: string | null
   created_at: string
   updated_at: string
 }
@@ -199,6 +202,13 @@ const CandidateDetail = () => {
   const [hasViewPermission, setHasViewPermission] = React.useState(false)
   const [hasManagePermission, setHasManagePermission] = React.useState(false)
   const [notice, setNotice] = React.useState<{ type: "success" | "danger"; message: string } | null>(null)
+  const [linkedWorker, setLinkedWorker] = React.useState<{
+    id: string
+    code: string
+    employment_status: string
+  } | null>(null)
+  const [canManageWorkers, setCanManageWorkers] = React.useState(false)
+  const [hireOpen, setHireOpen] = React.useState(false)
 
   const showNotice = (type: "success" | "danger", message: string) => {
     setNotice({ type, message })
@@ -323,6 +333,13 @@ const CandidateDetail = () => {
         })
         setHasManagePermission(!!canManage)
 
+        // Check if user can manage workers (required to hire)
+        const { data: canManageWorkersData } = await supabase.rpc("can_access_entity", {
+          target_entity_id: entityId,
+          permission_code: "workers.manage"
+        })
+        setCanManageWorkers(!!canManageWorkersData)
+
         if (!hasView) {
           setError("No tiene permiso para ver este candidato")
           return
@@ -344,6 +361,26 @@ const CandidateDetail = () => {
         }
 
         setCandidate(data)
+
+        // Si el candidato está vinculado a un trabajador, cargar su estado
+        if (data.worker_id) {
+          const { data: linked } = await supabase
+            .from("workers")
+            .select("id, code, employment_status")
+            .eq("id", data.worker_id)
+            .maybeSingle()
+          setLinkedWorker(
+            linked
+              ? {
+                  id: linked.id,
+                  code: linked.code,
+                  employment_status: linked.employment_status,
+                }
+              : null
+          )
+        } else {
+          setLinkedWorker(null)
+        }
       } catch (err) {
         console.error("Error fetching candidate:", err)
         setError(err instanceof Error ? err.message : "Error al cargar el candidato")
@@ -975,7 +1012,22 @@ const CandidateDetail = () => {
           title={formatFullName(candidate)}
           description={`Candidato en ${currentEntity?.name}`}
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {linkedWorker && linkedWorker.employment_status === "active" && (
+                <SiteCorpButton
+                  variant="outline"
+                  onClick={() =>
+                    navigate(`/entity/${entityId}/staffing/workers/${linkedWorker.id}`)
+                  }
+                >
+                  <Briefcase className="mr-2 h-4 w-4" /> Ver trabajador
+                </SiteCorpButton>
+              )}
+              {canManageWorkers && (!linkedWorker || linkedWorker.employment_status !== "active") && (
+                <SiteCorpButton onClick={() => setHireOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" /> Contratar
+                </SiteCorpButton>
+              )}
               {hasManagePermission && (
                 <SiteCorpButton
                   variant="outline"
@@ -1001,6 +1053,31 @@ const CandidateDetail = () => {
           {notice.message}
         </SiteCorpAlert>
       )}
+
+      {/* Indicador de relación laboral */}
+      {linkedWorker && (
+        <SiteCorpAlert type={linkedWorker.employment_status === "active" ? "success" : "info"}>
+          {linkedWorker.employment_status === "active"
+            ? `Trabajador activo (${linkedWorker.code}). Este candidato ya forma parte de la plantilla.`
+            : `Trabajador histórico (${linkedWorker.code}). Esta persona fue trabajador anteriormente; la acción «Contratar» realizará una reincorporación.`}
+        </SiteCorpAlert>
+      )}
+
+      {/* Diálogo de contratación */}
+      <HireCandidateDialog
+        open={hireOpen}
+        onOpenChange={setHireOpen}
+        entityId={entityId as string}
+        candidate={{
+          id: candidate.id,
+          fullName: formatFullName(candidate),
+          identification: candidate.identification,
+        }}
+        mode={linkedWorker ? "REINCORPORATION" : "NEW"}
+        onSuccess={(workerId) =>
+          navigate(`/entity/${entityId}/staffing/workers/${workerId}`)
+        }
+      />
 
       {/* Candidate info cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
