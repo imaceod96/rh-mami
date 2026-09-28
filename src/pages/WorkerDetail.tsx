@@ -21,11 +21,15 @@ import {
   Briefcase,
   UserCheck,
   FileText,
+  ArrowRightLeft,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { WorkerForm } from "@/components/workers/WorkerForm"
 import { WorkerDocumentsTab } from "@/components/workers/WorkerDocumentsTab"
+import ChangePositionDialog, {
+  type WorkerCurrentSituation,
+} from "@/components/workers/ChangePositionDialog"
 import { SelectItem } from "@/components/ui/select"
 import {
   resolveApplicableScaleId,
@@ -120,6 +124,7 @@ const WorkerDetail = () => {
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
   const [contractTypes, setContractTypes] = React.useState<{ id: string; name: string; code: string }[]>([])
   const [contractDialogOpen, setContractDialogOpen] = React.useState(false)
+  const [changePositionOpen, setChangePositionOpen] = React.useState(false)
   const [contractForm, setContractForm] = React.useState({ contractTypeId: "", startDate: "", endDate: "" })
   const [contractSubmitting, setContractSubmitting] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
@@ -351,6 +356,20 @@ const WorkerDetail = () => {
 
   const salary = salaryForGroup(applicableScaleId, group, salaryValuesByGroup)
 
+  const currentSituation: WorkerCurrentSituation = React.useMemo(
+    () => ({
+      positionId: position?.id ?? currentAssignment?.position_id ?? null,
+      positionName: position?.name ?? null,
+      positionCode: position?.code ?? null,
+      jobName: job?.name ?? null,
+      areaName: job?.area?.name ?? null,
+      groupSequence: group?.sequence_number ?? null,
+      salary: salary ?? null,
+      startDate: currentAssignment?.start_date ?? null,
+    }),
+    [position, currentAssignment, job, group, salary]
+  )
+
   if (loading) {
     return (
       <div className="space-y-6 p-6">
@@ -506,7 +525,18 @@ const WorkerDetail = () => {
         {/* Datos laborales */}
         <SiteCorpCard>
           <div className="p-6">
-            <h3 className="mb-4 text-lg font-semibold text-ink">Datos laborales</h3>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold text-ink">Datos laborales</h3>
+              {canManage && currentAssignment && (
+                <SiteCorpButton
+                  type="button"
+                  variant="outline"
+                  onClick={() => setChangePositionOpen(true)}
+                >
+                  <ArrowRightLeft className="mr-2 h-4 w-4" /> Cambiar de puesto
+                </SiteCorpButton>
+              )}
+            </div>
 
             <dl className="grid gap-4">
               <div>
@@ -930,6 +960,16 @@ const WorkerDetail = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de cambio de puesto */}
+      <ChangePositionDialog
+        open={changePositionOpen}
+        onOpenChange={setChangePositionOpen}
+        workerId={worker.id}
+        entityId={entityId as string}
+        current={currentSituation}
+        onSuccess={loadWorker}
+      />
     </div>
   )
 }
