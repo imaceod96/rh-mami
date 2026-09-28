@@ -28,20 +28,30 @@ const SiteCorpSelect = React.forwardRef<
         <label className="text-sm font-medium text-ink">{label}</label>
       )}
       <Select {...props}>
-        <SelectTrigger
-          ref={ref}
-          className={cn(
-            "h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sitecorp-primary",
-            error && "border-sitecorp-danger",
-            className
-          )}
-        >
-          <SelectValue placeholder="Seleccionar..." />
-        </SelectTrigger>
-        <SelectContent>
-          {children}
-        </SelectContent>
-      </Select>
+              <SelectTrigger
+                ref={ref}
+                className={cn(
+                  "h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sitecorp-primary",
+                  error && "border-sitecorp-danger",
+                  className
+                )}
+              >
+                <SelectValue placeholder="Seleccionar..." />
+              </SelectTrigger>
+              <SelectContent align="start" sideOffset={4}>
+                {React.Children.map(children, (child) => {
+                  if (React.isValidElement(child) && child.type === 'option') {
+                    const props = child.props as { value: string; children: React.ReactNode }
+                    return (
+                      <SelectItem key={props.value} value={props.value}>
+                        {props.children}
+                      </SelectItem>
+                    )
+                  }
+                  return child
+                })}
+              </SelectContent>
+            </Select>
       {error && (
         <p className="text-xs text-sitecorp-danger">{error}</p>
       )}
