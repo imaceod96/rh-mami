@@ -1,0 +1,174 @@
+import { supabase } from "@/lib/supabase"
+
+/**
+ * Vencimientos contractuales (Fase 12).
+ *
+ * Las alertas NO se persisten: se derivan del contrato vigente del trabajador
+ * (end_date vs. CURRENT_DATE). El cálculo de días y la categoría se resuelven en
+ * la base de datos (`contract_expiry_alerts`) para que exista una única fuente de
+ * verdad temporal entre la vista de alertas y WorkerDetail.
+ */
+
+export type ContractAlertState =
+  | "OVERDUE"
+  | "DUE_TODAY"
+  | "DUE_IN_7"
+  | "DUE_IN_15"
+  | "DUE_IN_30"
+  | "NO_END_DATE"
+
+export const CONTRACT_ALERT_HORIZON_DAYS = 30
+
+/** Horizonte amplio usado en WorkerDetail: permite conocer el vencimiento aunque
+ *  quede lejos, y la UI decide si corresponde mostrar alerta (≤ 30 días). */
+export const CONTRACT_ALERT_LOOKAHEAD_DAYS = 3650
+
+export interface ContractAlertRow {
+  worker_id: string
+  worker_code: string
+  worker_name: string
+  identification: string
+  area_name: string | null
+  job_name: string | null
+  position_name: string | null
+  position_code: string | null
+  contract_id: string
+  contract_type_name: string
+  contract_type_code: string
+  contract_start_date: string
+  contract_end_date: string | null
+  salary_group_id: string | null
+  salary_scale_id: string | null
+  salary_group_sequence_number: number | null
+  days_remaining: number | null
+  alert_state: ContractAlertState
+}
+
+interface ContractAlertMeta {
+  label: string
+  badge: "success" | "warning" | "danger" | "info" | "neutral"
+}
+
+export const CONTRACT_ALERT_META: Record<ContractAlertState, ContractAlertMeta> = {
+  OVERDUE: { label: "Vencido", badge: "danger" },
+  DUE_TODAY: { label: "Vence hoy", badge: "danger" },
+  DUE_IN_7: { label: "Vence en 7 días", badge: "warning" },
+  DUE_IN_15: { label: "Vence en 15 días", badge: "warning" },
+  DUE_IN_30: { label: "Vence en 30 días", badge: "info" },
+  NO_END_DATE: { label: "Sin fecha de finalización", badge: "neutral" },
+}
+
+/** Rangos excluyentes: un contrato sólo pertenece a una categoría. */
+export const CONTRACT_ALERT_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "ATTENTION", label: "Todos los que requieren atención" },
+  { value: "OVERDUE", label: "Vencidos" },
+  { value: "DUE_TODAY", label: "Vence hoy" },
+  { value: "DUE_IN_7", label: "Próximos 7 días" },
+  { value: "DUE_IN_15", label: "8–15 días" },
+  { value: "DUE_IN_30", label: "16–30 días" },
+  { value: "NO_END_DATE", label: "Sin fecha de finalización" },
+]
+
+/** Un contrato determinado vigente sin fecha de fin es una inconsistencia administrativa. */
+export const needsCorrection = (row: ContractAlertRow) => row.alert_state === "NO_END_DATE"
+export const requiresAttention = (row: ContractAlertRow) => row.alert_state !== "NO_END_DATE"
+
+export interface ContractAlertSummary {
+  overdue: number
+  dueToday: number
+  dueIn7: number
+  dueIn15: number
+  dueIn30: number
+  attention: number
+  correction: number
+}
+
+export function summarizeContractAlerts(rows: ContractAlertRow[]): ContractAlertSummary {
+  const summary: ContractAlertSummary = {
+    overdue: 0,
+    dueToday: 0,
+    dueIn7: 0,
+    dueIn15: 0,
+    dueIn30: 0,
+    attention: 0,
+    correction: 0,
+  }
+
+  rows.forEach((row) => {
+    switch (row.alert_state) {
+      case "OVERDUE":
+        summary.overdue += 1
+        break
+      case "DUE_TODAY":
+        summary.dueToday += 1
+        break
+      case "DUE_IN_7":
+        summary.dueIn7 += 1
+        break
+      case "DUE_IN_15":
+        summary.dueIn15 += 1
+        break
+      case "DUE_IN_30":
+        summary.dueIn30 += 1
+        break
+      default:
+        summary.correction += 1
+    }
+  })
+
+  summary.attention =
+    summary.overdue + summary.dueToday + summary.dueIn7 + summary.dueIn15 + summary.dueIn30
+
+  return summary
+}
+
+/** Texto de tiempo restante a partir de los días calculados por la base de datos. */
+export function deadlineLabel(
+  daysRemaining: number | null,
+  endDate: string | null
+): string {
+  if (endDate === null || daysRemaining === null) return "Sin fecha de finalización"
+  if (daysRemaining > 1) return `Vence en ${daysRemaining} días`
+  if (daysRemaining === 1) return "Vence mañana"
+  if (daysRemaining === 0) return "Vence hoy"
+  if (daysRemaining === -1) return "Vencido hace 1 día"
+  return `Vencido hace ${Math.abs(daysRemaining)} días`
+}
+
+/** Fecha laboral en formato dd/mm/aaaa (las fechas ISO son la fuente de verdad). */
+export function formatContractDate(isoDate: string | null | undefined): string {
+  if (!isoDate) return "—"
+  const [year, month, day] = isoDate.split("-")
+  if (!year || !month || !day) return isoDate
+  return `${day}/${month}/${year}`
+}
+
+/**
+ * Alertas de vencimiento de la entidad. `targetWorkerId` permite reutilizar el
+ * mismo cálculo (y la misma autoridad de permisos) desde WorkerDetail.
+ */
+export async function fetchContractAlerts(
+  entityId: string,
+  options: { horizonDays?: number; workerId?: string } = {}
+): Promise<ContractAlertRow[]> {
+  const { data, error } = await supabase.rpc("contract_expiry_alerts", {
+    target_entity_id: entityId,
+    horizon_days: options.horizonDays ?? CONTRACT_ALERT_HORIZON_DAYS,
+    target_worker_id: options.workerId ?? null,
+  })
+
+  if (error) throw error
+  return (data as ContractAlertRow[]) || []
+}
+
+/** Vencimiento del contrato vigente de un trabajador (o null si no aplica). */
+export async function fetchWorkerContractAlert(
+  entityId: string,
+  workerId: string
+): Promise<ContractAlertRow | null> {
+  const rows = await fetchContractAlerts(entityId, {
+    horizonDays: CONTRACT_ALERT_LOOKAHEAD_DAYS,
+    workerId,
+  })
+  return rows[0] ?? null
+}

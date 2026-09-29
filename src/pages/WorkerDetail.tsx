@@ -25,6 +25,8 @@ import {
   UserMinus,
   UserPlus,
   FileSignature,
+  AlertTriangle,
+  Wallet,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
@@ -46,6 +48,21 @@ import {
   formatSalary,
   type SalaryValue,
 } from "@/lib/salary"
+import {
+  ADDENDUM_STATUS_BADGE,
+  ADDENDUM_STATUS_LABELS,
+  SALARY_CHANGE_TYPE_LABELS,
+  fetchWorkerSalaryHistory,
+  pendingAddendums,
+  type WorkerSalaryHistoryEntry,
+} from "@/lib/worker-salary"
+import {
+  CONTRACT_ALERT_META,
+  deadlineLabel,
+  fetchWorkerContractAlert,
+  formatContractDate,
+  type ContractAlertRow,
+} from "@/lib/contract-alerts"
 
 interface WorkerDetail {
   id: string
@@ -103,6 +120,10 @@ interface WorkerDetail {
     end_date: string | null
     actual_end_date: string | null
     is_current: boolean
+    salary_amount: number | null
+    salary_currency_code: string | null
+    salary_effective_date: string | null
+    salary_snapshot_status: string
     contract_type: {
       id: string
       name: string
@@ -150,6 +171,8 @@ const WorkerDetail = () => {
   const [reincorporateOpen, setReincorporateOpen] = React.useState(false)
   const [changeContractOpen, setChangeContractOpen] = React.useState(false)
   const [movements, setMovements] = React.useState<WorkerMovement[]>([])
+  const [salaryHistory, setSalaryHistory] = React.useState<WorkerSalaryHistoryEntry[]>([])
+  const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
   const [contractForm, setContractForm] = React.useState({ contractTypeId: "", startDate: "", endDate: "" })
   const [contractSubmitting, setContractSubmitting] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
@@ -225,6 +248,7 @@ const WorkerDetail = () => {
                 ),
                 contracts:employment_contracts(
                   id, assignment_id, contract_type_id, start_date, end_date, actual_end_date, is_current,
+                  salary_amount, salary_currency_code, salary_effective_date, salary_snapshot_status,
                   contract_type:employment_contract_types(id, name, code)
                 )
               `)
@@ -338,6 +362,24 @@ const WorkerDetail = () => {
       } else {
         setSalaryValuesByGroup({})
       }
+
+      // Fase 12: vencimiento del contrato vigente. Se resuelve en el servidor para
+      // compartir el mismo cálculo (fechas y días) que la vista de Alertas.
+      try {
+        setContractAlert(await fetchWorkerContractAlert(entityId, workerId))
+      } catch (alertErr) {
+        console.error("Error loading contract alert:", alertErr)
+        setContractAlert(null)
+      }
+
+      // Fase 11A: histórico salarial y anexos contractuales pendientes (registros
+      // históricos: nunca se recalculan ni se sobrescriben).
+      try {
+        setSalaryHistory(await fetchWorkerSalaryHistory(workerId))
+      } catch (historyErr) {
+        console.error("Error loading salary history:", historyErr)
+        setSalaryHistory([])
+      }
     } catch (err) {
       console.error("Error loading worker:", err)
       setError(err instanceof Error ? err.message : "Error al cargar el trabajador")
@@ -429,6 +471,32 @@ const WorkerDetail = () => {
 
   const salary = salaryForGroup(applicableScaleId, group, salaryValuesByGroup)
 
+  const pendingContractAddendums = React.useMemo(
+    () => pendingAddendums(salaryHistory),
+    [salaryHistory]
+  )
+
+  // El snapshot contractual es histórico: puede diferir del salario operativo actual.
+  const contractSalaryDiffers =
+    currentContract?.salary_snapshot_status === "CAPTURED" &&
+    currentContract.salary_amount !== null &&
+    salary !== null &&
+    Number(currentContract.salary_amount) !== salary.amount
+
+  // Fase 12: alerta de vencimiento del contrato vigente (categorías derivadas).
+  const contractAlertTone =
+    contractAlert?.alert_state === "OVERDUE" || contractAlert?.alert_state === "DUE_TODAY"
+      ? "danger"
+      : contractAlert?.alert_state === "NO_END_DATE"
+        ? "warning"
+        : "info"
+
+  const showContractAlert =
+    !isInactive &&
+    !!contractAlert &&
+    (contractAlert.alert_state === "NO_END_DATE" ||
+      (contractAlert.days_remaining !== null && contractAlert.days_remaining <= 30))
+
   const lastBaja = React.useMemo(
     () => movements.find((m) => m.movement_type === "BAJA") || null,
     [movements]
@@ -494,8 +562,16 @@ const WorkerDetail = () => {
       />
 
       <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="mb-4 grid w-full max-w-md grid-cols-2">
+        <TabsList className="mb-4 grid w-full max-w-xl grid-cols-3">
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
+          <TabsTrigger value="salario">
+            Salario
+            {pendingContractAddendums.length > 0 && (
+              <span className="ml-2 rounded-full bg-sitecorp-warning/10 px-2 py-0.5 text-xs font-semibold text-sitecorp-warning">
+                {pendingContractAddendums.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
         </TabsList>
 
@@ -747,6 +823,7 @@ const WorkerDetail = () => {
                 </div>
               </div>
               {currentContract ? (
+                <>
                 <dl className="grid gap-4 sm:grid-cols-3">
                   <div>
                     <dt className="text-xs text-muted-foreground">Tipo de contrato</dt>
@@ -773,6 +850,112 @@ const WorkerDetail = () => {
                     </dd>
                   </div>
                 </dl>
+
+                {/* Salario del contrato: snapshot histórico (Fase 11A) */}
+                <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Salario al inicio del contrato
+                  </p>
+                  {currentContract.salary_snapshot_status === "CAPTURED" &&
+                  currentContract.salary_amount !== null ? (
+                    <>
+                      <p className="mt-1 text-sm font-medium text-ink">
+                        {formatSalary({
+                          amount: Number(currentContract.salary_amount),
+                          currency_code: currentContract.salary_currency_code || "",
+                        })}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Vigente desde {formatContractDate(currentContract.salary_effective_date)}
+                        {!contractSalaryDiffers && " · coincide con el salario actual"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-sm italic text-muted-foreground">
+                      No reconstruible: el importe histórico de este contrato no pudo determinarse de
+                      forma fiable y no se ha registrado ningún valor inventado.
+                    </p>
+                  )}
+                </div>
+
+                {/* Alerta de vencimiento contractual (Fase 12) */}
+                {showContractAlert && contractAlert && (
+                  <div
+                    className={`mt-3 rounded-xl border p-3 ${
+                      contractAlertTone === "danger"
+                        ? "border-sitecorp-danger/30 bg-sitecorp-danger/5"
+                        : contractAlertTone === "warning"
+                          ? "border-sitecorp-warning/30 bg-sitecorp-warning/5"
+                          : "border-blue-500/30 bg-blue-500/5"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <SiteCorpStatusBadge
+                        status={
+                          contractAlert.alert_state === "NO_END_DATE"
+                            ? "warning"
+                            : CONTRACT_ALERT_META[contractAlert.alert_state].badge
+                        }
+                      >
+                        {contractAlert.alert_state === "NO_END_DATE"
+                          ? "Requiere corrección"
+                          : CONTRACT_ALERT_META[contractAlert.alert_state].label}
+                      </SiteCorpStatusBadge>
+                      <span className="text-sm font-medium text-ink">
+                        {contractAlert.alert_state === "NO_END_DATE"
+                          ? "Contrato determinado sin fecha de finalización"
+                          : deadlineLabel(
+                              contractAlert.days_remaining,
+                              contractAlert.contract_end_date
+                            )}
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {contractAlert.alert_state === "NO_END_DATE"
+                        ? "Corrija la fecha de finalización del contrato o cámbielo a tiempo indeterminado."
+                        : `Inició ${formatContractDate(contractAlert.contract_start_date)}${
+                            contractAlert.contract_end_date
+                              ? ` · ${
+                                  contractAlert.days_remaining !== null &&
+                                  contractAlert.days_remaining < 0
+                                    ? "Finalizó"
+                                    : "Finaliza"
+                                } ${formatContractDate(contractAlert.contract_end_date)}`
+                              : ""
+                          }`}
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      La fecha del contrato genera una alerta administrativa: no se da de baja al
+                      trabajador, no se cierra su asignación ni se libera el puesto
+                      automáticamente.
+                    </p>
+
+                    {canManage && contractAlert.alert_state !== "NO_END_DATE" && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <SiteCorpButton
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          onClick={() => setChangeContractOpen(true)}
+                        >
+                          <FileSignature className="mr-1 h-3.5 w-3.5" /> Cambiar contrato
+                        </SiteCorpButton>
+                        <SiteCorpButton
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          onClick={() => setSeparateOpen(true)}
+                        >
+                          <UserMinus className="mr-1 h-3.5 w-3.5" /> Dar de baja
+                        </SiteCorpButton>
+                      </div>
+                    )}
+                  </div>
+                )}
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Sin contrato registrado para este trabajador.
@@ -902,6 +1085,246 @@ const WorkerDetail = () => {
         </div>
       </SiteCorpCard>
 
+        </TabsContent>
+
+        <TabsContent value="salario" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Salario operativo actual (derivado, nunca almacenado en el trabajador) */}
+            <SiteCorpCard
+              title="Salario actual"
+              description="Derivado del puesto, cargo y escala salarial vigentes"
+            >
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Grupo salarial</dt>
+                  <dd className="text-sm text-ink">
+                    {group ? `Grupo ${toRomanNumeral(group.sequence_number)}` : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Wallet className="h-3 w-3" /> Importe vigente
+                  </dt>
+                  <dd className="text-sm font-medium text-ink">
+                    {salary ? formatSalary(salary) : "Sin salario configurado"}
+                  </dd>
+                  {salary?.effective_from && (
+                    <p className="text-xs text-muted-foreground">
+                      Vigente desde {formatContractDate(salary.effective_from)}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Cargo</dt>
+                  <dd className="text-sm text-ink">{job?.name || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Puesto</dt>
+                  <dd className="text-sm text-ink">
+                    {isInactive ? "Último puesto: " : ""}
+                    {position?.name || "—"}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Se resuelve dinámicamente desde el valor vigente de la escala aplicable a la fecha
+                actual. No se almacena como salario del trabajador.
+              </p>
+            </SiteCorpCard>
+
+            {/* Snapshot contractual histórico */}
+            <SiteCorpCard
+              title="Salario del contrato"
+              description="Snapshot histórico registrado al crear el contrato vigente"
+            >
+              {!currentContract ? (
+                <p className="text-sm text-muted-foreground">
+                  Sin contrato vigente registrado para este trabajador.
+                </p>
+              ) : currentContract.salary_snapshot_status === "CAPTURED" &&
+                currentContract.salary_amount !== null ? (
+                <>
+                  <dl className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Importe del contrato</dt>
+                      <dd className="text-sm font-medium text-ink">
+                        {formatSalary({
+                          amount: Number(currentContract.salary_amount),
+                          currency_code: currentContract.salary_currency_code || "",
+                        })}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Fecha de vigencia</dt>
+                      <dd className="text-sm text-ink">
+                        {formatContractDate(currentContract.salary_effective_date)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Tipo de contrato</dt>
+                      <dd className="text-sm text-ink">
+                        {currentContract.contract_type?.name || "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Inicio del contrato</dt>
+                      <dd className="text-sm text-ink">
+                        {formatContractDate(currentContract.start_date)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {contractSalaryDiffers
+                      ? "El contrato conserva el importe histórico con el que se firmó: las modificaciones posteriores de la escala no lo sobrescriben."
+                      : "Coincide con el salario actual vigente."}
+                  </p>
+                </>
+              ) : (
+                <SiteCorpAlert type="warning" title="Salario del contrato no reconstruible">
+                  No fue posible determinar de forma fiable el importe salarial correspondiente al
+                  momento del contrato. No se ha registrado ningún valor inventado.
+                </SiteCorpAlert>
+              )}
+            </SiteCorpCard>
+          </div>
+
+          {/* Historial salarial */}
+          <SiteCorpCard
+            title="Historial salarial"
+            description="Evolución registrada del salario del trabajador (histórico: no se recalcula)"
+          >
+            {salaryHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Sin histórico salarial registrado para este trabajador.
+              </p>
+            ) : (
+              <ol className="relative space-y-4 border-l border-border pl-5">
+                {salaryHistory.map((entry) => (
+                  <li key={entry.id} className="relative">
+                    <span
+                      className={`absolute -left-[26px] top-1.5 h-3 w-3 rounded-full border-2 border-background ${
+                        entry.previous_amount === null
+                          ? "bg-sitecorp-success"
+                          : "bg-sitecorp-primary"
+                      }`}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-ink">
+                        {formatContractDate(entry.effective_date)}
+                      </span>
+                      <SiteCorpStatusBadge status="neutral">
+                        {SALARY_CHANGE_TYPE_LABELS[entry.change_type] || entry.change_type}
+                      </SiteCorpStatusBadge>
+                      {entry.group_sequence_number !== null && (
+                        <span className="text-xs text-muted-foreground">
+                          Grupo {toRomanNumeral(entry.group_sequence_number)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-sm text-ink">
+                      {entry.previous_amount === null ? (
+                        <>
+                          Salario inicial:{" "}
+                          <span className="font-medium">
+                            {formatSalary({
+                              amount: Number(entry.new_amount),
+                              currency_code: entry.currency_code,
+                            })}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {formatSalary({
+                            amount: Number(entry.previous_amount),
+                            currency_code: entry.currency_code,
+                          })}{" "}
+                          →{" "}
+                          <span className="font-medium">
+                            {formatSalary({
+                              amount: Number(entry.new_amount),
+                              currency_code: entry.currency_code,
+                            })}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    {entry.notes && (
+                      <p className="text-xs text-muted-foreground">{entry.notes}</p>
+                    )}
+                    {entry.addendums.map((addendum) => (
+                      <p
+                        key={addendum.id}
+                        className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+                      >
+                        <span>Anexo al contrato por cambio de salario</span>
+                        <SiteCorpStatusBadge
+                          status={ADDENDUM_STATUS_BADGE[addendum.status] || "neutral"}
+                        >
+                          {ADDENDUM_STATUS_LABELS[addendum.status] || addendum.status}
+                        </SiteCorpStatusBadge>
+                      </p>
+                    ))}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </SiteCorpCard>
+
+          {/* Anexos contractuales pendientes (registros, sin archivo todavía) */}
+          <SiteCorpCard
+            title="Documentos contractuales"
+            description="Anexos preparados por cambios salariales"
+          >
+            {pendingContractAddendums.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Sin anexos contractuales registrados.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {pendingContractAddendums.map((addendum) => (
+                  <div
+                    key={addendum.id}
+                    className="rounded-xl border border-border bg-muted/30 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-ink">
+                        Anexo al contrato por cambio de salario
+                      </span>
+                      <SiteCorpStatusBadge
+                        status={ADDENDUM_STATUS_BADGE[addendum.status] || "neutral"}
+                      >
+                        {ADDENDUM_STATUS_LABELS[addendum.status] || addendum.status}
+                      </SiteCorpStatusBadge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Fecha efectiva: {formatContractDate(addendum.effective_date)}
+                      {addendum.previous_amount !== null && addendum.new_amount !== null && (
+                        <>
+                          {" · "}
+                          {formatSalary({
+                            amount: Number(addendum.previous_amount),
+                            currency_code: addendum.currency_code || "",
+                          })}{" "}
+                          →{" "}
+                          {formatSalary({
+                            amount: Number(addendum.new_amount),
+                            currency_code: addendum.currency_code || "",
+                          })}
+                        </>
+                      )}
+                      {addendum.group_sequence_number !== null && (
+                        <> · Grupo {toRomanNumeral(addendum.group_sequence_number)}</>
+                      )}
+                    </p>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Estos anexos son registros contractuales pendientes de plantilla legal: todavía no
+                  existe un archivo generado ni se pueden descargar.
+                </p>
+              </div>
+            )}
+          </SiteCorpCard>
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-6">

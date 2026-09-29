@@ -12,7 +12,6 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SalaryGroupDialog } from "@/components/salary-group-dialog"
 import ReviewSalaryChangeDialog from "@/components/salary/ReviewSalaryChangeDialog"
-import { showSuccess } from "@/utils/toast"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { Scale, Plus, Edit3, Clock, AlertTriangle } from "lucide-react"
 import type { SalaryGroupWithCurrent, SalaryScale } from "@/contexts/SalaryContext"
@@ -57,10 +56,10 @@ const EntitySettingsSalary = () => {
   const [error, setError] = React.useState<string | null>(null)
   const [showAddGroup, setShowAddGroup] = React.useState(false)
   const [newGroupDesc, setNewGroupDesc] = React.useState("")
-  const [showEditValue, setShowEditValue] = React.useState<string | null>(null)
-  const [newAmount, setNewAmount] = React.useState("")
-  const [newEffectiveFrom, setNewEffectiveFrom] = React.useState("")
   const [canManageGlobal, setCanManageGlobal] = React.useState(false)
+  const [canManageEntitySalary, setCanManageEntitySalary] = React.useState(false)
+  // Cambio salarial en revisión (Fase 11A): nunca se guarda directamente.
+  const [changeGroup, setChangeGroup] = React.useState<SalaryGroupRow | null>(null)
   const [globalScale, setGlobalScale] = React.useState<SalaryScale | null>(null)
   const [showCreateEnterpriseScale, setShowCreateEnterpriseScale] = React.useState(false)
   const [newScaleName, setNewScaleName] = React.useState("")
@@ -107,6 +106,9 @@ const EntitySettingsSalary = () => {
           }
         } else {
           // EMPRESARIAL: Load entity-specific scale ONLY
+          const canManageEntity = await canManageSalary(currentEntity.id)
+          setCanManageEntitySalary(canManageEntity)
+
           const scaleData = await fetchEntityEmpresarialScale(currentEntity.id)
           if (scaleData) {
             setScale(scaleData)
@@ -132,7 +134,7 @@ const EntitySettingsSalary = () => {
       } finally {
         setLoading(false)
       }
-    }, [currentEntity?.id, currentEntity?.regime_id, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary])
+    }, [currentEntity?.id, currentEntity?.regime_id, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary, canManageSalary])
 
   React.useEffect(() => {
     loadScale()
@@ -156,23 +158,18 @@ const EntitySettingsSalary = () => {
       }
     }
 
-  const handleEditValue = async (groupId: string) => {
-    if (!newAmount || !newEffectiveFrom) return
-    try {
-      const amount = parseFloat(newAmount)
-      if (isNaN(amount) || amount <= 0) {
-        setError("El monto debe ser un número positivo")
-        return
-      }
-      await addSalaryValue(groupId, amount, "CUP", newEffectiveFrom)
-      setShowEditValue(null)
-      setNewAmount("")
-      setNewEffectiveFrom("")
-      await loadScale()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al actualizar el salario")
-    }
+  /**
+   * Fase 11A: modificar un importe salarial abre la revisión de impacto.
+   * Nunca se guarda directamente y nunca se destruye el valor anterior: se crea
+   * una nueva vigencia y se registran históricos/anexos de los afectados.
+   */
+  const openSalaryChange = (group: SalaryGroupRow) => {
+    setError(null)
+    setChangeGroup(group)
   }
+
+  const groupLabel = (group: SalaryGroupRow) =>
+    `Grupo ${group.roman_numeral}${group.description ? ` — ${group.description}` : ""}`
 
   const handleViewHistory = async (groupId: string) => {
     setHistoryGroupId(groupId)
@@ -349,11 +346,7 @@ const EntitySettingsSalary = () => {
                                                                                           <SiteCorpButton
                                                                                             size="sm"
                                                                                             variant="outline"
-                                                                                            onClick={() => {
-                                                                                              setShowEditValue(showEditValue === group.id ? null : group.id)
-                                                                                              setNewAmount("")
-                                                                                              setNewEffectiveFrom("")
-                                                                                            }}
+                                                                                            onClick={() => openSalaryChange(group)}
                                                                                           >
                                                                                             <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
                                                                                           </SiteCorpButton>
@@ -375,35 +368,6 @@ const EntitySettingsSalary = () => {
                                     )}
                 </div>
 
-                {/* Edit value form */}
-                {showEditValue && (
-                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                    <h4 className="text-sm font-semibold text-ink">Editar salario del grupo</h4>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <label className="text-xs text-muted-foreground">Nuevo salario</label>
-                        <SiteCorpInput
-                          type="number"
-                          placeholder="Monto"
-                          value={newAmount}
-                          onChange={(e) => setNewAmount(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs text-muted-foreground">Vigente desde</label>
-                        <SiteCorpInput
-                          type="date"
-                          value={newEffectiveFrom}
-                          onChange={(e) => setNewEffectiveFrom(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <SiteCorpButton onClick={() => handleEditValue(showEditValue)}>Guardar</SiteCorpButton>
-                      <SiteCorpButton variant="outline" onClick={() => setShowEditValue(null)}>Cancelar</SiteCorpButton>
-                    </div>
-                  </div>
-                )}
               </div>
             </SiteCorpCard>
           ) : (
@@ -456,7 +420,7 @@ const EntitySettingsSalary = () => {
                     {groups.filter(g => g.is_active).length} grupo(s) activo(s)
                   </p>
                 </div>
-                {isPlatformSuperAdmin && (
+                {(isPlatformSuperAdmin || canManageEntitySalary) && (
                   <SiteCorpButton onClick={() => setShowAddGroup(true)}>
                     <Plus className="mr-2 h-4 w-4" /> Añadir grupo salarial
                   </SiteCorpButton>
@@ -505,15 +469,11 @@ const EntitySettingsSalary = () => {
                       <SiteCorpStatusBadge status={group.is_active ? "success" : "warning"}>
                         {group.is_active ? "Activo" : "Inactivo"}
                       </SiteCorpStatusBadge>
-                      {isPlatformSuperAdmin && (
+                      {(isPlatformSuperAdmin || canManageEntitySalary) && (
                                                   <SiteCorpButton
                                                     size="sm"
                                                     variant="outline"
-                                                    onClick={() => {
-                                                      setShowEditValue(showEditValue === group.id ? null : group.id)
-                                                      setNewAmount("")
-                                                      setNewEffectiveFrom("")
-                                                    }}
+                                                    onClick={() => openSalaryChange(group)}
                                                   >
                                                     <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
                                                   </SiteCorpButton>
@@ -530,35 +490,6 @@ const EntitySettingsSalary = () => {
                 ))}
               </div>
 
-              {/* Edit value form */}
-              {showEditValue && (
-                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                  <h4 className="text-sm font-semibold text-ink">Editar salario del grupo</h4>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Nuevo salario</label>
-                      <SiteCorpInput
-                        type="number"
-                        placeholder="Monto"
-                        value={newAmount}
-                        onChange={(e) => setNewAmount(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Vigente desde</label>
-                      <SiteCorpInput
-                        type="date"
-                        value={newEffectiveFrom}
-                        onChange={(e) => setNewEffectiveFrom(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <SiteCorpButton onClick={() => handleEditValue(showEditValue)}>Guardar</SiteCorpButton>
-                    <SiteCorpButton variant="outline" onClick={() => setShowEditValue(null)}>Cancelar</SiteCorpButton>
-                  </div>
-                </div>
-              )}
             </div>
           </SiteCorpCard>
 
@@ -605,7 +536,21 @@ const EntitySettingsSalary = () => {
               </>
             )}
           
-                {/* Salary History Modal */}
+                      {/* Revisión de cambio salarial (Fase 11A): nunca se guarda sin revisar el impacto */}
+      <ReviewSalaryChangeDialog
+        open={!!changeGroup}
+        onOpenChange={(open) => {
+          if (!open) setChangeGroup(null)
+        }}
+        groupId={changeGroup?.id || null}
+        groupLabel={changeGroup ? groupLabel(changeGroup) : ""}
+        scaleLabel={scale?.name || "Escala salarial"}
+        onApplied={async () => {
+          await loadScale()
+        }}
+      />
+
+      {/* Salary History Modal */}
       <SalaryHistoryModal
         open={showHistoryModal}
         onOpenChange={(open) => setShowHistoryModal(open)}
