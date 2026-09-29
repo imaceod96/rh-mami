@@ -10,8 +10,10 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Building2, Factory, Layers, Plus } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Building2, Factory, Layers, Plus, ShieldOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { buildAccountCode } from "@/lib/sitecorp-account"
 
 interface OrganizationEntity {
   id: string
@@ -164,6 +166,8 @@ export const OrganizationEntityDialog = ({
   const { toast } = useToast()
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string | null>(null)
+  const [deactivateConfirmOpen, setDeactivateConfirmOpen] = React.useState(false)
+  const pendingSubmit = React.useRef<OrganizationEntityFormDataZod | null>(null)
 
   // El tenant activo solo se usa como respaldo; nunca se toma «el primer workspace».
   const effectiveTenantId = tenantId || currentTenant?.id || ""
@@ -191,6 +195,10 @@ export const OrganizationEntityDialog = ({
 
   React.useEffect(() => {
     if (open) {
+      setSaveError(null)
+      setDeactivateConfirmOpen(false)
+      pendingSubmit.current = null
+
       if (editingEntity) {
               reset({
                 name: editingEntity.name,
@@ -221,6 +229,19 @@ export const OrganizationEntityDialog = ({
   const onSubmit = async (data: OrganizationEntityFormDataZod) => {
     setSaveError(null)
 
+    // Desactivar una Cuenta SiteCorp es una acción sensible: requiere confirmación
+    if (editingEntity?.is_sitecorp_account === true && data.is_sitecorp_account !== true) {
+      pendingSubmit.current = data
+      setDeactivateConfirmOpen(true)
+      return
+    }
+
+    await persistEntity(data)
+  }
+
+  const persistEntity = async (data: OrganizationEntityFormDataZod) => {
+    setSaveError(null)
+
     if (!effectiveTenantId) {
       const message = "No hay un workspace seleccionado para crear la entidad."
       setSaveError(message)
@@ -234,14 +255,29 @@ export const OrganizationEntityDialog = ({
       setSaving(true)
 
       // Código interno de la entidad: se sigue generando automáticamente (nunca se pide)
+      const entityCode =
+        data.entity_type === "business_group" || !editingEntity
+          ? generateCode(data.entity_type)
+          : editingEntity?.code || generateCode(data.entity_type)
+
+      // Cuenta SiteCorp: la bandera es la única fuente de verdad de los módulos internos.
+      // El código de cuenta que exige el modelo se deriva del código interno y solo se
+      // genera al activar (nunca se regenera al reeditar: la operación es idempotente).
+      const wasSiteCorp = editingEntity?.is_sitecorp_account === true
+      const sitecorp = data.is_sitecorp_account === true
+      const accountCode = sitecorp
+        ? editingEntity?.account_code || buildAccountCode(entityCode)
+        : null
+      const accountIsActive = sitecorp ? (wasSiteCorp ? editingEntity?.account_is_active === true : true) : false
+
       const entityData = {
         ...data,
-        code:
-          data.entity_type === "business_group" || !editingEntity
-            ? generateCode(data.entity_type)
-            : editingEntity?.code || generateCode(data.entity_type),
+        code: entityCode,
         // parent_id siempre UUID real o NULL (nunca cadena vacía)
         parent_id: data.entity_type === "business_group" ? null : data.parent_id || null,
+        is_sitecorp_account: sitecorp,
+        account_code: accountCode,
+        account_is_active: accountIsActive,
       }
 
       if (editingEntity) {
@@ -465,7 +501,6 @@ export const OrganizationEntityDialog = ({
             )}
           </div>
 
-          {/* Description and sitecorp account are conditional */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-ink">Descripción</label>
             <SiteCorpInput
@@ -474,33 +509,44 @@ export const OrganizationEntityDialog = ({
             />
           </div>
 
-          {watch("is_sitecorp_account") && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Es cuenta SiteCorp</label>
-              <input
-                type="checkbox"
-                id="is_sitecorp_account"
-                checked={watch("is_sitecorp_account")}
-                onChange={(e) =>
-                  setValue("is_sitecorp_account", e.target.checked)
+          {/* Cuenta SiteCorp: habilita los módulos internos de gestión de la entidad */}
+          <div className="rounded-xl border border-border bg-muted/30 p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="entity-sitecorp-account"
+                checked={watch("is_sitecorp_account") === true}
+                onCheckedChange={(checked) =>
+                  setValue("is_sitecorp_account", checked === true)
                 }
-                className="h-4 w-4 rounded border-input text-sitecorp-primary focus:ring-sitecorp-primary"
               />
-              <label htmlFor="is_sitecorp_account" className="text-sm font-medium text-ink">
-                Es cuenta SiteCorp
-              </label>
+              <div className="min-w-0">
+                <label
+                  htmlFor="entity-sitecorp-account"
+                  className="text-sm font-medium text-ink"
+                >
+                  Cuenta SiteCorp
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {watch("is_sitecorp_account")
+                    ? "Activa los módulos internos de gestión para esta entidad."
+                    : "La entidad se mantendrá únicamente dentro de la estructura organizativa."}
+                </p>
+              </div>
             </div>
-          )}
 
-          {watch("is_sitecorp_account") && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Código de cuenta</label>
-              <SiteCorpInput
-                placeholder="Código de cuenta"
-                {...register("account_code")}
-              />
-            </div>
-          )}
+            {watch("is_sitecorp_account") && (
+              <p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
+                El código de la cuenta SiteCorp se genera automáticamente
+                {editingEntity?.account_code ? (
+                  <>
+                    :{" "}
+                    <span className="font-mono text-ink">{editingEntity.account_code}</span>
+                  </>
+                ) : null}
+                .
+              </p>
+            )}
+          </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <SiteCorpButton
@@ -515,10 +561,58 @@ export const OrganizationEntityDialog = ({
               type="submit"
               disabled={saving}
             >
-              {saving ? "Guardando..." : editingEntity ? "Actualizar" : "Crear"}
+              {saving ? "Guardando..." : editingEntity ? "Actualizar" : "Crear entidad"}
             </SiteCorpButton>
           </div>
         </form>
+
+        {/* Confirmación al desactivar una Cuenta SiteCorp */}
+        <Dialog open={deactivateConfirmOpen} onOpenChange={setDeactivateConfirmOpen}>
+          <DialogContent className="max-w-lg rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <ShieldOff className="h-5 w-5 text-sitecorp-warning" />
+                Desactivar Cuenta SiteCorp
+              </DialogTitle>
+              <DialogDescription>
+                Al desactivar la Cuenta SiteCorp, los módulos internos de esta entidad dejarán de
+                estar disponibles.
+              </DialogDescription>
+            </DialogHeader>
+
+            <p className="text-sm text-muted-foreground">
+              Los datos existentes no se eliminarán y podrán recuperarse si la cuenta vuelve a
+              activarse.
+            </p>
+
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+              <SiteCorpButton
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  pendingSubmit.current = null
+                  setDeactivateConfirmOpen(false)
+                }}
+                disabled={saving}
+              >
+                Cancelar
+              </SiteCorpButton>
+              <SiteCorpButton
+                type="button"
+                variant="destructive"
+                disabled={saving}
+                onClick={async () => {
+                  const pending = pendingSubmit.current
+                  pendingSubmit.current = null
+                  setDeactivateConfirmOpen(false)
+                  if (pending) await persistEntity(pending)
+                }}
+              >
+                {saving ? "Desactivando..." : "Desactivar"}
+              </SiteCorpButton>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   )

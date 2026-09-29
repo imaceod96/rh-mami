@@ -178,9 +178,13 @@ const Organization = () => {
               >
                 {entity.is_active ? "Activa" : "Inactiva"}
               </SiteCorpStatusBadge>
-              {entity.is_sitecorp_account && (
+              {entity.is_sitecorp_account ? (
                 <SiteCorpStatusBadge status="info">
-                  Cuenta
+                  Cuenta SiteCorp
+                </SiteCorpStatusBadge>
+              ) : (
+                <SiteCorpStatusBadge status="neutral">
+                  Sin gestión SiteCorp
                 </SiteCorpStatusBadge>
               )}
               {isPlatformSuperAdmin && (

@@ -369,7 +369,7 @@ const Organizations = () => {
                     </SiteCorpStatusBadge>
                   </>
                 ) : (
-                  <SiteCorpStatusBadge status="neutral">Sin cuenta propia</SiteCorpStatusBadge>
+                  <SiteCorpStatusBadge status="neutral">Sin gestión SiteCorp</SiteCorpStatusBadge>
                 )}
                 {!entity.is_active && <SiteCorpStatusBadge status="danger">Entidad inactiva</SiteCorpStatusBadge>}
               </div>
@@ -382,28 +382,19 @@ const Organizations = () => {
 
           <div className="flex flex-wrap items-center gap-2">
             {entity.entity_type === "business_group" && (
-                          <>
-                            <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
-                              <Plus className="mr-1 h-3.5 w-3.5" /> Empresa
-                            </SiteCorpButton>
-                            <SiteCorpButton size="sm" variant="outline" onClick={() => enterEntity(entity)}>
-                              <LogIn className="mr-1 h-3.5 w-3.5" /> Entrar
-                            </SiteCorpButton>
-                          </>
+                          <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
+                            <Plus className="mr-1 h-3.5 w-3.5" /> Empresa
+                          </SiteCorpButton>
                         )}
                         {entity.entity_type === "company" && (
-                          <>
-                            <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
-                              <Plus className="mr-1 h-3.5 w-3.5" /> UEB
-                            </SiteCorpButton>
-                            <SiteCorpButton size="sm" variant="outline" onClick={() => enterEntity(entity)}>
-                              <LogIn className="mr-1 h-3.5 w-3.5" /> Entrar
-                            </SiteCorpButton>
-                          </>
+                          <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateChildEntity(entity)}>
+                            <Plus className="mr-1 h-3.5 w-3.5" /> UEB
+                          </SiteCorpButton>
                         )}
-                        {entity.entity_type === "ueb" && (
+                        {/* Gestionar solo existe cuando la entidad es Cuenta SiteCorp */}
+                        {entity.is_sitecorp_account && (
                           <SiteCorpButton size="sm" variant="outline" onClick={() => enterEntity(entity)}>
-                            <LogIn className="mr-1 h-3.5 w-3.5" /> Entrar
+                            <LogIn className="mr-1 h-3.5 w-3.5" /> Gestionar
                           </SiteCorpButton>
                         )}
                         <SiteCorpButton size="sm" variant="outline" onClick={() => openEditEntity(entity)}>

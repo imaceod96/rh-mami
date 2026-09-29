@@ -23,11 +23,22 @@ import {
   fetchContractAlerts,
   requiresAttention,
 } from "@/lib/contract-alerts"
+import { ENTITY_INTERNAL_MODULES, hasSiteCorpAccount } from "@/lib/sitecorp-account"
 
 const entityTypeLabels: Record<string, string> = {
   business_group: "Grupo empresarial",
   company: "Empresa",
   ueb: "UEB",
+}
+
+/** Iconos de los módulos internos (la lista de módulos es única: ENTITY_INTERNAL_MODULES) */
+const moduleIcons: Record<string, React.ReactNode> = {
+  summary: <LayoutDashboard className="h-5 w-5" />,
+  candidates: <Users className="h-5 w-5" />,
+  staffing: <Briefcase className="h-5 w-5" />,
+  "contract-alerts": <CalendarClock className="h-5 w-5" />,
+  hiring: <Mail className="h-5 w-5" />,
+  settings: <Settings className="h-5 w-5" />,
 }
 
 const typeIcon = (type: string) => {
@@ -61,6 +72,9 @@ const EntityLayout = React.forwardRef<
 
   const entityId = currentEntity?.id
 
+  // Los módulos internos solo existen cuando la entidad es Cuenta SiteCorp
+  const modulesEnabled = hasSiteCorpAccount(currentEntity)
+
   // Contador de contratos por tiempo determinado que requieren atención (≤ 30 días
   // o ya vencidos). Cálculo derivado: no se persiste ninguna alerta.
   const [attentionCount, setAttentionCount] = React.useState<number | null>(null)
@@ -69,7 +83,7 @@ const EntityLayout = React.forwardRef<
     let cancelled = false
 
     const loadAttentionCount = async () => {
-      if (!entityId) {
+      if (!entityId || !modulesEnabled) {
         setAttentionCount(null)
         return
       }
@@ -89,7 +103,7 @@ const EntityLayout = React.forwardRef<
     return () => {
       cancelled = true
     }
-  }, [entityId, location.pathname])
+  }, [entityId, location.pathname, modulesEnabled])
 
   return (
     <div
@@ -115,61 +129,32 @@ const EntityLayout = React.forwardRef<
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-1">
-            {entityId && (
+            {entityId && modulesEnabled && (
               <>
-                <Link
-                  to={`/entity/${entityId}/summary`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <LayoutDashboard className="h-5 w-5" />
-                  Resumen
-                </Link>
-
-                <Link
-                  to={`/entity/${entityId}/candidates`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <Users className="h-5 w-5" />
-                  Candidatos
-                </Link>
-
-                <Link
-                  to={`/entity/${entityId}/staffing`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <Briefcase className="h-5 w-5" />
-                  Plantilla
-                </Link>
-
-                <Link
-                  to={`/entity/${entityId}/contracts/alerts`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <CalendarClock className="h-5 w-5" />
-                  <span className="flex-1">Vencimientos</span>
-                  {attentionCount !== null && attentionCount > 0 && (
-                    <span className="rounded-full bg-sitecorp-danger/10 px-2 py-0.5 text-xs font-semibold text-sitecorp-danger">
-                      {attentionCount}
-                    </span>
-                  )}
-                </Link>
-
-                <Link
-                  to={`/entity/${entityId}/hiring`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <Mail className="h-5 w-5" />
-                  Contratación
-                </Link>
-
-                <Link
-                  to={`/entity/${entityId}/settings`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                >
-                  <Settings className="h-5 w-5" />
-                  Ajustes
-                </Link>
+                {ENTITY_INTERNAL_MODULES.map((module) => (
+                  <Link
+                    key={module.key}
+                    to={module.path(entityId)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
+                  >
+                    {moduleIcons[module.key] || <Settings className="h-5 w-5" />}
+                    <span className="flex-1">{module.label}</span>
+                    {module.key === "contract-alerts" &&
+                      attentionCount !== null &&
+                      attentionCount > 0 && (
+                        <span className="rounded-full bg-sitecorp-danger/10 px-2 py-0.5 text-xs font-semibold text-sitecorp-danger">
+                          {attentionCount}
+                        </span>
+                      )}
+                  </Link>
+                ))}
               </>
+            )}
+
+            {entityId && !modulesEnabled && (
+              <p className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                Esta entidad no tiene habilitados los módulos internos de SiteCorp.
+              </p>
             )}
           </div>
         </nav>

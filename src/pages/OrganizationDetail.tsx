@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Factory,
   Layers,
+  LayoutDashboard,
   Pencil,
   Plus,
   Save,
@@ -407,9 +408,9 @@ const OrganizationDetail = () => {
                   {typeIcon(tenantEntity.entity_type)}
                   <span className="flex-1">{tenantEntity.name}</span>
                   <SiteCorpStatusBadge
-                    status={tenantEntity.is_sitecorp_account && tenantEntity.account_is_active ? "success" : "neutral"}
+                    status={tenantEntity.is_sitecorp_account ? "success" : "neutral"}
                   >
-                    {tenantEntity.is_sitecorp_account ? "Cuenta" : "Sin cuenta"}
+                    {tenantEntity.is_sitecorp_account ? "Cuenta SiteCorp" : "Sin gestión SiteCorp"}
                   </SiteCorpStatusBadge>
                 </DropdownMenuItem>
               ))}
@@ -511,13 +512,16 @@ const OrganizationDetail = () => {
             ) : (
               <div className="text-center py-8">
                 <p className="text-sm text-muted-foreground">
-                  Esta entidad no tiene una cuenta SiteCorp propia.
+                  Esta entidad no tiene habilitados los módulos internos de SiteCorp. Puedes
+                  activarlos desde «Editar entidad»; los módulos quedarán disponibles sin recargar
+                  la aplicación.
                 </p>
                 <SiteCorpButton
+                  className="mt-3"
                   variant="outline"
                   onClick={openEditEntity}
                 >
-                  Configurar cuenta SiteCorp
+                  Activar Cuenta SiteCorp
                 </SiteCorpButton>
               </div>
             )}
@@ -653,6 +657,16 @@ const OrganizationDetail = () => {
           </SiteCorpButton>
         )}
         
+        {/* Gestionar solo cuando la entidad es Cuenta SiteCorp (módulos internos) */}
+        {entity.is_sitecorp_account && (
+          <SiteCorpButton
+            onClick={() => navigate(`/entity/${entity.id}/summary`)}
+          >
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            Gestionar módulos internos
+          </SiteCorpButton>
+        )}
+
         <SiteCorpButton
           variant="outline"
           onClick={openEditEntity}
