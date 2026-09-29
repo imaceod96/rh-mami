@@ -660,7 +660,7 @@ const Organizations = () => {
         open={entityDialogOpen}
         onOpenChange={setEntityDialogOpen}
         onSaved={loadData}
-        tenants={tenants}
+        tenantId={entityDefaultTenant}
         entities={entities}
         editingEntity={editingEntity}
         defaultEntityType={entityDefaultType}

@@ -2,22 +2,16 @@ import * as React from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useAuth } from "@/contexts/AuthContext"
 import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { supabase } from "@/lib/supabase"
 import { Button as SiteCorpButton } from "@/components/ui/button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
+import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Building2, Factory, Layers, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-interface Tenant {
-  id: string
-  name: string
-  [key: string]: any
-}
 
 interface OrganizationEntity {
   id: string
@@ -105,7 +99,12 @@ interface OrganizationEntityDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void
-  tenants: Tenant[]
+  /**
+   * Workspace/tenant al que pertenecerá la entidad. Debe provenir siempre de una
+   * fuente autoritativa (el workspace desde el que se abre el formulario, el tenant
+   * activo o el tenant de la entidad que se edita). Nunca se deduce «el primero».
+   */
+  tenantId: string
   entities: OrganizationEntity[]
   editingEntity: OrganizationEntity | null
   defaultEntityType?: OrganizationEntity["entity_type"]
@@ -114,24 +113,60 @@ interface OrganizationEntityDialogProps {
   defaultRegime?: OrganizationEntity["regime_id"]
 }
 
+/** Traduce errores de Supabase a un mensaje entendible sin exponer detalles internos. */
+const describeEntityError = (error: {
+  code?: string
+  message?: string
+  details?: string | null
+  hint?: string | null
+}): string => {
+  const code = error?.code || ""
+  const message = error?.message || ""
+
+  if (code === "23503") {
+    return "El workspace o la entidad superior seleccionada no es válida."
+  }
+  if (code === "23505") {
+    return "Ya existe una entidad con ese nombre en este workspace."
+  }
+  if (code === "23514") {
+    return /parent/i.test(message)
+      ? "La entidad superior no es válida para este tipo de entidad."
+      : "Los datos no cumplen las reglas de la organización."
+  }
+  if (code === "23502") {
+    return "Falta un dato obligatorio para crear la entidad."
+  }
+  if (code === "22P02") {
+    return "Alguno de los identificadores enviados no es válido."
+  }
+  if (code === "42501" || /row-level security/i.test(message)) {
+    return "No tienes permiso para crear o editar entidades en este workspace."
+  }
+  if (code === "PGRST204") {
+    return "La estructura del formulario no coincide con la base de datos. Contacta al administrador."
+  }
+  return message || "No se pudo guardar la entidad."
+}
+
 export const OrganizationEntityDialog = ({
   open,
   onOpenChange,
   onSaved,
-  tenants,
+  tenantId,
   entities,
   editingEntity,
   defaultEntityType = "business_group",
   defaultParentId,
   defaultRegime = "PRESUPUESTADA",
 }: OrganizationEntityDialogProps) => {
-  const { user } = useAuth()
   const { currentTenant } = useCurrentTenant()
   const { toast } = useToast()
   const [saving, setSaving] = React.useState(false)
+  const [saveError, setSaveError] = React.useState<string | null>(null)
 
-  // Auto-assign tenant from current context, fallback to first tenant
-  const defaultTenantId = currentTenant?.id || tenants[0]?.id || ""
+  // El tenant activo solo se usa como respaldo; nunca se toma «el primer workspace».
+  const effectiveTenantId = tenantId || currentTenant?.id || ""
 
   const {
     register,
@@ -184,7 +219,16 @@ export const OrganizationEntityDialog = ({
   }, [open, editingEntity, reset, defaultEntityType, defaultParentId, defaultRegime])
 
   const onSubmit = async (data: OrganizationEntityFormDataZod) => {
-    if (!user) return
+    setSaveError(null)
+
+    if (!effectiveTenantId) {
+      const message = "No hay un workspace seleccionado para crear la entidad."
+      setSaveError(message)
+      toast({ title: "Error", description: message, variant: "destructive" })
+      return
+    }
+
+    let entityPayload: Record<string, unknown> | null = null
 
     try {
       setSaving(true)
@@ -192,13 +236,17 @@ export const OrganizationEntityDialog = ({
       // Código interno de la entidad: se sigue generando automáticamente (nunca se pide)
       const entityData = {
         ...data,
-        tenant_id: defaultTenantId,
-        code: data.entity_type === "business_group" || !editingEntity ? generateCode(data.entity_type) : editingEntity?.code || generateCode(data.entity_type),
-        updated_by: user.id,
+        code:
+          data.entity_type === "business_group" || !editingEntity
+            ? generateCode(data.entity_type)
+            : editingEntity?.code || generateCode(data.entity_type),
+        // parent_id siempre UUID real o NULL (nunca cadena vacía)
         parent_id: data.entity_type === "business_group" ? null : data.parent_id || null,
       }
 
       if (editingEntity) {
+        // El workspace de la entidad no se modifica al editar (aislamiento multi-tenant)
+        entityPayload = entityData
         const { error } = await supabase
           .from("organization_entities")
           .update(entityData)
@@ -211,9 +259,13 @@ export const OrganizationEntityDialog = ({
           description: `La entidad "${data.name}" ha sido actualizada correctamente.`,
         })
       } else {
+        // El tenant solo se fija al crear: proviene del workspace desde el que se abre el formulario
+        const insertData = { ...entityData, tenant_id: effectiveTenantId }
+        entityPayload = insertData
+
         const { error } = await supabase
           .from("organization_entities")
-          .insert([entityData])
+          .insert([insertData])
           .select()
           .single()
 
@@ -228,20 +280,45 @@ export const OrganizationEntityDialog = ({
       onSaved()
       onOpenChange(false)
     } catch (err) {
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "No se pudo guardar la entidad",
-        variant: "destructive",
+      const requestError = err as {
+        code?: string
+        message?: string
+        details?: string | null
+        hint?: string | null
+      }
+
+      console.error("[organization-entity] No se pudo guardar la entidad", {
+        code: requestError?.code,
+        message: requestError?.message,
+        details: requestError?.details,
+        hint: requestError?.hint,
+        payload: entityPayload,
       })
+
+      const description = describeEntityError(requestError)
+      setSaveError(description)
+      toast({ title: "Error", description, variant: "destructive" })
     } finally {
       setSaving(false)
     }
   }
 
-  // Filter parent entities based on entity type and tenant
-  const parentEntities = entities.filter(
-    (e) => e.id !== editingEntity?.id && e.tenant_id === defaultTenantId
-  )
+  // Entidades candidatas a ser padre: siempre del MISMO tenant (aislamiento por workspace)
+  const parentEntities = React.useMemo(() => {
+    const sameTenant = entities.filter(
+      (e) => e.id !== editingEntity?.id && e.tenant_id === effectiveTenantId
+    )
+    const active = sameTenant.filter((e) => e.is_active !== false)
+
+    // Al editar, la entidad superior actual debe seguir visible aunque esté inactiva
+    const currentParent = editingEntity?.parent_id
+      ? sameTenant.find((e) => e.id === editingEntity.parent_id)
+      : undefined
+    if (currentParent && !active.some((e) => e.id === currentParent.id)) {
+      return [currentParent, ...active]
+    }
+    return active
+  }, [entities, editingEntity, effectiveTenantId])
 
   // When entity type is business_group, no parents allowed
   // When entity type is company, only business_groups as parents
@@ -302,6 +379,8 @@ export const OrganizationEntityDialog = ({
             {editingEntity ? "Modifica los datos de la entidad." : "Completa los datos para crear una nueva entidad."}
           </DialogDescription>
         </DialogHeader>
+
+        {saveError && <SiteCorpAlert type="danger">{saveError}</SiteCorpAlert>}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">

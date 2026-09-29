@@ -278,7 +278,7 @@ const Organization = () => {
               open={entityDialogOpen}
               onOpenChange={setEntityDialogOpen}
               onSaved={loadEntities}
-              tenants={currentTenant ? [currentTenant as Tenant] : []}
+              tenantId={currentTenant?.id || ""}
               entities={entities}
               editingEntity={editingEntity}
               defaultEntityType="company"
