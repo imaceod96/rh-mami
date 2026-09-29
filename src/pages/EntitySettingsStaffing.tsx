@@ -45,6 +45,10 @@ import {
   Trash2,
 } from "lucide-react"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import {
+  NO_OCCUPATIONAL_CATEGORY_LABEL,
+  fetchOccupationalCategories,
+} from "@/lib/occupational-categories"
 import { JobForm } from "@/components/JobForm"
 import { AreaForm } from "@/components/AreaForm"
 import { PositionForm, type PositionJobOption, type PositionEditingData } from "@/components/PositionForm"
@@ -78,6 +82,10 @@ interface OrganizationJob {
   is_active: boolean
   created_at: string
   updated_at: string
+  // Fase 11A.2: información laboral del cargo
+  occupational_category_id: string | null
+  required_profession_or_trade: string | null
+  work_content: string | null
   area: {
     id: string
     name: string
@@ -85,6 +93,11 @@ interface OrganizationJob {
     is_active: boolean
     organization_entity_id: string
   }
+  occupational_category: {
+    id: string
+    name: string
+    code: string
+  } | null
   salary_group: {
     id: string
     salary_scale_id: string
@@ -187,6 +200,8 @@ const EntitySettingsStaffing = () => {
   const [canManage, setCanManage] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("active")
   const [areaFilter, setAreaFilter] = React.useState<string>("all")
+  // Fase 11A.2: filtro por categoría ocupacional del cargo
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all")
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set())
   const [notice, setNotice] = React.useState<{ type: "success" | "danger"; message: string } | null>(null)
 
@@ -281,6 +296,11 @@ const EntitySettingsStaffing = () => {
 
       if (jobsError) throw jobsError
 
+      // Catálogo global de categorías ocupacionales (Fase 11A.2): se resuelve en
+      // cliente por id para no depender de la detección de la nueva FK por PostgREST.
+      const categories = await fetchOccupationalCategories({ includeInactive: true })
+      const categoryById = new Map(categories.map(c => [c.id, c]))
+
       // Transform jobs to include current salary value
       const jobsWithCurrentValue = (jobsData as any[])?.map((job: any) => {
         const currentValue = job.salary_group?.salary_group_values?.length > 0
@@ -289,6 +309,9 @@ const EntitySettingsStaffing = () => {
 
         return {
           ...job,
+          occupational_category: job.occupational_category_id
+            ? categoryById.get(job.occupational_category_id) || null
+            : null,
           salary_group: job.salary_group
             ? {
                 ...job.salary_group,
@@ -398,6 +421,13 @@ const EntitySettingsStaffing = () => {
       result = result.filter(j => j.area_id === areaFilter)
     }
 
+    // Filter by occupational category (Fase 11A.2)
+    if (categoryFilter === "none") {
+      result = result.filter(j => !j.occupational_category_id)
+    } else if (categoryFilter !== "all") {
+      result = result.filter(j => j.occupational_category_id === categoryFilter)
+    }
+
     // Filter by status
     if (statusFilter === "active") {
       result = result.filter(j => j.is_active)
@@ -406,7 +436,22 @@ const EntitySettingsStaffing = () => {
     }
 
     return result
-  }, [jobs, areaFilter, statusFilter])
+  }, [jobs, areaFilter, statusFilter, categoryFilter])
+
+  // Opciones del filtro de categoría: sólo las categorías realmente usadas en los cargos
+  const categoryFilterOptions = React.useMemo(() => {
+    const map = new Map<string, string>()
+    jobs.forEach(j => {
+      if (j.occupational_category) map.set(j.occupational_category.id, j.occupational_category.name)
+    })
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [jobs])
+
+  // Cargos históricos sin categoría ocupacional (Fase 11A.2)
+  const jobsMissingCategory = React.useMemo(
+    () => jobs.filter(j => j.is_active && !j.occupational_category_id).length,
+    [jobs]
+  )
 
   const activeJobs = React.useMemo(() => jobs.filter(j => j.is_active), [jobs])
 
@@ -925,6 +970,18 @@ const EntitySettingsStaffing = () => {
                 ))}
               </SiteCorpSelect>
               <SiteCorpSelect
+                value={categoryFilter}
+                onValueChange={(value) => setCategoryFilter(value)}
+              >
+                <SelectItem value="all">Todas las categorías</SelectItem>
+                {categoryFilterOptions.map(category => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value="none">Sin categoría ocupacional</SelectItem>
+              </SiteCorpSelect>
+              <SiteCorpSelect
                 value={statusFilter}
                 onValueChange={(value) => setStatusFilter(value as StatusFilter)}
               >
@@ -933,6 +990,16 @@ const EntitySettingsStaffing = () => {
                 <SelectItem value="all">Todos</SelectItem>
               </SiteCorpSelect>
             </div>
+
+            {/* Cargos históricos sin categoría ocupacional */}
+            {jobsMissingCategory > 0 && (
+              <SiteCorpAlert type="warning">
+                {jobsMissingCategory === 1
+                  ? "1 cargo activo no tiene categoría ocupacional configurada."
+                  : `${jobsMissingCategory} cargos activos no tienen categoría ocupacional configurada.`}{" "}
+                Complétala editando el cargo; no se ha asignado ninguna categoría automáticamente.
+              </SiteCorpAlert>
+            )}
 
             {/* Empty state */}
             {jobs.length === 0 ? (
@@ -993,6 +1060,15 @@ const EntitySettingsStaffing = () => {
                                     })} ${job.salary_group.current_value.currency_code}`
                                   : "Sin salario"}
                               </span>
+                              {job.occupational_category ? (
+                                <SiteCorpStatusBadge status="info">
+                                  {job.occupational_category.name}
+                                </SiteCorpStatusBadge>
+                              ) : (
+                                <SiteCorpStatusBadge status="warning">
+                                  {NO_OCCUPATIONAL_CATEGORY_LABEL}
+                                </SiteCorpStatusBadge>
+                              )}
                               <SiteCorpStatusBadge status={job.is_active ? "success" : "neutral"}>
                                 {job.is_active ? "Activo" : "Inactivo"}
                               </SiteCorpStatusBadge>
@@ -1268,13 +1344,13 @@ const EntitySettingsStaffing = () => {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingJob ? "Editar cargo" : "Nuevo cargo"}</DialogTitle>
             <DialogDescription>
               {editingJob
-                ? "Modifica los datos del cargo."
-                : "Crea un nuevo cargo para esta entidad."}
+                ? "Modifica los datos, la clasificación laboral y el contenido de trabajo del cargo."
+                : "Crea un nuevo cargo para esta entidad: información general, clasificación laboral, retribución y contenido de trabajo."}
             </DialogDescription>
           </DialogHeader>
           <JobForm

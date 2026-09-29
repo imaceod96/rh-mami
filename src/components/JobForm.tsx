@@ -9,6 +9,11 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import {
+  NO_OCCUPATIONAL_CATEGORY_LABEL,
+  fetchOccupationalCategories,
+  type OccupationalCategory,
+} from "@/lib/occupational-categories"
 import type { SalaryGroupWithCurrent } from "@/contexts/SalaryContext"
 
 interface OrganizationArea {
@@ -22,15 +27,6 @@ interface OrganizationArea {
   is_active: boolean
   created_at: string
   updated_at: string
-}
-
-interface JobFormData {
-  name: string
-  code: string
-  area_id: string
-  description: string
-  salary_group_id: string
-  hierarchy_order: string
 }
 
 interface JobFormProps {
@@ -48,11 +44,13 @@ export const JobForm: React.FC<JobFormProps> = ({
 }) => {
   const [areas, setAreas] = React.useState<OrganizationArea[]>([])
   const [groups, setGroups] = React.useState<SalaryGroupWithCurrent[]>([])
+  const [categories, setCategories] = React.useState<OccupationalCategory[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [selectedGroup, setSelectedGroup] = React.useState<string>("")
+  const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [salaryVigente, setSalaryVigente] = React.useState<{
     amount: number
     currency_code: string
@@ -71,7 +69,7 @@ export const JobForm: React.FC<JobFormProps> = ({
 
     setLoading(true)
     setError(null)
-    let stage: "areas" | "escala" | "grupos" = "areas"
+    let stage: "areas" | "categorias" | "escala" | "grupos" = "areas"
 
     try {
       // Load active areas of this entity
@@ -84,6 +82,10 @@ export const JobForm: React.FC<JobFormProps> = ({
 
       if (areasError) throw areasError
       setAreas((areasData as OrganizationArea[]) || [])
+
+      // Catálogo GLOBAL de categorías ocupacionales (nunca hardcodeado en React)
+      stage = "categorias"
+      setCategories(await fetchOccupationalCategories())
 
       stage = "escala"
 
@@ -167,7 +169,9 @@ export const JobForm: React.FC<JobFormProps> = ({
       setError(
         stage === "areas"
           ? "No se pudieron cargar las áreas."
-          : "No se pudieron cargar los grupos salariales."
+          : stage === "categorias"
+            ? "No se pudieron cargar las categorías ocupacionales."
+            : "No se pudieron cargar los grupos salariales."
       )
     } finally {
       setLoading(false)
@@ -179,27 +183,35 @@ export const JobForm: React.FC<JobFormProps> = ({
   }, [loadData])
 
   React.useEffect(() => {
-    if (editingJob) {
-      setSelectedGroup(editingJob.salary_group_id)
-      // Load the current salary value for the editing job's group
-      if (editingJob.salary_group_id) {
-        supabase
-          .from("salary_group_values")
-          .select("*")
-          .eq("salary_group_id", editingJob.salary_group_id)
-          .eq("is_active", true)
-          .order("effective_from", { ascending: false })
-          .limit(1)
-          .single()
-          .then(({ data, error }) => {
-            if (!error && data) {
-              setSalaryVigente({
-                amount: data.amount,
-                currency_code: data.currency_code,
-              })
-            }
-          })
-      }
+    if (!editingJob) {
+      // Cargo nuevo: clasificación y retribución parten vacías
+      setSelectedGroup("")
+      setSelectedCategory("")
+      setSalaryVigente(null)
+      return
+    }
+
+    setSelectedGroup(editingJob.salary_group_id)
+    setSelectedCategory(editingJob.occupational_category_id || "")
+
+    // Load the current salary value for the editing job's group
+    if (editingJob.salary_group_id) {
+      supabase
+        .from("salary_group_values")
+        .select("*")
+        .eq("salary_group_id", editingJob.salary_group_id)
+        .eq("is_active", true)
+        .order("effective_from", { ascending: false })
+        .limit(1)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setSalaryVigente({
+              amount: data.amount,
+              currency_code: data.currency_code,
+            })
+          }
+        })
     }
   }, [editingJob])
 
@@ -237,6 +249,10 @@ export const JobForm: React.FC<JobFormProps> = ({
       const code = (form.elements.namedItem("code") as HTMLInputElement).value.trim()
       const area_id = (form.elements.namedItem("area_id") as HTMLSelectElement).value
       const description = (form.elements.namedItem("description") as HTMLTextAreaElement).value.trim() || null
+      const required_profession_or_trade =
+        ((form.elements.namedItem("required_profession_or_trade") as HTMLInputElement)?.value || "").trim() || null
+      const work_content =
+        ((form.elements.namedItem("work_content") as HTMLTextAreaElement)?.value || "").trim() || null
       const hierarchy_order = parseInt(
         (form.elements.namedItem("hierarchy_order") as HTMLInputElement).value,
         10
@@ -252,6 +268,12 @@ export const JobForm: React.FC<JobFormProps> = ({
     }
     if (!area_id) {
       setFormError("El área es obligatoria")
+      return
+    }
+    // Fase 11A.2: obligatoria para cargos nuevos. Los cargos históricos sin
+    // categoría pueden completarse después sin bloquear su edición.
+    if (!selectedCategory && !editingJob) {
+      setFormError("La categoría ocupacional es obligatoria")
       return
     }
     if (!selectedGroup) {
@@ -290,6 +312,9 @@ export const JobForm: React.FC<JobFormProps> = ({
             description,
             salary_group_id: selectedGroup,
             hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
+            occupational_category_id: selectedCategory || null,
+            required_profession_or_trade,
+            work_content,
           })
           .eq("id", editingJob.id)
 
@@ -307,6 +332,9 @@ export const JobForm: React.FC<JobFormProps> = ({
             salary_group_id: selectedGroup,
             hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
             is_active: true,
+            occupational_category_id: selectedCategory,
+            required_profession_or_trade,
+            work_content,
           })
 
         if (insertError) throw insertError
@@ -318,6 +346,8 @@ export const JobForm: React.FC<JobFormProps> = ({
         err instanceof Error ? err.message : "Error al guardar el cargo"
       if (message.includes("organization_jobs_organization_entity_id_code_unique")) {
         setFormError("Ya existe un cargo con ese código en esta entidad")
+      } else if (message.includes("categoría ocupacional")) {
+        setFormError("La categoría ocupacional es obligatoria para los cargos nuevos.")
       } else {
         setFormError(message)
       }
@@ -339,137 +369,229 @@ export const JobForm: React.FC<JobFormProps> = ({
     )
   }
 
+  const missingCategory = !!editingJob && !editingJob.occupational_category_id
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {formError && <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>}
 
-      <div className="space-y-2">
-        <Label htmlFor="job-name">Nombre *</Label>
-        <SiteCorpInput
-          id="job-name"
-          name="name"
-          defaultValue={editingJob?.name || ""}
-          placeholder="Ej.: Especialista de Recursos Humanos"
-          required
-        />
-      </div>
+      {/* INFORMACIÓN GENERAL */}
+      <div className="space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Información general
+        </p>
 
-      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="job-code">Código *</Label>
+          <Label htmlFor="job-name">Nombre *</Label>
           <SiteCorpInput
-            id="job-code"
-            name="code"
-            defaultValue={editingJob?.code || ""}
-            placeholder="Ej.: ESP-RRHH"
+            id="job-name"
+            name="name"
+            defaultValue={editingJob?.name || ""}
+            placeholder="Ej.: Especialista de Recursos Humanos"
             required
           />
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="job-code">Código *</Label>
+            <SiteCorpInput
+              id="job-code"
+              name="code"
+              defaultValue={editingJob?.code || ""}
+              placeholder="Ej.: ESP-RRHH"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="job-order">Orden</Label>
+            <SiteCorpInput
+              id="job-order"
+              name="hierarchy_order"
+              type="number"
+              defaultValue={editingJob?.hierarchy_order || 0}
+              placeholder="0"
+            />
+          </div>
+        </div>
+
         <div className="space-y-2">
-          <Label htmlFor="job-order">Orden</Label>
-          <SiteCorpInput
-            id="job-order"
-            name="hierarchy_order"
-            type="number"
-            defaultValue={editingJob?.hierarchy_order || 0}
-            placeholder="0"
+          <Label htmlFor="job-area">Área *</Label>
+          <SiteCorpSelect
+            name="area_id"
+            defaultValue={editingJob?.area_id || ""}
+            required
+          >
+            <option value="">Seleccionar área</option>
+            {areas.map((area) => (
+              <option key={area.id} value={area.id}>
+                {area.name} ({area.code})
+              </option>
+            ))}
+          </SiteCorpSelect>
+          <p className="text-xs text-muted-foreground">
+            Solo áreas activas de esta entidad.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="job-description">Descripción</Label>
+          <Textarea
+            id="job-description"
+            name="description"
+            defaultValue={editingJob?.description || ""}
+            placeholder="Descripción opcional del cargo"
+            rows={2}
           />
         </div>
       </div>
 
-      <div className="space-y-2">
-              <Label htmlFor="job-area">Área *</Label>
-              <SiteCorpSelect
-                name="area_id"
-                defaultValue={editingJob?.area_id || ""}
-                required
-              >
-                <option value="">Seleccionar área</option>
-                {areas.map((area) => (
-                  <option key={area.id} value={area.id}>
-                    {area.name} ({area.code})
-                  </option>
-                ))}
-              </SiteCorpSelect>
-              <p className="text-xs text-muted-foreground">
-                Solo áreas activas de esta entidad.
-              </p>
-            </div>
-      
-            <div className="space-y-2">
-              <Label htmlFor="job-group">Grupo salarial *</Label>
-              <SiteCorpSelect
-                value={selectedGroup}
-                onValueChange={handleGroupChange}
-                required
-                disabled={!!scaleInfo && !scaleInfo.scaleId}
-              >
-          <option value="">Seleccionar grupo salarial</option>
-          {groups.map((g) => (
-            <option key={g.group.id} value={g.group.id}>
-              Grupo {g.roman_numeral}
-              {g.current_value
-                ? ` — ${g.current_value.amount.toLocaleString("es-CU", {
-                    minimumFractionDigits: 2,
-                  })} ${g.current_value.currency_code}`
-                : " — Salario no configurado"}
-            </option>
-          ))}
-        </SiteCorpSelect>
-        {scaleInfo && scaleInfo.scaleId ? (
-          <>
-            <p className="text-xs text-muted-foreground">
-              Escala: {scaleInfo.scaleName}
-            </p>
-            {groups.length === 0 && (
-              <p className="text-xs text-sitecorp-danger">
-                {scaleInfo.scopeType === "PRESUPUESTADA_GLOBAL"
-                  ? "La escala salarial presupuestada todavía no tiene grupos configurados."
-                  : "La escala salarial de esta entidad todavía no tiene grupos configurados."}
-              </p>
-            )}
-          </>
-        ) : scaleInfo && scaleInfo.regime === "EMPRESARIAL" ? (
-          <div className="space-y-1">
-            <p className="text-xs text-sitecorp-danger">
-              No hay escala salarial empresarial configurada para esta entidad.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate(`/entity/${entityId}/settings/salary`)}
-              className="text-xs font-medium text-sitecorp-primary underline underline-offset-2 hover:opacity-80"
-            >
-              Ir a Ajustes → Escala salarial
-            </button>
-          </div>
-        ) : scaleInfo ? (
-          <p className="text-xs text-sitecorp-danger">
-            La escala salarial presupuestada todavía no tiene grupos configurados.
-          </p>
-        ) : null}
-      </div>
+      {/* CLASIFICACIÓN LABORAL */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Clasificación laboral
+        </p>
 
-      {salaryVigente && (
-        <div className="rounded-lg border border-border bg-muted/30 p-3">
-          <p className="text-xs text-muted-foreground">Salario vigente</p>
-          <p className="text-lg font-semibold text-ink">
-            {salaryVigente.amount.toLocaleString("es-CU", {
-              minimumFractionDigits: 2,
-            })}{" "}
-            {salaryVigente.currency_code}
+        {missingCategory && (
+          <SiteCorpAlert type="warning">
+            {NO_OCCUPATIONAL_CATEGORY_LABEL}. Complete la clasificación laboral del cargo; no se ha
+            asignado ninguna categoría automáticamente.
+          </SiteCorpAlert>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="job-occupational-category">Categoría ocupacional *</Label>
+          <SiteCorpSelect
+            value={selectedCategory}
+            onValueChange={setSelectedCategory}
+          >
+            <option value="">
+              {missingCategory ? "Sin categoría ocupacional configurada" : "Seleccionar categoría"}
+            </option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </SiteCorpSelect>
+          <p className="text-xs text-muted-foreground">
+            Catálogo global de SiteCorp (Operario, Administrativo, Servicios, Técnico).
           </p>
         </div>
-      )}
 
-      <div className="space-y-2">
-        <Label htmlFor="job-description">Descripción</Label>
-        <Textarea
-          id="job-description"
-          name="description"
-          defaultValue={editingJob?.description || ""}
-          placeholder="Descripción opcional del cargo"
-          rows={2}
-        />
+        <div className="space-y-2">
+          <Label htmlFor="job-required-profession">Profesión u oficio requerido</Label>
+          <SiteCorpInput
+            id="job-required-profession"
+            name="required_profession_or_trade"
+            defaultValue={editingJob?.required_profession_or_trade || ""}
+            placeholder="Ej.: Licenciado en Contabilidad"
+          />
+          <p className="text-xs text-muted-foreground">
+            Requisito del cargo. Es independiente de la profesión u oficio que posea la persona
+            contratada.
+          </p>
+        </div>
+      </div>
+
+      {/* RETRIBUCIÓN */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Retribución
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="job-group">Grupo salarial *</Label>
+          <SiteCorpSelect
+            value={selectedGroup}
+            onValueChange={handleGroupChange}
+            required
+            disabled={!!scaleInfo && !scaleInfo.scaleId}
+          >
+            <option value="">Seleccionar grupo salarial</option>
+            {groups.map((g) => (
+              <option key={g.group.id} value={g.group.id}>
+                Grupo {g.roman_numeral}
+                {g.current_value
+                  ? ` — ${g.current_value.amount.toLocaleString("es-CU", {
+                      minimumFractionDigits: 2,
+                    })} ${g.current_value.currency_code}`
+                  : " — Salario no configurado"}
+              </option>
+            ))}
+          </SiteCorpSelect>
+          {scaleInfo && scaleInfo.scaleId ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Escala: {scaleInfo.scaleName}
+              </p>
+              {groups.length === 0 && (
+                <p className="text-xs text-sitecorp-danger">
+                  {scaleInfo.scopeType === "PRESUPUESTADA_GLOBAL"
+                    ? "La escala salarial presupuestada todavía no tiene grupos configurados."
+                    : "La escala salarial de esta entidad todavía no tiene grupos configurados."}
+                </p>
+              )}
+            </>
+          ) : scaleInfo && scaleInfo.regime === "EMPRESARIAL" ? (
+            <div className="space-y-1">
+              <p className="text-xs text-sitecorp-danger">
+                No hay escala salarial empresarial configurada para esta entidad.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate(`/entity/${entityId}/settings/salary`)}
+                className="text-xs font-medium text-sitecorp-primary underline underline-offset-2 hover:opacity-80"
+              >
+                Ir a Ajustes → Escala salarial
+              </button>
+            </div>
+          ) : scaleInfo ? (
+            <p className="text-xs text-sitecorp-danger">
+              La escala salarial presupuestada todavía no tiene grupos configurados.
+            </p>
+          ) : null}
+        </div>
+
+        {/* Salario derivado: nunca se escribe manualmente desde el cargo */}
+        {salaryVigente && (
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Salario actual</p>
+              <SiteCorpStatusBadge status="info">Calculado automáticamente</SiteCorpStatusBadge>
+            </div>
+            <p className="text-lg font-semibold text-ink">
+              {salaryVigente.amount.toLocaleString("es-CU", {
+                minimumFractionDigits: 2,
+              })}{" "}
+              {salaryVigente.currency_code}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Derivado del grupo salarial y de la escala aplicable a la entidad.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* CONTENIDO DE TRABAJO */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Contenido de trabajo
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="job-work-content">Funciones / contenido de trabajo</Label>
+          <Textarea
+            id="job-work-content"
+            name="work_content"
+            defaultValue={editingJob?.work_content || ""}
+            placeholder="Funciones y responsabilidades generales correspondientes al cargo"
+            rows={6}
+          />
+          <p className="text-xs text-muted-foreground">
+            Este contenido pertenece al cargo y se reutiliza desde sus puestos.
+          </p>
+        </div>
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
