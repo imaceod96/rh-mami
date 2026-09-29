@@ -26,11 +26,26 @@ import {
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
-import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
 } from "@/lib/position-schedule"
+import {
+  ContractRetributionFields,
+  ContractSignatureFields,
+} from "@/components/contracts/ContractConditionsFields"
+import {
+  ContractFormalizationAlerts,
+  EMPTY_FORMALIZATION_PENDING,
+} from "@/components/contracts/ContractFormalizationAlerts"
+import {
+  buildComponentsPayload,
+  fetchPaymentMethods,
+  hasInvalidComponent,
+  type CompensationComponentDraft,
+  type ContractFormalizationPending,
+  type PaymentMethodOption,
+} from "@/lib/contract-conditions"
 
 interface PositionRow {
   id: string
@@ -139,6 +154,13 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [contractStartDate, setContractStartDate] = React.useState("")
   const [contractEndDate, setContractEndDate] = React.useState("")
   const [notes, setNotes] = React.useState("")
+  // Fase 11A.5: condiciones formalizadas en el contrato
+  const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodOption[]>([])
+  const [signatureDate, setSignatureDate] = React.useState("")
+  const [signaturePlace, setSignaturePlace] = React.useState("")
+  const [paymentMethodId, setPaymentMethodId] = React.useState("")
+  const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
+  const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
   const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
     null
   )
@@ -236,6 +258,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       })
       setCanManageOrganization(!!canManageOrg)
 
+      // Fase 11A.5: catálogo global de formas de pago (A tiempo / A rendimiento)
+      setPaymentMethods(await fetchPaymentMethods())
+
       setApplicableScaleId(await resolveApplicableScaleId(entityId))
       const groupIds = mapped
         .map((p) => p.job?.salary_group?.id)
@@ -259,6 +284,11 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setContractStartDate("")
     setContractEndDate("")
     setNotes("")
+    setSignatureDate("")
+    setSignaturePlace("")
+    setPaymentMethodId("")
+    setComponents([])
+    setPending(null)
     setRepresentativeAssignmentId(null)
     setError(null)
     setOccupancy({})
@@ -319,11 +349,13 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     : 0
 
   /**
-   * Fase 11A.1: fecha contractual usada para resolver el representante que comparece.
-   * Mientras el modelo no incorpore `signature_date`, se utiliza el inicio del contrato
-   * (fecha efectiva) de forma explícita.
+   * Fase 11A.5: el representante que comparece se resuelve por la FECHA DE FIRMA
+   * (no por la fecha de inicio), porque es la fecha en que se formaliza el contrato.
    */
-  const contractReferenceDate = contractStartDate || hireDate
+  const contractReferenceDate = signatureDate
+  const baseSalaryAmount = selectedSalary?.amount ?? null
+  const baseSalaryCurrency = selectedSalary?.currency_code ?? null
+  const formalizationBlocked = (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0
 
   React.useEffect(() => {
     if (!isDetermined) setContractEndDate("")
@@ -346,6 +378,32 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     }
     if (!contractTypeId) {
       setError("Selecciona un tipo de contrato.")
+      return
+    }
+    if (!signatureDate) {
+      setError("La fecha de firma del contrato es obligatoria.")
+      return
+    }
+    if (!signaturePlace.trim()) {
+      setError("El lugar de firma es obligatorio.")
+      return
+    }
+    if (!paymentMethodId) {
+      setError("Selecciona la forma de pago.")
+      return
+    }
+    if (hasInvalidComponent(components)) {
+      setError(
+        "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)."
+      )
+      return
+    }
+    if (formalizationBlocked) {
+      setError(
+        `No se puede completar la formalización del contrato. Datos pendientes: ${(
+          pending || EMPTY_FORMALIZATION_PENDING
+        ).blocking.join(" · ")}`
+      )
       return
     }
     if (!representativeAssignmentId) {
@@ -376,6 +434,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         p_contract_end_date: isDetermined ? contractEndDate || null : null,
         p_notes: notes.trim() || null,
         p_representative_assignment_id: representativeAssignmentId,
+        p_signature_date: signatureDate,
+        p_signature_place: signaturePlace.trim(),
+        p_payment_method_id: paymentMethodId,
+        p_compensation_components: buildComponentsPayload(components),
       })
       if (rpcError) throw rpcError
 
@@ -406,6 +468,14 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         friendly = "El contrato por tiempo determinado requiere una fecha final."
       } else if (/posterior/i.test(msg)) {
         friendly = "La fecha final del contrato debe ser posterior a su inicio."
+      } else if (/Datos pendientes/i.test(msg)) {
+        friendly = msg
+      } else if (/concepto retributivo|n[uú]mero v[aá]lido|negativo/i.test(msg)) {
+        friendly =
+          "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)."
+      } else if (/escala salarial/i.test(msg)) {
+        friendly =
+          "No existe una escala salarial aplicable configurada para esta entidad. Complete la configuración salarial antes de formalizar el contrato."
       } else if (/representante/i.test(msg)) {
         friendly =
           "No existe ningún representante autorizado configurado para la fecha del contrato."
