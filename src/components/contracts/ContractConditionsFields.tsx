@@ -87,7 +87,7 @@ export const ContractSignatureFields: React.FC<ContractSignatureFieldsProps> = (
       <SiteCorpSelect
         value={paymentMethodId}
         onValueChange={onPaymentMethodIdChange}
-        disabled={disabled}
+        className={disabled ? "pointer-events-none opacity-50" : undefined}
       >
         <option value="">Seleccionar forma</option>
         {paymentMethods.map((method) => (

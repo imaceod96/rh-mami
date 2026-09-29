@@ -46,6 +46,7 @@ import {
 interface AlertTarget {
   workerId: string
   workerName: string
+  identification: string
   situation: WorkerCurrentSituation
   contract: CurrentContractInfo | null
 }
@@ -178,6 +179,7 @@ const EntityContractAlerts = () => {
   const buildTarget = (row: ContractAlertRow): AlertTarget => ({
     workerId: row.worker_id,
     workerName: row.worker_name,
+    identification: row.identification,
     situation: {
       positionId: null,
       positionName: row.position_name,
@@ -640,6 +642,15 @@ const EntityContractAlerts = () => {
           workerId={changeTarget.workerId}
           entityId={entityId as string}
           current={changeTarget.contract}
+          workerName={changeTarget.workerName}
+          workerIdentification={changeTarget.identification}
+          positionId={changeTarget.situation.positionId}
+          positionName={changeTarget.situation.positionName}
+          jobName={changeTarget.situation.jobName}
+          areaName={changeTarget.situation.areaName}
+          salaryGroupSequence={changeTarget.situation.groupSequence}
+          baseSalaryAmount={changeTarget.situation.salary?.amount ?? null}
+          baseSalaryCurrency={changeTarget.situation.salary?.currency_code ?? null}
           onSuccess={() => {
             setChangeTarget(null)
             load()
