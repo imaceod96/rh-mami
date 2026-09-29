@@ -89,13 +89,21 @@ import {
   type SalaryValue,
 } from "@/lib/salary"
 import {
-  ADDENDUM_STATUS_BADGE,
-  ADDENDUM_STATUS_LABELS,
   SALARY_CHANGE_TYPE_LABELS,
   fetchWorkerSalaryHistory,
-  pendingAddendums,
   type WorkerSalaryHistoryEntry,
 } from "@/lib/worker-salary"
+import {
+  ADDENDUM_STATUS_BADGE,
+  ADDENDUM_STATUS_LABELS,
+  addendumReasonLabel,
+  fetchWorkerAddendums,
+  fetchWorkerContractualConditions,
+  isAddendumPending,
+  type ContractAddendum,
+  type WorkerContractualConditions,
+} from "@/lib/addendums"
+import { ContractAddendumsSection } from "@/components/addendums/ContractAddendumsSection"
 import {
   CONTRACT_ALERT_META,
   deadlineLabel,
@@ -235,6 +243,10 @@ const WorkerDetail = () => {
   const [changeContractOpen, setChangeContractOpen] = React.useState(false)
   const [movements, setMovements] = React.useState<WorkerMovement[]>([])
   const [salaryHistory, setSalaryHistory] = React.useState<WorkerSalaryHistoryEntry[]>([])
+  // Fase 11A.6: anexos al contrato y condiciones contractuales formalizadas vigentes
+  const [addendums, setAddendums] = React.useState<ContractAddendum[]>([])
+  const [contractualConditions, setContractualConditions] =
+    React.useState<WorkerContractualConditions | null>(null)
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
   // Fase 11A.3: horario habitual del puesto vigente (no se copia al trabajador)
   const [positionSegments, setPositionSegments] = React.useState<PositionScheduleSegment[]>([])
@@ -528,13 +540,27 @@ const WorkerDetail = () => {
         setContractAlert(null)
       }
 
-      // Fase 11A: histórico salarial y anexos contractuales pendientes (registros
-      // históricos: nunca se recalculan ni se sobrescriben).
+      // Fase 11A: histórico salarial (evolución económica: nunca se recalcula).
       try {
         setSalaryHistory(await fetchWorkerSalaryHistory(workerId))
       } catch (historyErr) {
         console.error("Error loading salary history:", historyErr)
         setSalaryHistory([])
+      }
+
+      // Fase 11A.6: anexos al contrato y condiciones formalizadas vigentes
+      // (contrato original + anexos formalizados en orden efectivo).
+      try {
+        setAddendums(await fetchWorkerAddendums(workerId))
+      } catch (addendumErr) {
+        console.error("Error loading contract addendums:", addendumErr)
+        setAddendums([])
+      }
+      try {
+        setContractualConditions(await fetchWorkerContractualConditions(workerId))
+      } catch (conditionsErr) {
+        console.error("Error loading contractual conditions:", conditionsErr)
+        setContractualConditions(null)
       }
     } catch (err) {
       console.error("Error loading worker:", err)
@@ -700,9 +726,10 @@ const WorkerDetail = () => {
 
   const salary = salaryForGroup(applicableScaleId, group, salaryValuesByGroup)
 
+  // Anexos pendientes de formalizar (todavía NO forman parte de las condiciones formalizadas)
   const pendingContractAddendums = React.useMemo(
-    () => pendingAddendums(salaryHistory),
-    [salaryHistory]
+    () => addendums.filter((row) => isAddendumPending(row.status)),
+    [addendums]
   )
 
   // El snapshot contractual es histórico: puede diferir del salario operativo actual.
@@ -1711,7 +1738,10 @@ const WorkerDetail = () => {
                         key={addendum.id}
                         className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
                       >
-                        <span>Anexo al contrato por cambio de salario</span>
+                        <span>
+                          Anexo al contrato
+                          {addendum.addendum_number ? ` Nº ${addendum.addendum_number}` : ""}
+                        </span>
                         <SiteCorpStatusBadge
                           status={ADDENDUM_STATUS_BADGE[addendum.status] || "neutral"}
                         >
@@ -1725,61 +1755,30 @@ const WorkerDetail = () => {
             )}
           </SiteCorpCard>
 
-          {/* Anexos contractuales pendientes (registros, sin archivo todavía) */}
-          <SiteCorpCard
-            title="Documentos contractuales"
-            description="Anexos preparados por cambios salariales"
-          >
-            {pendingContractAddendums.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Sin anexos contractuales registrados.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {pendingContractAddendums.map((addendum) => (
-                  <div
-                    key={addendum.id}
-                    className="rounded-xl border border-border bg-muted/30 p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-ink">
-                        Anexo al contrato por cambio de salario
-                      </span>
-                      <SiteCorpStatusBadge
-                        status={ADDENDUM_STATUS_BADGE[addendum.status] || "neutral"}
-                      >
-                        {ADDENDUM_STATUS_LABELS[addendum.status] || addendum.status}
-                      </SiteCorpStatusBadge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Fecha efectiva: {formatContractDate(addendum.effective_date)}
-                      {addendum.previous_amount !== null && addendum.new_amount !== null && (
-                        <>
-                          {" · "}
-                          {formatSalary({
-                            amount: Number(addendum.previous_amount),
-                            currency_code: addendum.currency_code || "",
-                          })}{" "}
-                          →{" "}
-                          {formatSalary({
-                            amount: Number(addendum.new_amount),
-                            currency_code: addendum.currency_code || "",
-                          })}
-                        </>
-                      )}
-                      {addendum.group_sequence_number !== null && (
-                        <> · Grupo {toRomanNumeral(addendum.group_sequence_number)}</>
-                      )}
-                    </p>
-                  </div>
-                ))}
-                <p className="text-xs text-muted-foreground">
-                  Estos anexos son registros contractuales pendientes de plantilla legal: todavía no
-                  existe un archivo generado ni se pueden descargar.
-                </p>
-              </div>
-            )}
-          </SiteCorpCard>
+          {/* Fase 11A.6: contratos y anexos al contrato (§51) */}
+          <ContractAddendumsSection
+            workerId={worker.id}
+            entityId={entityId as string}
+            canManage={canManage}
+            addendums={addendums}
+            contracts={sortedContracts.map((c) => ({
+              id: c.id,
+              typeName: c.contract_type?.name ?? null,
+              startDate: c.start_date,
+              endDate: c.end_date,
+              isCurrent: !!c.is_current,
+            }))}
+            conditions={contractualConditions}
+            operational={{
+              jobName: job?.name ?? null,
+              positionName: position?.name ?? null,
+              groupSequence: group?.sequence_number ?? null,
+              salaryAmount: salary?.amount ?? null,
+              salaryCurrency: salary?.currency_code ?? null,
+            }}
+            paymentMethods={paymentMethods}
+            onChanged={loadWorker}
+          />
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-6">

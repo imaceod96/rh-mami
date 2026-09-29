@@ -21,12 +21,20 @@ import {
   formatSalary,
   type SalaryValue,
 } from "@/lib/salary"
-import { ArrowRight, AlertTriangle } from "lucide-react"
+import { ArrowRight, AlertTriangle, FileSignature, Info } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
 } from "@/lib/position-schedule"
+import { AddendumChangesList } from "@/components/addendums/AddendumChangesList"
+import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import {
+  changeWorkerPosition,
+  previewPositionChange,
+  type PositionChangePreview,
+} from "@/lib/addendums"
+import { formatConditionDate } from "@/lib/contract-conditions"
 
 interface PositionRow {
   id: string
@@ -111,6 +119,18 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
     Record<string, PositionScheduleSegment[]>
   >({})
 
+  // Fase 11A.6: diferencias contractuales y anexo
+  const [preview, setPreview] = React.useState<PositionChangePreview | null>(null)
+  const [previewLoading, setPreviewLoading] = React.useState(false)
+  const [previewError, setPreviewError] = React.useState<string | null>(null)
+  const [createAddendum, setCreateAddendum] = React.useState(true)
+  const [formalizeNow, setFormalizeNow] = React.useState(false)
+  const [signatureDate, setSignatureDate] = React.useState("")
+  const [signaturePlace, setSignaturePlace] = React.useState("")
+  const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
+    null
+  )
+
   const loadPositions = React.useCallback(async () => {
     if (!entityId) return
     setLoading(true)
@@ -188,6 +208,13 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
     setNotes("")
     setError(null)
     setOccupancy({})
+    setPreview(null)
+    setPreviewError(null)
+    setCreateAddendum(true)
+    setFormalizeNow(false)
+    setSignatureDate("")
+    setSignaturePlace("")
+    setRepresentativeAssignmentId(null)
     loadPositions()
   }, [open, loadPositions])
 
@@ -212,6 +239,43 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
 
   const minDate = current.startDate ? addDays(current.startDate, 1) : undefined
 
+  // Fase 11A.6: diferencias contractuales calculadas en el backend (§21/§22)
+  React.useEffect(() => {
+    if (!open || !selectedPositionId || !effectiveDate) {
+      setPreview(null)
+      setPreviewError(null)
+      return
+    }
+    let cancelled = false
+    setPreviewLoading(true)
+    setPreviewError(null)
+
+    previewPositionChange({ workerId, newPositionId: selectedPositionId, effectiveDate })
+      .then((result) => {
+        if (cancelled) return
+        setPreview(result)
+        // Sin contrato vigente no puede existir un anexo: nunca se crea uno huérfano
+        setCreateAddendum(result.has_contractual_changes && !!result.employment_contract_id)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Error previewing position change:", err)
+        setPreview(null)
+        setPreviewError(
+          err instanceof Error
+            ? err.message
+            : "No se pudieron calcular las diferencias contractuales."
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedPositionId, effectiveDate, workerId])
+
   const handleSubmit = async () => {
     setError(null)
 
@@ -227,19 +291,54 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
       setError("La fecha efectiva debe ser posterior al inicio del puesto actual.")
       return
     }
+    if (previewLoading) {
+      setError("Espere a que se calculen las diferencias contractuales.")
+      return
+    }
+    const withAddendum = createAddendum && !!preview?.has_contractual_changes
+    if (withAddendum && formalizeNow) {
+      if (!signatureDate) {
+        setError("La fecha de firma es obligatoria para formalizar el anexo.")
+        return
+      }
+      if (!signaturePlace.trim()) {
+        setError("El lugar de firma es obligatorio para formalizar el anexo.")
+        return
+      }
+      if (!representativeAssignmentId) {
+        setError("Seleccione el representante vigente en la fecha de firma del anexo.")
+        return
+      }
+    }
 
     setSubmitting(true)
     try {
-      const { error: rpcError } = await supabase.rpc("change_worker_position", {
-        p_worker_id: workerId,
-        p_new_position_id: selectedPositionId,
-        p_effective_date: effectiveDate,
-        p_reason: reason.trim() || null,
-        p_notes: notes.trim() || null,
+      const result = await changeWorkerPosition({
+        workerId,
+        newPositionId: selectedPositionId,
+        effectiveDate,
+        reason: reason.trim() || null,
+        notes: notes.trim() || null,
+        createAddendum: withAddendum,
+        reasonCode: "POSITION_CHANGE",
+        signatureDate: withAddendum && formalizeNow ? signatureDate : null,
+        signaturePlace: withAddendum && formalizeNow ? signaturePlace : null,
+        representativeAssignmentId: withAddendum && formalizeNow ? representativeAssignmentId : null,
+        requireFormalized: withAddendum && formalizeNow,
       })
-      if (rpcError) throw rpcError
 
-      showSuccess("Cambio de puesto realizado correctamente.")
+      const addendumStatus = result.addendum?.addendum_status
+      const addendumNumber = result.addendum?.addendum_number
+
+      showSuccess(
+        addendumStatus === "FORMALIZED"
+          ? `Cambio de puesto realizado. Anexo Nº ${addendumNumber} formalizado.`
+          : addendumNumber
+            ? `Cambio de puesto realizado. Anexo Nº ${addendumNumber} pendiente de formalizar.`
+            : result.addendum_skipped === "NO_CONTRACT"
+              ? "Cambio de puesto realizado. No se registró anexo: el trabajador no tiene un contrato vigente."
+              : "Cambio de puesto realizado correctamente."
+      )
       onOpenChange(false)
       onSuccess()
     } catch (err) {
@@ -255,6 +354,11 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
         friendly = "La fecha efectiva debe ser posterior al inicio del puesto actual."
       } else if (/ya ocupa/i.test(msg)) {
         friendly = "El trabajador ya ocupa ese puesto."
+      } else if (/Datos pendientes/i.test(msg)) {
+        friendly = msg
+      } else if (/contrato vigente/i.test(msg)) {
+        friendly =
+          "El trabajador no tiene un contrato vigente: no se puede registrar el anexo contractual."
       } else if (/permiso/i.test(msg)) {
         friendly = "No tiene permiso para realizar movimientos de trabajadores."
       } else if (msg) {
@@ -267,14 +371,18 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
     }
   }
 
+  const hasChanges = !!preview?.has_contractual_changes
+  const addendumWillBeCreated = createAddendum && hasChanges
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[640px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle>Cambiar de puesto</DialogTitle>
           <DialogDescription>
-            Se cerrará el puesto actual y se creará una nueva asignación, conservando la
-            trayectoria laboral del trabajador.
+            Se cerrará el puesto actual y se creará una nueva asignación, conservando la trayectoria
+            laboral del trabajador. Si el cambio modifica condiciones contractuales se prepara un
+            anexo al contrato vigente.
           </DialogDescription>
         </DialogHeader>
 
@@ -336,7 +444,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
                   <option key={p.id} value={p.id}>
                     {p.name}
                     {p.job ? ` · ${p.job.name}` : ""} (
-                    {(occupancy[p.id] || 0)}/{p.authorized_quantity})
+                    {occupancy[p.id] || 0}/{p.authorized_quantity})
                   </option>
                 ))}
               </SiteCorpSelect>
@@ -458,9 +566,119 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
               onChange={(e) => setEffectiveDate(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Inicio del nuevo puesto. El puesto actual finalizará el día anterior.
+              Inicio del nuevo puesto. El puesto actual finalizará el día anterior. Es también la
+              fecha de vigencia del anexo.
             </p>
           </div>
+
+          {/* Diferencias contractuales (Fase 11A.6) */}
+          {selected && !effectiveDate ? (
+            <SiteCorpAlert type="info">
+              Indique la fecha efectiva para calcular las diferencias contractuales del cambio.
+            </SiteCorpAlert>
+          ) : selectedPositionId && effectiveDate && previewLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Calculando diferencias contractuales…
+            </p>
+          ) : previewError ? (
+            <SiteCorpAlert type="danger">{previewError}</SiteCorpAlert>
+          ) : preview ? (
+            <>
+              {hasChanges ? (
+                <AddendumChangesList
+                  changes={preview.changes}
+                  description="Condiciones del contrato vigente que cambian con este movimiento. Sólo se muestran los campos que cambian."
+                />
+              ) : (
+                <SiteCorpAlert type="info" title="Sin cambios contractuales">
+                  Este cambio no modifica condiciones contractuales representables: no se creará
+                  ningún anexo.
+                </SiteCorpAlert>
+              )}
+
+              {hasChanges && !preview.employment_contract_id && (
+                <SiteCorpAlert type="warning" title="Sin contrato vigente">
+                  El trabajador no tiene un contrato vigente sobre el que formalizar el anexo: el
+                  cambio de puesto se realizará sin registrar anexo.
+                </SiteCorpAlert>
+              )}
+
+              {hasChanges && (
+                <div className="space-y-3 rounded-xl border border-border p-4">
+                  <label className="flex items-start gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-input"
+                      checked={createAddendum}
+                      disabled={!preview.employment_contract_id}
+                      onChange={(e) => setCreateAddendum(e.target.checked)}
+                    />
+                    <span>
+                      Generar anexo al contrato vigente
+                      <span className="block text-xs text-muted-foreground">
+                        El anexo se registra en la misma operación del cambio de puesto. Si no se
+                        formaliza ahora, queda pendiente de firma.
+                      </span>
+                    </span>
+                  </label>
+
+                  {createAddendum && (
+                    <>
+                      <label className="flex items-start gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-input"
+                          checked={formalizeNow}
+                          onChange={(e) => setFormalizeNow(e.target.checked)}
+                        />
+                        <span>
+                          Formalizar ahora (fecha de firma, lugar y representante)
+                          <span className="block text-xs text-muted-foreground">
+                            Firmar después es válido: el anexo quedará pendiente y podrá formalizarse
+                            desde la ficha del trabajador.
+                          </span>
+                        </span>
+                      </label>
+
+                      {formalizeNow && (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label>Fecha de firma *</Label>
+                              <SiteCorpInput
+                                type="date"
+                                value={signatureDate}
+                                onChange={(e) => setSignatureDate(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Lugar de firma *</Label>
+                              <SiteCorpInput
+                                value={signaturePlace}
+                                onChange={(e) => setSignaturePlace(e.target.value)}
+                                placeholder="Ej.: La Habana"
+                              />
+                            </div>
+                          </div>
+                          <RepresentativeSelect
+                            entityId={entityId}
+                            onDate={signatureDate}
+                            value={representativeAssignmentId}
+                            onChange={setRepresentativeAssignmentId}
+                            canManage
+                            label="Representante que suscribe el anexo *"
+                            dateHint={`Representante vigente en la fecha de firma${
+                              signatureDate ? ` (${formatConditionDate(signatureDate)})` : ""
+                            }.`}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          ) : null}
 
           {/* Motivo */}
           <div className="space-y-2">
@@ -470,6 +688,12 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
               placeholder="Promoción interna, reorganización, necesidad del servicio…"
               onChange={(e) => setReason(e.target.value)}
             />
+            {addendumWillBeCreated && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <FileSignature className="h-3.5 w-3.5" />
+                El anexo quedará registrado como «Cambio de puesto» en el contrato vigente.
+              </p>
+            )}
           </div>
 
           {/* Observaciones */}
@@ -482,6 +706,11 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sitecorp-primary"
               placeholder="Opcional"
             />
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              La asignación anterior se cierra y la nueva se crea en una sola transacción: si algo
+              falla, no se aplica ningún cambio.
+            </p>
           </div>
 
           {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
@@ -494,7 +723,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
           <SiteCorpButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || loading || selectable.length === 0}
+            disabled={submitting || loading || selectable.length === 0 || previewLoading}
           >
             {submitting ? "Procesando…" : "Confirmar cambio de puesto"}
           </SiteCorpButton>
