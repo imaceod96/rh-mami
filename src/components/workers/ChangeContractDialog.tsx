@@ -13,6 +13,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
 import { showSuccess, showError } from "@/utils/toast"
+import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { FileSignature } from "lucide-react"
 
 interface ContractType {
@@ -33,6 +34,7 @@ interface ChangeContractDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workerId: string
+  entityId: string
   current: CurrentContractInfo
   onSuccess: () => void
 }
@@ -47,6 +49,7 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
   open,
   onOpenChange,
   workerId,
+  entityId,
   current,
   onSuccess,
 }) => {
@@ -56,6 +59,10 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
   const [effectiveDate, setEffectiveDate] = React.useState("")
   const [newEndDate, setNewEndDate] = React.useState("")
   const [notes, setNotes] = React.useState("")
+  const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
+    null
+  )
+  const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -65,6 +72,7 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
     setEffectiveDate("")
     setNewEndDate("")
     setNotes("")
+    setRepresentativeAssignmentId(null)
     setError(null)
     setLoading(true)
     supabase
@@ -81,7 +89,14 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
         }
         setLoading(false)
       })
-  }, [open])
+
+    supabase
+      .rpc("can_access_entity", {
+        target_entity_id: entityId,
+        permission_code: "organization.manage",
+      })
+      .then(({ data }) => setCanManageOrganization(!!data))
+  }, [open, entityId])
 
   const selectedType = contractTypes.find((t) => t.id === newContractTypeId) || null
   const isDetermined = selectedType?.code === "DETERMINADO"
@@ -114,6 +129,12 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
       setError("La fecha de finalización debe ser posterior a la fecha efectiva.")
       return
     }
+    if (!representativeAssignmentId) {
+      setError(
+        "No existe ningún representante autorizado configurado para la fecha del contrato."
+      )
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -123,6 +144,7 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
         p_effective_date: effectiveDate,
         p_new_end_date: isDetermined ? newEndDate : null,
         p_notes: notes.trim() || null,
+        p_representative_assignment_id: representativeAssignmentId,
       })
       if (rpcError) throw rpcError
 
@@ -138,6 +160,8 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
         friendly = "El contrato por tiempo determinado requiere una fecha de finalización."
       } else if (/posterior a la fecha efectiva/i.test(msg)) {
         friendly = "La fecha de finalización debe ser posterior a la fecha efectiva."
+      } else if (/representante/i.test(msg)) {
+        friendly = "No existe ningún representante autorizado configurado para la fecha del contrato."
       } else if (/no tiene un contrato vigente/i.test(msg)) {
         friendly = "El trabajador no tiene un contrato vigente."
       } else if (/no est[aá] activo/i.test(msg)) {
@@ -228,6 +252,14 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
             </div>
           </div>
 
+          <RepresentativeSelect
+            entityId={entityId}
+            onDate={effectiveDate}
+            value={representativeAssignmentId}
+            onChange={setRepresentativeAssignmentId}
+            canManage={canManageOrganization}
+          />
+
           <div className="space-y-2">
             <Label>Observaciones</Label>
             <textarea
@@ -246,7 +278,11 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
           <SiteCorpButton variant="outline" type="button" onClick={() => onOpenChange(false)}>
             Cancelar
           </SiteCorpButton>
-          <SiteCorpButton type="button" onClick={handleSubmit} disabled={submitting || loading}>
+          <SiteCorpButton
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || loading || !representativeAssignmentId}
+          >
             <FileSignature className="mr-2 h-4 w-4" />
             {submitting ? "Procesando…" : "Confirmar cambio de contrato"}
           </SiteCorpButton>

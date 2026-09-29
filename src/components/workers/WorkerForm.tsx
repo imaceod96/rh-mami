@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { ciToBirthDate } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
+import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 
 export interface WorkerPositionOption {
   id: string
@@ -156,6 +157,10 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const [contractTypeId, setContractTypeId] = React.useState<string>("")
   const [contractStartDate, setContractStartDate] = React.useState<string>("")
   const [contractEndDate, setContractEndDate] = React.useState<string>("")
+  const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
+    null
+  )
+  const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
 
@@ -179,6 +184,16 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       setFormError("No se pudieron cargar los catálogos.")
     })
   }, [])
+
+  React.useEffect(() => {
+    if (!entityId) return
+    supabase
+      .rpc("can_access_entity", {
+        target_entity_id: entityId,
+        permission_code: "organization.manage",
+      })
+      .then(({ data }) => setCanManageOrganization(!!data))
+  }, [entityId])
 
   const municipalities = React.useMemo(
     () => (form.province && MUNICIPIOS_BY_PROVINCE_FULL[form.province]) || [],
@@ -280,10 +295,16 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       contractEndDate <= effectiveContractStart
     ) {
       setFormError("La fecha de fin del contrato debe ser posterior a su inicio")
-      return
-    }
-
-    setSubmitting(true)
+        return
+      }
+      if (!isEditing && !representativeAssignmentId) {
+        setFormError(
+          "No existe ningún representante autorizado configurado para la fecha del contrato."
+        )
+        return
+      }
+  
+      setSubmitting(true)
 
     try {
       if (isEditing) {
@@ -338,6 +359,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           p_contract_type_id: contractTypeId || null,
           p_contract_start_date: effectiveContractStart || null,
           p_contract_end_date: isDeterminedContract ? contractEndDate || null : null,
+          p_representative_assignment_id: representativeAssignmentId,
         })
 
         if (rpcError) throw rpcError
@@ -646,6 +668,16 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
                     : "Solo aplica a contratos por tiempo determinado."}
                 </p>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <RepresentativeSelect
+                entityId={entityId}
+                onDate={contractStartDate || form.hire_date}
+                value={representativeAssignmentId}
+                onChange={setRepresentativeAssignmentId}
+                canManage={canManageOrganization}
+              />
             </div>
           </div>
         )}

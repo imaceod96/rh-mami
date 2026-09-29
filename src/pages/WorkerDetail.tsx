@@ -37,6 +37,7 @@ import ChangePositionDialog, {
 } from "@/components/workers/ChangePositionDialog"
 import SeparateWorkerDialog from "@/components/workers/SeparateWorkerDialog"
 import ReincorporateWorkerDialog from "@/components/workers/ReincorporateWorkerDialog"
+import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import ChangeContractDialog, {
   type CurrentContractInfo,
 } from "@/components/workers/ChangeContractDialog"
@@ -124,6 +125,10 @@ interface WorkerDetail {
     salary_currency_code: string | null
     salary_effective_date: string | null
     salary_snapshot_status: string
+    representative_name_snapshot: string | null
+    representative_position_snapshot: string | null
+    representative_captured_at: string | null
+    entity_name_snapshot: string | null
     contract_type: {
       id: string
       name: string
@@ -173,7 +178,12 @@ const WorkerDetail = () => {
   const [movements, setMovements] = React.useState<WorkerMovement[]>([])
   const [salaryHistory, setSalaryHistory] = React.useState<WorkerSalaryHistoryEntry[]>([])
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
-  const [contractForm, setContractForm] = React.useState({ contractTypeId: "", startDate: "", endDate: "" })
+  const [contractForm, setContractForm] = React.useState<{
+    contractTypeId: string
+    startDate: string
+    endDate: string
+    representativeAssignmentId: string | null
+  }>({ contractTypeId: "", startDate: "", endDate: "", representativeAssignmentId: null })
   const [contractSubmitting, setContractSubmitting] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
 
@@ -249,6 +259,10 @@ const WorkerDetail = () => {
                 contracts:employment_contracts(
                   id, assignment_id, contract_type_id, start_date, end_date, actual_end_date, is_current,
                   salary_amount, salary_currency_code, salary_effective_date, salary_snapshot_status,
+                  representative_name_snapshot, representative_position_snapshot, representative_captured_at,
+                  entity_name_snapshot, entity_organism_snapshot, entity_branch_snapshot,
+                  entity_labor_code_snapshot, entity_address_snapshot, entity_province_snapshot,
+                  entity_municipality_snapshot,
                   contract_type:employment_contract_types(id, name, code)
                 )
               `)
@@ -445,6 +459,12 @@ const WorkerDetail = () => {
       setActionError("La fecha de fin debe ser posterior al inicio")
       return
     }
+    if (!contractForm.representativeAssignmentId) {
+      setActionError(
+        "No existe ningún representante autorizado configurado para la fecha del contrato."
+      )
+      return
+    }
 
     setContractSubmitting(true)
     try {
@@ -453,10 +473,16 @@ const WorkerDetail = () => {
         p_contract_type_id: contractForm.contractTypeId,
         p_contract_start_date: start,
         p_contract_end_date: selectedType?.code === "DETERMINADO" ? contractForm.endDate || null : null,
+        p_representative_assignment_id: contractForm.representativeAssignmentId,
       })
       if (rpcError) throw rpcError
       setContractDialogOpen(false)
-      setContractForm({ contractTypeId: "", startDate: "", endDate: "" })
+      setContractForm({
+        contractTypeId: "",
+        startDate: "",
+        endDate: "",
+        representativeAssignmentId: null,
+      })
       loadWorker()
     } catch (err) {
       console.error("Error registering contract:", err)
@@ -804,6 +830,7 @@ const WorkerDetail = () => {
                           contractTypeId: "",
                           startDate: worker.hire_date || "",
                           endDate: "",
+                          representativeAssignmentId: null,
                         })
                         setContractDialogOpen(true)
                       }}
@@ -874,6 +901,29 @@ const WorkerDetail = () => {
                     <p className="mt-1 text-sm italic text-muted-foreground">
                       No reconstruible: el importe histórico de este contrato no pudo determinarse de
                       forma fiable y no se ha registrado ningún valor inventado.
+                    </p>
+                  )}
+                </div>
+
+                {/* Representante que comparece: snapshot histórico (Fase 11A.1) */}
+                <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Representante de la entidad al formalizarse el contrato
+                  </p>
+                  {currentContract.representative_captured_at &&
+                  currentContract.representative_name_snapshot ? (
+                    <>
+                      <p className="mt-1 text-sm font-medium text-ink">
+                        {currentContract.representative_name_snapshot}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {currentContract.representative_position_snapshot || "—"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-sm italic text-muted-foreground">
+                      Sin información histórica: este contrato se formalizó antes de que se registrara
+                      el representante autorizado de la entidad.
                     </p>
                   )}
                 </div>
@@ -1053,30 +1103,37 @@ const WorkerDetail = () => {
               <h4 className="mb-3 text-sm font-semibold text-ink">Historial de contratos</h4>
               <ul className="space-y-2">
                 {sortedContracts.map((c) => (
-                  <li
-                    key={c.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
-                  >
-                    <span className="text-sm text-ink">
-                      {c.contract_type?.name || "Contrato"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {c.start_date} →{" "}
-                      {c.is_current
-                        ? c.end_date
-                          ? `previsto hasta ${c.end_date}`
-                          : "sin fecha de fin"
-                        : c.actual_end_date
-                          ? `hasta ${c.actual_end_date}`
-                          : c.end_date
+                  <li key={c.id} className="rounded-lg border border-border px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm text-ink">
+                        {c.contract_type?.name || "Contrato"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {c.start_date} →{" "}
+                        {c.is_current
+                          ? c.end_date
                             ? `previsto hasta ${c.end_date}`
-                            : "sin fecha de fin"}
-                    </span>
-                    {c.is_current ? (
-                      <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>
-                    ) : (
-                      <SiteCorpStatusBadge status="neutral">Finalizado</SiteCorpStatusBadge>
-                    )}
+                            : "sin fecha de fin"
+                          : c.actual_end_date
+                            ? `hasta ${c.actual_end_date}`
+                            : c.end_date
+                              ? `previsto hasta ${c.end_date}`
+                              : "sin fecha de fin"}
+                      </span>
+                      {c.is_current ? (
+                        <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>
+                      ) : (
+                        <SiteCorpStatusBadge status="neutral">Finalizado</SiteCorpStatusBadge>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {/* Snapshot histórico del contrato: nunca se resuelve con el representante actual */}
+                      {c.representative_captured_at && c.representative_name_snapshot
+                        ? `Representante: ${c.representative_name_snapshot} · ${
+                            c.representative_position_snapshot || "—"
+                          }`
+                        : "Representante: sin información histórica"}
+                    </p>
                   </li>
                 ))}
               </ul>
@@ -1543,6 +1600,15 @@ const WorkerDetail = () => {
               </div>
             </div>
 
+            <RepresentativeSelect
+              entityId={entityId || ""}
+              onDate={contractForm.startDate || worker.hire_date || ""}
+              value={contractForm.representativeAssignmentId}
+              onChange={(assignmentId) =>
+                setContractForm((f) => ({ ...f, representativeAssignmentId: assignmentId }))
+              }
+            />
+
             <div className="flex justify-end gap-2 pt-2">
               <SiteCorpButton
                 variant="outline"
@@ -1551,7 +1617,10 @@ const WorkerDetail = () => {
               >
                 Cancelar
               </SiteCorpButton>
-              <SiteCorpButton type="submit" disabled={contractSubmitting}>
+              <SiteCorpButton
+                type="submit"
+                disabled={contractSubmitting || !contractForm.representativeAssignmentId}
+              >
                 {contractSubmitting ? "Registrando..." : "Registrar contrato"}
               </SiteCorpButton>
             </div>
@@ -1593,6 +1662,7 @@ const WorkerDetail = () => {
           open={changeContractOpen}
           onOpenChange={setChangeContractOpen}
           workerId={worker.id}
+          entityId={entityId as string}
           current={currentContractInfo}
           onSuccess={loadWorker}
         />

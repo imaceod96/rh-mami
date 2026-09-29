@@ -40,6 +40,7 @@ import EntitySettingsRoles from "./pages/EntitySettingsRoles"
 import EntitySettingsSalary from "./pages/EntitySettingsSalary"
 import EntitySettingsGoverningDocuments from "./pages/EntitySettingsGoverningDocuments"
 import EntitySettingsStaffing from "./pages/EntitySettingsStaffing"
+import EntitySettingsContractData from "./pages/EntitySettingsContractData"
 import NotFound from "./pages/NotFound"
 
 const queryClient = new QueryClient()
@@ -150,6 +151,7 @@ const AppRoutes = () => {
           <Route path="/entity/:entityId/settings/roles" element={<EntitySettingsRoles />} />
           <Route path="/entity/:entityId/settings/salary" element={<EntitySettingsSalary />} />
           <Route path="/entity/:entityId/settings/governing-documents" element={<EntitySettingsGoverningDocuments />} />
+          <Route path="/entity/:entityId/settings/contract-data" element={<EntitySettingsContractData />} />
         </Route>
       </Routes>
     )

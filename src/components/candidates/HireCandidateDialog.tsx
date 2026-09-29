@@ -23,6 +23,7 @@ import {
   formatSalary,
   type SalaryValue,
 } from "@/lib/salary"
+import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 
 interface PositionRow {
@@ -125,6 +126,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [contractStartDate, setContractStartDate] = React.useState("")
   const [contractEndDate, setContractEndDate] = React.useState("")
   const [notes, setNotes] = React.useState("")
+  const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
+    null
+  )
+  const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -205,6 +210,12 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       if (ctError) throw ctError
       setContractTypes((ctData as ContractType[]) || [])
 
+      const { data: canManageOrg } = await supabase.rpc("can_access_entity", {
+        target_entity_id: entityId,
+        permission_code: "organization.manage",
+      })
+      setCanManageOrganization(!!canManageOrg)
+
       setApplicableScaleId(await resolveApplicableScaleId(entityId))
       const groupIds = mapped
         .map((p) => p.job?.salary_group?.id)
@@ -228,6 +239,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setContractStartDate("")
     setContractEndDate("")
     setNotes("")
+    setRepresentativeAssignmentId(null)
     setError(null)
     setOccupancy({})
     loadData()
@@ -286,6 +298,13 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     ? Math.max(0, (selected.authorized_quantity || 0) - (occupancy[selected.id] || 0))
     : 0
 
+  /**
+   * Fase 11A.1: fecha contractual usada para resolver el representante que comparece.
+   * Mientras el modelo no incorpore `signature_date`, se utiliza el inicio del contrato
+   * (fecha efectiva) de forma explícita.
+   */
+  const contractReferenceDate = contractStartDate || hireDate
+
   React.useEffect(() => {
     if (!isDetermined) setContractEndDate("")
   }, [isDetermined])
@@ -309,6 +328,13 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setError("Selecciona un tipo de contrato.")
       return
     }
+    if (!representativeAssignmentId) {
+      setError(
+        "No existe ningún representante autorizado configurado para la fecha del contrato. Configure los representantes de la entidad para continuar."
+      )
+      return
+    }
+
     const effectiveContractStart = contractStartDate || hireDate
     if (isDetermined && !contractEndDate) {
       setError("El contrato por tiempo determinado requiere una fecha final.")
@@ -329,6 +355,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         p_contract_start_date: effectiveContractStart,
         p_contract_end_date: isDetermined ? contractEndDate || null : null,
         p_notes: notes.trim() || null,
+        p_representative_assignment_id: representativeAssignmentId,
       })
       if (rpcError) throw rpcError
 
@@ -359,6 +386,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         friendly = "El contrato por tiempo determinado requiere una fecha final."
       } else if (/posterior/i.test(msg)) {
         friendly = "La fecha final del contrato debe ser posterior a su inicio."
+      } else if (/representante/i.test(msg)) {
+        friendly =
+          "No existe ningún representante autorizado configurado para la fecha del contrato."
       } else if (/permiso/i.test(msg)) {
         friendly = "No tiene permiso para contratar trabajadores en esta entidad."
       } else if (msg) {
@@ -668,6 +698,14 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           </div>
         </div>
 
+        <RepresentativeSelect
+          entityId={entityId}
+          onDate={contractReferenceDate}
+          value={representativeAssignmentId}
+          onChange={setRepresentativeAssignmentId}
+          canManage={canManageOrganization}
+        />
+
         <div className="space-y-2">
           <Label>Observaciones</Label>
           <textarea
@@ -688,7 +726,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           <SiteCorpButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || loading || !selectedCandidate || !hasVacancy}
+            disabled={
+              submitting || loading || !selectedCandidate || !hasVacancy || !representativeAssignmentId
+            }
           >
             <UserPlus className="mr-2 h-4 w-4" />
             {submitting

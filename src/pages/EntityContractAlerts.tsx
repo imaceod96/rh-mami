@@ -638,6 +638,7 @@ const EntityContractAlerts = () => {
             if (!open) setChangeTarget(null)
           }}
           workerId={changeTarget.workerId}
+          entityId={entityId as string}
           current={changeTarget.contract}
           onSuccess={() => {
             setChangeTarget(null)

@@ -21,6 +21,7 @@ import {
   formatSalary,
   type SalaryValue,
 } from "@/lib/salary"
+import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { AlertTriangle, UserPlus } from "lucide-react"
 
 interface PositionRow {
@@ -76,6 +77,10 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   const [contractTypeId, setContractTypeId] = React.useState("")
   const [contractStartDate, setContractStartDate] = React.useState("")
   const [contractEndDate, setContractEndDate] = React.useState("")
+  const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
+    null
+  )
+  const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -143,6 +148,12 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         .map((p) => p.job?.salary_group?.id)
         .filter((id): id is string => !!id)
       setSalaryValuesByGroup(await fetchSalaryValuesForGroups(groupIds))
+
+      const { data: canManageOrg } = await supabase.rpc("can_access_entity", {
+        target_entity_id: entityId,
+        permission_code: "organization.manage",
+      })
+      setCanManageOrganization(!!canManageOrg)
     } catch (err) {
       console.error("Error loading reincorporation data:", err)
       setLoadError("No se pudieron cargar los puestos disponibles.")
@@ -158,6 +169,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     setContractTypeId("")
     setContractStartDate("")
     setContractEndDate("")
+    setRepresentativeAssignmentId(null)
     setError(null)
     setOccupancy({})
     loadData()
@@ -210,6 +222,12 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       setError("La fecha de fin del contrato debe ser posterior a su inicio.")
       return
     }
+    if (!representativeAssignmentId) {
+      setError(
+        "No existe ningún representante autorizado configurado para la fecha del contrato."
+      )
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -221,6 +239,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         p_contract_start_date: effectiveContractStart,
         p_contract_end_date: isDetermined ? contractEndDate || null : null,
         p_notes: null,
+        p_representative_assignment_id: representativeAssignmentId,
       })
       if (rpcError) throw rpcError
 
@@ -244,6 +263,8 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         friendly = "El trabajador ya está activo."
       } else if (/carn[eé] de identidad/i.test(msg)) {
         friendly = "Ya existe otro trabajador activo con ese carné de identidad en este workspace."
+      } else if (/representante/i.test(msg)) {
+        friendly = "No existe ningún representante autorizado configurado para la fecha del contrato."
       } else if (/no est[aá] activo/i.test(msg)) {
         friendly = "El puesto seleccionado no está activo."
       } else if (/permiso/i.test(msg)) {
@@ -397,6 +418,14 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
             </div>
           </div>
 
+          <RepresentativeSelect
+            entityId={entityId}
+            onDate={contractStartDate || reincorporationDate}
+            value={representativeAssignmentId}
+            onChange={setRepresentativeAssignmentId}
+            canManage={canManageOrganization}
+          />
+
           {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
         </div>
 
@@ -407,7 +436,9 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
           <SiteCorpButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || loading || selectable.length === 0}
+            disabled={
+              submitting || loading || selectable.length === 0 || !representativeAssignmentId
+            }
           >
             <UserPlus className="mr-2 h-4 w-4" />
             {submitting ? "Procesando…" : "Confirmar reincorporación"}

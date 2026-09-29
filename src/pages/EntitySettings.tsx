@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
-import { Building2, Users, Shield, Scale, FileText, Network } from "lucide-react"
+import { Users, Shield, Scale, FileText, Network, ClipboardList } from "lucide-react"
 
 const EntitySettings = () => {
   const { currentEntity } = useCurrentEntity()
@@ -33,6 +33,13 @@ const EntitySettings = () => {
       description: "Configura las áreas, cargos y puestos que conforman la estructura de plantilla de la entidad.",
       icon: Network,
       href: `/entity/${currentEntity?.id}/settings/staffing`,
+    },
+    {
+      title: "Datos contractuales",
+      description:
+        "Datos contractuales de la entidad y representantes autorizados para la formalización de contratos.",
+      icon: ClipboardList,
+      href: `/entity/${currentEntity?.id}/settings/contract-data`,
     },
     {
       title: "Documentos rectores",
