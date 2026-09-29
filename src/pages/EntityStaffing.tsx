@@ -32,7 +32,7 @@ import {
 } from "@/components/workers/WorkerForm"
 import {
   resolveApplicableScaleId,
-  fetchActiveSalaryValuesForGroups,
+  fetchSalaryValuesForGroups,
   salaryForGroup,
   formatSalary,
 } from "@/lib/salary"
@@ -233,7 +233,7 @@ const EntityStaffing = () => {
       const groupIds = jobsRows
         .map(j => j.salary_group?.id)
         .filter((id): id is string => !!id)
-      setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups(groupIds))
+      setSalaryValuesByGroup(await fetchSalaryValuesForGroups(groupIds))
     } catch (err) {
       console.error("Error loading plantilla operativa:", err)
       setError(err instanceof Error ? err.message : "Error al cargar la plantilla operativa")

@@ -41,7 +41,7 @@ import ChangeContractDialog, {
 import { SelectItem } from "@/components/ui/select"
 import {
   resolveApplicableScaleId,
-  fetchActiveSalaryValuesForGroups,
+  fetchSalaryValuesForGroups,
   salaryForGroup,
   formatSalary,
   type SalaryValue,
@@ -334,7 +334,7 @@ const WorkerDetail = () => {
         null
 
       if (localGroup?.id) {
-        setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups([localGroup.id]))
+        setSalaryValuesByGroup(await fetchSalaryValuesForGroups([localGroup.id]))
       } else {
         setSalaryValuesByGroup({})
       }

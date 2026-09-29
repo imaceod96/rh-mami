@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { useSalary } from "@/contexts/SalaryContext"
+import { useSalary, type SalaryScale } from "@/contexts/SalaryContext"
 import { useAuth } from "@/contexts/AuthContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -10,6 +10,8 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SalaryGroupDialog } from "@/components/salary-group-dialog"
+import ReviewSalaryChangeDialog from "@/components/salary/ReviewSalaryChangeDialog"
+import { showSuccess } from "@/utils/toast"
 import { Plus, Edit3, Clock, PlusCircle } from "lucide-react"
 
 interface SalaryGroupRow {
@@ -34,15 +36,13 @@ const AdminSettingsSalaryScale = () => {
   const navigate = useNavigate()
   const { fetchGlobalPresupuestadaScale, fetchScaleWithGroups, addSalaryGroup, addSalaryValue, createGlobalPresupuestadaScale, canManageGlobalSalary, fetchSalaryHistory } = useSalary()
   const { isPlatformSuperAdmin } = useAuth()
-  const [scale, setScale] = React.useState<any>(null)
+  const [scale, setScale] = React.useState<SalaryScale | null>(null)
   const [groups, setGroups] = React.useState<SalaryGroupRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [showAddGroup, setShowAddGroup] = React.useState(false)
   const [newGroupDesc, setNewGroupDesc] = React.useState("")
-  const [showEditValue, setShowEditValue] = React.useState<string | null>(null)
-  const [newAmount, setNewAmount] = React.useState("")
-  const [newEffectiveFrom, setNewEffectiveFrom] = React.useState("")
+  const [changeGroup, setChangeGroup] = React.useState<SalaryGroupRow | null>(null)
   const [showCreateScale, setShowCreateScale] = React.useState(false)
   const [newScaleName, setNewScaleName] = React.useState("Escala salarial presupuestada general")
   const [newScaleCurrency, setNewScaleCurrency] = React.useState("CUP")
@@ -102,33 +102,23 @@ const AdminSettingsSalaryScale = () => {
         if (newGroup) {
           const amount = parseFloat(salary)
           if (!isNaN(amount) && amount > 0) {
+            // Valor inicial del grupo: se registra con la misma función atómica
             await addSalaryValue(newGroup.id, amount, "CUP", effectiveFrom)
           }
           setNewGroupDesc("")
           setShowAddGroup(false)
           await loadScale()
+          showSuccess("Grupo salarial añadido correctamente.")
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al añadir grupo")
       }
     }
 
-  const handleEditValue = async (groupId: string) => {
-    if (!newAmount || !newEffectiveFrom) return
-    try {
-      const amount = parseFloat(newAmount)
-      if (isNaN(amount) || amount <= 0) {
-        setError("El monto debe ser un número positivo")
-        return
-      }
-      await addSalaryValue(groupId, amount, "CUP", newEffectiveFrom)
-      setShowEditValue(null)
-      setNewAmount("")
-      setNewEffectiveFrom("")
-      await loadScale()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al actualizar el salario")
-    }
+  // El cambio de importe de un grupo siempre pasa por la revisión de impacto
+  const openSalaryChange = (group: SalaryGroupRow) => {
+    setError(null)
+    setChangeGroup(group)
   }
 
   const handleViewHistory = async (groupId: string) => {
@@ -314,11 +304,7 @@ const AdminSettingsSalaryScale = () => {
                       <SiteCorpButton
                                               size="sm"
                                               variant="outline"
-                                              onClick={() => {
-                                                setShowEditValue(showEditValue === group.id ? null : group.id)
-                                                setNewAmount("")
-                                                setNewEffectiveFrom("")
-                                              }}
+                                              onClick={() => openSalaryChange(group)}
                                             >
                                               <Edit3 className="mr-1 h-3.5 w-3.5" /> Cambiar salario
                                             </SiteCorpButton>
@@ -334,64 +320,30 @@ const AdminSettingsSalaryScale = () => {
                 ))}
               </div>
 
-              {/* Edit value form */}
-              {showEditValue && (
-                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                  <h4 className="text-sm font-semibold text-ink">Cambiar salario del grupo</h4>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Nuevo salario</label>
-                      <SiteCorpInput
-                        type="number"
-                        placeholder="Monto"
-                        value={newAmount}
-                        onChange={(e) => setNewAmount(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Vigente desde</label>
-                      <SiteCorpInput
-                        type="date"
-                        value={newEffectiveFrom}
-                        onChange={(e) => setNewEffectiveFrom(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <SiteCorpButton onClick={() => handleEditValue(showEditValue)}>Guardar</SiteCorpButton>
-                    <SiteCorpButton variant="outline" onClick={() => setShowEditValue(null)}>Cancelar</SiteCorpButton>
-                  </div>
-                </div>
-              )}
-            </div>
-          </SiteCorpCard>
-
-          {/* Salary history */}
-          <SiteCorpCard title="Historial de salarios" description="Valores históricos por grupo">
-            <div className="space-y-3">
-              {groups.map((group) => (
-                <div key={group.id} className="rounded-lg border border-border bg-muted/30 p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-bold text-sitecorp-primary">{group.roman_numeral}</span>
-                    <span className="text-sm text-muted-foreground">Grupo {group.sequence_number}</span>
-                  </div>
-                  <div className="space-y-1">
-                    {group.current_value && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>Actual: {group.current_value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} {group.current_value.currency_code} desde {group.current_value.effective_from}</span>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Historial completo disponible en la sección de historial global.
-                    </p>
-                  </div>
-                </div>
-              ))}
+              <p className="text-xs text-muted-foreground">
+                «Cambiar salario» abre la revisión de impacto: se muestran el importe vigente, el
+                nuevo importe, la fecha efectiva y los trabajadores afectados antes de aplicar el
+                cambio. Cada cambio conserva los importes anteriores y prepara un anexo contractual
+                pendiente de generar.
+              </p>
             </div>
           </SiteCorpCard>
         </>
       )}
+
+      {/* Revisión de cambio salarial (nueva vigencia + impacto + anexos pendientes) */}
+      <ReviewSalaryChangeDialog
+        open={!!changeGroup}
+        onOpenChange={(open) => {
+          if (!open) setChangeGroup(null)
+        }}
+        groupId={changeGroup?.id || null}
+        groupLabel={changeGroup ? `Grupo ${changeGroup.roman_numeral}` : ""}
+        scaleLabel={scale?.name || ""}
+        onApplied={async () => {
+          await loadScale()
+        }}
+      />
 
       {/* Salary History Modal */}
       <SalaryHistoryModal

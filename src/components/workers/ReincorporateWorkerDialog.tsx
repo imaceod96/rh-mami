@@ -16,7 +16,7 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
 import { showSuccess, showError } from "@/utils/toast"
 import {
   resolveApplicableScaleId,
-  fetchActiveSalaryValuesForGroups,
+  fetchSalaryValuesForGroups,
   salaryForGroup,
   formatSalary,
   type SalaryValue,
@@ -142,7 +142,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       const groupIds = mapped
         .map((p) => p.job?.salary_group?.id)
         .filter((id): id is string => !!id)
-      setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups(groupIds))
+      setSalaryValuesByGroup(await fetchSalaryValuesForGroups(groupIds))
     } catch (err) {
       console.error("Error loading reincorporation data:", err)
       setLoadError("No se pudieron cargar los puestos disponibles.")

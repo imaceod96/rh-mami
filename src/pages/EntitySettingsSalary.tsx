@@ -11,6 +11,8 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SalaryGroupDialog } from "@/components/salary-group-dialog"
+import ReviewSalaryChangeDialog from "@/components/salary/ReviewSalaryChangeDialog"
+import { showSuccess } from "@/utils/toast"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { Scale, Plus, Edit3, Clock, AlertTriangle } from "lucide-react"
 import type { SalaryGroupWithCurrent, SalaryScale } from "@/contexts/SalaryContext"
@@ -45,6 +47,7 @@ const EntitySettingsSalary = () => {
     createGlobalPresupuestadaScale,
     createEntityEmpresarialScale,
     canManageGlobalSalary,
+    canManageSalary,
     fetchSalaryHistory
   } = useSalary()
   const { isPlatformSuperAdmin, user } = useAuth()

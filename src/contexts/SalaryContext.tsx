@@ -40,9 +40,17 @@ export interface SalaryGroupValue {
   updated_at: string
 }
 
+export interface SalaryGroupCurrentValue {
+  amount: number
+  currency_code: string
+  effective_from: string
+  effective_to: string | null
+}
+
 export interface SalaryGroupWithCurrent {
   group: SalaryGroup
-  current_value: SalaryGroupValue | null
+  /** Importe vigente HOY (resolución temporal por effective_from / effective_to) */
+  current_value: SalaryGroupCurrentValue | null
   roman_numeral: string
 }
 
@@ -67,7 +75,6 @@ interface SalaryContextType {
   
   // Value operations
   addSalaryValue: (groupId: string, amount: number, currencyCode: string, effectiveFrom: string) => Promise<SalaryGroupValue | null>
-  updateSalaryValue: (valueId: string, updates: Partial<SalaryGroupValue>) => Promise<SalaryGroupValue | null>
   fetchSalaryHistory: (groupId: string) => Promise<SalaryGroupValue[]>
   getCurrentSalaryValue: (groupId: string) => Promise<SalaryGroupValue | null>
   
@@ -137,25 +144,34 @@ export const SalaryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       
       if (groupsError) throw groupsError
       const groups = groupsData as SalaryGroup[]
-      
-      const groupsWithValues: SalaryGroupWithCurrent[] = []
-      for (const group of groups) {
-        const { data: valueData, error: valueError } = await supabase
-          .from('salary_group_values')
-          .select('*')
-          .eq('salary_group_id', group.id)
-          .eq('is_active', true)
-          .order('effective_from', { ascending: false })
-          .limit(1)
-          .single()
-        
-        groupsWithValues.push({
-          group,
-          current_value: valueError && valueError.code !== 'PGRST116' ? null : (valueData as SalaryGroupValue | null),
-          roman_numeral: toRomanNumeral(group.sequence_number)
+
+      // Importe vigente por grupo resuelto por vigencia temporal (la fecha es la fuente de verdad)
+      const valuesByGroup: Record<string, SalaryGroupCurrentValue> = {}
+      if (groups.length > 0) {
+        const { data: valuesData, error: valuesError } = await supabase.rpc(
+          'resolve_salary_group_values',
+          {
+            p_group_ids: groups.map(g => g.id),
+            p_effective_date: null
+          }
+        )
+        if (valuesError) throw valuesError
+        ;((valuesData as any[]) || []).forEach(v => {
+          valuesByGroup[v.salary_group_id] = {
+            amount: v.amount,
+            currency_code: v.currency_code,
+            effective_from: v.effective_from,
+            effective_to: v.effective_to
+          }
         })
       }
-      
+
+      const groupsWithValues: SalaryGroupWithCurrent[] = groups.map(group => ({
+        group,
+        current_value: valuesByGroup[group.id] || null,
+        roman_numeral: toRomanNumeral(group.sequence_number)
+      }))
+
       return { scale, groups: groupsWithValues }
     } catch (err) {
       console.error('[SalaryContext] Error fetching scale with groups:', err)
@@ -322,59 +338,41 @@ export const SalaryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [user])
 
+  /**
+   * Registra una nueva vigencia del importe salarial a través de la función atómica
+   * `apply_salary_group_value_change` (nunca sobrescribe valores anteriores).
+   * Para cambios de importe sobre un grupo existente usar el flujo de revisión
+   * (ReviewSalaryChangeDialog), que muestra el impacto antes de aplicar.
+   */
   const addSalaryValue = React.useCallback(async (
-    groupId: string, 
-    amount: number, 
-    currencyCode: string, 
+    groupId: string,
+    amount: number,
+    currencyCode: string,
     effectiveFrom: string
   ): Promise<SalaryGroupValue | null> => {
     if (!user) return null
     try {
-      // Deactivate any currently active value for this group
-      const { error: deactivateError } = await supabase
-        .from('salary_group_values')
-        .update({ is_active: false })
-        .eq('salary_group_id', groupId)
-        .eq('is_active', true)
-      
-      if (deactivateError) throw deactivateError
-      
-      // Insert new value
-      const { data, error } = await supabase
-        .from('salary_group_values')
-        .insert({
-          salary_group_id: groupId,
-          amount,
-          currency_code: currencyCode,
-          effective_from: effectiveFrom,
-          is_active: true,
-          created_by: user.id
-        })
-        .select()
-        .single()
-      
+      const { data, error } = await supabase.rpc('apply_salary_group_value_change', {
+        p_salary_group_id: groupId,
+        p_new_amount: amount,
+        p_currency_code: currencyCode || null,
+        p_effective_from: effectiveFrom,
+        p_notes: null
+      })
       if (error) throw error
-      return data as SalaryGroupValue
+
+      const valueId = (data as { salary_group_value_id?: string } | null)?.salary_group_value_id
+      if (!valueId) return null
+
+      const { data: row, error: rowError } = await supabase
+        .from('salary_group_values')
+        .select('*')
+        .eq('id', valueId)
+        .single()
+      if (rowError) throw rowError
+      return row as SalaryGroupValue
     } catch (err) {
       console.error('[SalaryContext] Error adding salary value:', err)
-      throw err
-    }
-  }, [user])
-
-  const updateSalaryValue = React.useCallback(async (valueId: string, updates: Partial<SalaryGroupValue>): Promise<SalaryGroupValue | null> => {
-    if (!user) return null
-    try {
-      const { data, error } = await supabase
-        .from('salary_group_values')
-        .update(updates)
-        .eq('id', valueId)
-        .select()
-        .single()
-      
-      if (error) throw error
-      return data as SalaryGroupValue
-    } catch (err) {
-      console.error('[SalaryContext] Error updating salary value:', err)
       throw err
     }
   }, [user])
@@ -526,7 +524,6 @@ export const SalaryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           updateSalaryGroup,
           deactivateSalaryGroup,
           addSalaryValue,
-          updateSalaryValue,
           fetchSalaryHistory,
           getCurrentSalaryValue,
           resolveSalaryValue,

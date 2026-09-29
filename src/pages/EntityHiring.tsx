@@ -28,7 +28,7 @@ import {
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import {
   resolveApplicableScaleId,
-  fetchActiveSalaryValuesForGroups,
+  fetchSalaryValuesForGroups,
   salaryForGroup,
   formatSalary,
   type SalaryValue,
@@ -176,7 +176,7 @@ const EntityHiring = () => {
       const groupIds = positionRows
         .map((p) => p.job?.salary_group?.id)
         .filter((id): id is string => !!id)
-      setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups(groupIds))
+      setSalaryValuesByGroup(await fetchSalaryValuesForGroups(groupIds))
     } catch (err) {
       console.error("Error loading hiring data:", err)
       setError(err instanceof Error ? err.message : "Error al cargar los puestos de la entidad")

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase"
 export interface SalaryValue {
   amount: number
   currency_code: string
+  effective_from?: string | null
 }
 
 export interface SalaryGroupRef {
@@ -26,31 +27,40 @@ export async function resolveApplicableScaleId(entityId: string): Promise<string
 }
 
 /**
- * Obtiene el importe vigente (último por effective_from) de cada grupo salarial.
- * Fuente de verdad única para Plantilla Operativa y la ficha del trabajador.
+ * Resuelve el valor salarial vigente para una fecha (por defecto, hoy).
+ * El valor vigente se determina por la vigencia temporal (effective_from / effective_to)
+ * del histórico de valores del grupo, nunca por un flag mutable.
  */
-export async function fetchActiveSalaryValuesForGroups(
-  groupIds: string[]
+export async function fetchSalaryValuesForGroups(
+  groupIds: string[],
+  effectiveDate?: string
 ): Promise<Record<string, SalaryValue | null>> {
   const map: Record<string, SalaryValue | null> = {}
   const uniqueIds = Array.from(new Set(groupIds.filter((id): id is string => !!id)))
   if (uniqueIds.length === 0) return map
 
-  const { data, error } = await supabase
-    .from("salary_group_values")
-    .select("salary_group_id, amount, currency_code, effective_from")
-    .in("salary_group_id", uniqueIds)
-    .eq("is_active", true)
-    .order("effective_from", { ascending: false })
+  const { data, error } = await supabase.rpc("resolve_salary_group_values", {
+    p_group_ids: uniqueIds,
+    p_effective_date: effectiveDate || null,
+  })
   if (error) throw error
 
-  ;(data as { salary_group_id: string; amount: number; currency_code: string }[] | null)?.forEach(
-    (v) => {
-      if (map[v.salary_group_id] === undefined) {
-        map[v.salary_group_id] = { amount: v.amount, currency_code: v.currency_code }
-      }
+  ;(
+    data as
+      | { salary_group_id: string; amount: number; currency_code: string; effective_from: string }[]
+      | null
+  )?.forEach((v) => {
+    map[v.salary_group_id] = {
+      amount: v.amount,
+      currency_code: v.currency_code,
+      effective_from: v.effective_from,
     }
-  )
+  })
+
+  uniqueIds.forEach((id) => {
+    if (map[id] === undefined) map[id] = null
+  })
+
   return map
 }
 
@@ -68,5 +78,5 @@ export function salaryForGroup(
   return valuesByGroup[group.id] || null
 }
 
-export const formatSalary = (v: SalaryValue) =>
+export const formatSalary = (v: { amount: number; currency_code: string }) =>
   `${v.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${v.currency_code}`

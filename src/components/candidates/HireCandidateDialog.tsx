@@ -18,7 +18,7 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
 import { showSuccess, showError } from "@/utils/toast"
 import {
   resolveApplicableScaleId,
-  fetchActiveSalaryValuesForGroups,
+  fetchSalaryValuesForGroups,
   salaryForGroup,
   formatSalary,
   type SalaryValue,
@@ -209,7 +209,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       const groupIds = mapped
         .map((p) => p.job?.salary_group?.id)
         .filter((id): id is string => !!id)
-      setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups(groupIds))
+      setSalaryValuesByGroup(await fetchSalaryValuesForGroups(groupIds))
     } catch (err) {
       console.error("Error loading hiring data:", err)
       setLoadError("No se pudieron cargar los datos para la contratación.")
