@@ -97,7 +97,14 @@ export async function fetchRepresentativePositions(
   })
 
   if (error) throw error
-  return (data as RepresentativePositionRow[]) || []
+  return ((data as any[]) || []).map((row) => ({
+    position_id: row.representative_position_id,
+    title: row.position_title,
+    display_order: row.display_order,
+    assignment_id: row.assignment_id ?? null,
+    person_name: row.person_name ?? null,
+    effective_from: row.effective_from ?? null,
+  }))
 }
 
 /** Representantes válidos (con ocupante) para la fecha indicada. */
