@@ -36,6 +36,10 @@ import {
   salaryForGroup,
   formatSalary,
 } from "@/lib/salary"
+import {
+  fetchEntityScheduleSegments,
+  type PositionScheduleSegment,
+} from "@/lib/position-schedule"
 
 interface OrganizationArea {
   id: string
