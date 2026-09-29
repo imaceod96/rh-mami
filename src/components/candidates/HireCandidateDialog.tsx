@@ -38,9 +38,12 @@ import {
   ContractFormalizationAlerts,
   EMPTY_FORMALIZATION_PENDING,
 } from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
+import type { RepresentativePositionRow } from "@/lib/representatives"
 import {
   buildComponentsPayload,
   fetchPaymentMethods,
+  formatConditionDate,
   hasInvalidComponent,
   type CompensationComponentDraft,
   type ContractFormalizationPending,
@@ -160,6 +163,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [signaturePlace, setSignaturePlace] = React.useState("")
   const [paymentMethodId, setPaymentMethodId] = React.useState("")
   const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
+  const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
   const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
   const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
     null
@@ -288,6 +292,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setSignaturePlace("")
     setPaymentMethodId("")
     setComponents([])
+    setRepresentatives([])
     setPending(null)
     setRepresentativeAssignmentId(null)
     setError(null)
@@ -356,6 +361,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const baseSalaryAmount = selectedSalary?.amount ?? null
   const baseSalaryCurrency = selectedSalary?.currency_code ?? null
   const formalizationBlocked = (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0
+  const selectedRepresentative =
+    representatives.find((row) => row.assignment_id === representativeAssignmentId) || null
 
   React.useEffect(() => {
     if (!isDetermined) setContractEndDate("")
@@ -800,14 +807,73 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           </div>
         </div>
 
-        <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
+        {/* ---------- Contrato: firma, lugar y forma de pago ---------- */}
+        <ContractSignatureFields
+          signatureDate={signatureDate}
+          onSignatureDateChange={setSignatureDate}
+          signaturePlace={signaturePlace}
+          onSignaturePlaceChange={setSignaturePlace}
+          paymentMethodId={paymentMethodId}
+          onPaymentMethodIdChange={setPaymentMethodId}
+          paymentMethods={paymentMethods}
+        />
 
+        <ContractFormalizationAlerts
+          entityId={entityId}
+          positionId={positionId || null}
+          signatureDate={signatureDate || null}
+          signaturePlace={signaturePlace || null}
+          paymentMethodId={paymentMethodId || null}
+          representativeAssignmentId={representativeAssignmentId}
+          canManage={canManageOrganization}
+          onPendingChange={setPending}
+        />
+
+        {/* ---------- Representante (resuelto por la fecha de firma) ---------- */}
         <RepresentativeSelect
           entityId={entityId}
           onDate={contractReferenceDate}
           value={representativeAssignmentId}
           onChange={setRepresentativeAssignmentId}
           canManage={canManageOrganization}
+          label="Representante que suscribe el contrato *"
+          dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
+            signatureDate
+          )}). Los cambios posteriores de representante no modifican este contrato.`}
+          onOptionsChange={setRepresentatives}
+        />
+
+        {/* ---------- Condiciones retributivas ---------- */}
+        <ContractRetributionFields
+          components={components}
+          onComponentsChange={setComponents}
+          baseSalaryAmount={baseSalaryAmount}
+          baseSalaryCurrency={baseSalaryCurrency}
+          salaryGroupSequence={selectedGroup?.sequence_number ?? null}
+          disabled={!selected}
+        />
+
+        {/* ---------- Resumen ---------- */}
+        <ContractFormalizationSummary
+          workerName={selectedCandidate?.fullName || ""}
+          personIdentification={selectedCandidate?.identification || null}
+          positionName={selected?.name || ""}
+          jobName={selected?.job?.name || null}
+          areaName={selected?.job?.area?.name || null}
+          contractTypeName={selectedType?.name || null}
+          startDate={contractStartDate || hireDate}
+          endDate={isDetermined ? contractEndDate || null : null}
+          signatureDate={signatureDate}
+          signaturePlace={signaturePlace}
+          paymentMethodName={
+            paymentMethods.find((method) => method.id === paymentMethodId)?.name || null
+          }
+          representativeName={selectedRepresentative?.person_name || null}
+          representativeTitle={selectedRepresentative?.title || null}
+          baseSalaryAmount={baseSalaryAmount}
+          baseSalaryCurrency={baseSalaryCurrency}
+          salaryGroupSequence={selectedGroup?.sequence_number ?? null}
+          components={components}
         />
 
         <div className="space-y-2">
@@ -831,7 +897,18 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={
-              submitting || loading || !selectedCandidate || !hasVacancy || !representativeAssignmentId
+              submitting ||
+              loading ||
+              !selectedCandidate ||
+              !positionId ||
+              !hasVacancy ||
+              !contractTypeId ||
+              !signatureDate ||
+              !signaturePlace.trim() ||
+              !paymentMethodId ||
+              hasInvalidComponent(components) ||
+              formalizationBlocked ||
+              !representativeAssignmentId
             }
           >
             <UserPlus className="mr-2 h-4 w-4" />

@@ -22,8 +22,26 @@ import {
   type SalaryValue,
 } from "@/lib/salary"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import type { RepresentativePositionRow } from "@/lib/representatives"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
-import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
+import {
+  ContractFormalizationAlerts,
+  EMPTY_FORMALIZATION_PENDING,
+} from "@/components/contracts/ContractFormalizationAlerts"
+import {
+  ContractRetributionFields,
+  ContractSignatureFields,
+} from "@/components/contracts/ContractConditionsFields"
+import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
+import {
+  buildComponentsPayload,
+  fetchPaymentMethods,
+  formatConditionDate,
+  hasInvalidComponent,
+  type CompensationComponentDraft,
+  type ContractFormalizationPending,
+  type PaymentMethodOption,
+} from "@/lib/contract-conditions"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
@@ -57,6 +75,11 @@ interface ContractType {
   code: string
 }
 
+interface WorkerIdentity {
+  fullName: string
+  identification: string
+}
+
 interface ReincorporateWorkerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -68,6 +91,8 @@ interface ReincorporateWorkerDialogProps {
 const groupLabel = (sequence: number | null | undefined) =>
   sequence == null ? "—" : `Grupo ${toRomanNumeral(sequence)}`
 
+/** Fase 11A.5 — reincorporación: crea nuevo período, puesto y contrato con las
+ *  mismas condiciones contractuales que el resto de flujos de contratación. */
 const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   open,
   onOpenChange,
@@ -85,11 +110,20 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   const [loading, setLoading] = React.useState(false)
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
+  const [worker, setWorker] = React.useState<WorkerIdentity | null>(null)
   const [positionId, setPositionId] = React.useState("")
   const [reincorporationDate, setReincorporationDate] = React.useState("")
   const [contractTypeId, setContractTypeId] = React.useState("")
   const [contractStartDate, setContractStartDate] = React.useState("")
   const [contractEndDate, setContractEndDate] = React.useState("")
+  // Fase 11A.5: condiciones formalizadas en el nuevo contrato
+  const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodOption[]>([])
+  const [signatureDate, setSignatureDate] = React.useState("")
+  const [signaturePlace, setSignaturePlace] = React.useState("")
+  const [paymentMethodId, setPaymentMethodId] = React.useState("")
+  const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
+  const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
+  const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
   const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
     null
   )
@@ -105,7 +139,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     setLoading(true)
     setLoadError(null)
     try {
-      const { data, error: posError } = await supabase
+      const { data: posData, error: posError } = await supabase
         .from("organization_positions")
         .select(
           `id, name, code, is_active, authorized_quantity,
@@ -120,7 +154,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         .order("name")
       if (posError) throw posError
 
-      const mapped = ((data as any[]) || []).map((p: any) => ({
+      const mapped = ((posData as any[]) || []).map((p: any) => ({
         ...p,
         job: p.job
           ? {
@@ -163,6 +197,26 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       if (ctError) throw ctError
       setContractTypes((ctData as ContractType[]) || [])
 
+      // Identidad del trabajador para el resumen contractual
+      const { data: workerRow, error: workerError } = await supabase
+        .from("workers")
+        .select("first_name, first_surname, second_surname, identification")
+        .eq("id", workerId)
+        .maybeSingle()
+      if (workerError) throw workerError
+      if (workerRow) {
+        const row = workerRow as any
+        setWorker({
+          fullName: [row.first_name, row.first_surname, row.second_surname]
+            .filter(Boolean)
+            .join(" "),
+          identification: row.identification,
+        })
+      }
+
+      // Fase 11A.5: catálogo global de formas de pago
+      setPaymentMethods(await fetchPaymentMethods())
+
       setApplicableScaleId(await resolveApplicableScaleId(entityId))
       const groupIds = mapped
         .map((p) => p.job?.salary_group?.id)
@@ -180,7 +234,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     } finally {
       setLoading(false)
     }
-  }, [entityId])
+  }, [entityId, workerId])
 
   React.useEffect(() => {
     if (!open) return
@@ -189,6 +243,12 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     setContractTypeId("")
     setContractStartDate("")
     setContractEndDate("")
+    setSignatureDate("")
+    setSignaturePlace("")
+    setPaymentMethodId("")
+    setComponents([])
+    setRepresentatives([])
+    setPending(null)
     setRepresentativeAssignmentId(null)
     setError(null)
     setOccupancy({})
@@ -213,6 +273,15 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   const selectedType = contractTypes.find((t) => t.id === contractTypeId) || null
   const isDetermined = selectedType?.code === "DETERMINADO"
 
+  // El representante que suscribe se resuelve por la FECHA DE FIRMA
+  const contractReferenceDate = signatureDate
+  const baseSalaryAmount = selectedSalary?.amount ?? null
+  const baseSalaryCurrency = selectedSalary?.currency_code ?? null
+  const formalizationBlocked = (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0
+  const selectedRepresentative =
+    representatives.find((row) => row.assignment_id === representativeAssignmentId) || null
+  const effectiveContractStart = contractStartDate || reincorporationDate
+
   React.useEffect(() => {
     if (isDetermined) return
     setContractEndDate("")
@@ -233,7 +302,32 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       setError("Selecciona un tipo de contrato.")
       return
     }
-    const effectiveContractStart = contractStartDate || reincorporationDate
+    if (!signatureDate) {
+      setError("La fecha de firma del contrato es obligatoria.")
+      return
+    }
+    if (!signaturePlace.trim()) {
+      setError("El lugar de firma es obligatorio.")
+      return
+    }
+    if (!paymentMethodId) {
+      setError("Selecciona la forma de pago.")
+      return
+    }
+    if (hasInvalidComponent(components)) {
+      setError(
+        "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)."
+      )
+      return
+    }
+    if (formalizationBlocked) {
+      setError(
+        `No se puede completar la formalización del contrato. Datos pendientes: ${(
+          pending || EMPTY_FORMALIZATION_PENDING
+        ).blocking.join(" · ")}`
+      )
+      return
+    }
     if (isDetermined && !contractEndDate) {
       setError("El contrato por tiempo determinado requiere una fecha de fin.")
       return
@@ -244,7 +338,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     }
     if (!representativeAssignmentId) {
       setError(
-        "No existe ningún representante autorizado configurado para la fecha del contrato."
+        "No hay representantes configurados para la fecha de firma seleccionada."
       )
       return
     }
@@ -260,6 +354,10 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         p_contract_end_date: isDetermined ? contractEndDate || null : null,
         p_notes: null,
         p_representative_assignment_id: representativeAssignmentId,
+        p_signature_date: signatureDate,
+        p_signature_place: signaturePlace.trim(),
+        p_payment_method_id: paymentMethodId,
+        p_compensation_components: buildComponentsPayload(components),
       })
       if (rpcError) throw rpcError
 
@@ -279,12 +377,20 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         friendly = "El contrato por tiempo determinado requiere una fecha de fin."
       } else if (/posterior a su inicio/i.test(msg)) {
         friendly = "La fecha de fin del contrato debe ser posterior a su inicio."
+      } else if (/Datos pendientes/i.test(msg)) {
+        friendly = msg
+      } else if (/concepto retributivo|n[uú]mero v[aá]lido|negativo/i.test(msg)) {
+        friendly =
+          "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)."
+      } else if (/escala salarial/i.test(msg)) {
+        friendly =
+          "No existe una escala salarial aplicable configurada para esta entidad. Complete la configuración salarial antes de formalizar el contrato."
       } else if (/ya est[aá] activo/i.test(msg)) {
         friendly = "El trabajador ya está activo."
       } else if (/carn[eé] de identidad/i.test(msg)) {
         friendly = "Ya existe otro trabajador activo con ese carné de identidad en este workspace."
       } else if (/representante/i.test(msg)) {
-        friendly = "No existe ningún representante autorizado configurado para la fecha del contrato."
+        friendly = "No hay representantes configurados para la fecha de firma seleccionada."
       } else if (/no est[aá] activo/i.test(msg)) {
         friendly = "El puesto seleccionado no está activo."
       } else if (/permiso/i.test(msg)) {
@@ -301,7 +407,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[620px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>Reincorporar trabajador</DialogTitle>
           <DialogDescription>
@@ -313,6 +419,26 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         {loadError && <SiteCorpAlert type="danger">{loadError}</SiteCorpAlert>}
 
         <div className="space-y-4">
+          {/* 1. Persona */}
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Persona
+            </p>
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs text-muted-foreground">Nombre</dt>
+                <dd className="text-sm font-medium text-ink">
+                  {worker?.fullName || "Cargando…"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Carné de identidad</dt>
+                <dd className="text-sm font-medium text-ink">{worker?.identification || "—"}</dd>
+              </div>
+            </dl>
+          </div>
+
+          {/* 2. Puesto y condiciones estructurales */}
           <div className="space-y-2">
             <Label>Nuevo puesto *</Label>
             {loading ? (
@@ -399,6 +525,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
             </div>
           )}
 
+          {/* 3. Contrato: vigencia */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Fecha de reincorporación *</Label>
@@ -440,7 +567,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
                 value={contractEndDate}
                 onChange={(e) => setContractEndDate(e.target.value)}
                 disabled={!isDetermined}
-                min={contractStartDate || reincorporationDate || undefined}
+                min={effectiveContractStart || undefined}
               />
               {!isDetermined && (
                 <p className="text-xs text-muted-foreground">
@@ -450,14 +577,73 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
             </div>
           </div>
 
-          <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
+          <ContractSignatureFields
+            signatureDate={signatureDate}
+            onSignatureDateChange={setSignatureDate}
+            signaturePlace={signaturePlace}
+            onSignaturePlaceChange={setSignaturePlace}
+            paymentMethodId={paymentMethodId}
+            onPaymentMethodIdChange={setPaymentMethodId}
+            paymentMethods={paymentMethods}
+          />
 
+          <ContractFormalizationAlerts
+            entityId={entityId}
+            positionId={positionId || null}
+            signatureDate={signatureDate || null}
+            signaturePlace={signaturePlace || null}
+            paymentMethodId={paymentMethodId || null}
+            representativeAssignmentId={representativeAssignmentId}
+            canManage={canManageOrganization}
+            onPendingChange={setPending}
+          />
+
+          {/* 4. Representante (resuelto por la fecha de firma) */}
           <RepresentativeSelect
             entityId={entityId}
-            onDate={contractStartDate || reincorporationDate}
+            onDate={contractReferenceDate}
             value={representativeAssignmentId}
             onChange={setRepresentativeAssignmentId}
             canManage={canManageOrganization}
+            label="Representante que suscribe el contrato *"
+            dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
+              signatureDate
+            )}). Los cambios posteriores de representante no modifican este contrato.`}
+            onOptionsChange={setRepresentatives}
+          />
+
+          {/* 5. Condiciones retributivas */}
+          <ContractRetributionFields
+            components={components}
+            onComponentsChange={setComponents}
+            baseSalaryAmount={baseSalaryAmount}
+            baseSalaryCurrency={baseSalaryCurrency}
+            salaryGroupSequence={selectedGroup?.sequence_number ?? null}
+            disabled={!selected}
+          />
+
+          {/* 6. Resumen */}
+          <ContractFormalizationSummary
+            title="Resumen de la reincorporación"
+            workerName={worker?.fullName || ""}
+            personIdentification={worker?.identification || null}
+            positionName={selected?.name || ""}
+            jobName={selected?.job?.name || null}
+            areaName={selected?.job?.area?.name || null}
+            contractTypeName={selectedType?.name || null}
+            startDate={effectiveContractStart}
+            endDate={isDetermined ? contractEndDate || null : null}
+            signatureDate={signatureDate}
+            signaturePlace={signaturePlace}
+            paymentMethodName={
+              paymentMethods.find((method) => method.id === paymentMethodId)?.name || null
+            }
+            representativeName={selectedRepresentative?.person_name || null}
+            representativeTitle={selectedRepresentative?.title || null}
+            baseSalaryAmount={baseSalaryAmount}
+            baseSalaryCurrency={baseSalaryCurrency}
+            salaryGroupSequence={selectedGroup?.sequence_number ?? null}
+            components={components}
           />
 
           {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
@@ -471,7 +657,17 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={
-              submitting || loading || selectable.length === 0 || !representativeAssignmentId
+              submitting ||
+              loading ||
+              selectable.length === 0 ||
+              !positionId ||
+              !contractTypeId ||
+              !signatureDate ||
+              !signaturePlace.trim() ||
+              !paymentMethodId ||
+              hasInvalidComponent(components) ||
+              formalizationBlocked ||
+              !representativeAssignmentId
             }
           >
             <UserPlus className="mr-2 h-4 w-4" />

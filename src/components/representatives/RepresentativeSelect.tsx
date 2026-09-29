@@ -20,6 +20,8 @@ interface RepresentativeSelectProps {
   label?: string
   /** Texto de apoyo que documenta la fecha contractual utilizada */
   dateHint?: string
+  /** Notifica los representantes vigentes resueltos (para resúmenes y validaciones) */
+  onOptionsChange?: (rows: RepresentativePositionRow[]) => void
 }
 
 /**
@@ -37,10 +39,16 @@ export const RepresentativeSelect = ({
   canManage = false,
   label = "Representante de la entidad *",
   dateHint,
+  onOptionsChange,
 }: RepresentativeSelectProps) => {
   const [rows, setRows] = React.useState<RepresentativePositionRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+
+  const onOptionsChangeRef = React.useRef(onOptionsChange)
+  React.useEffect(() => {
+    onOptionsChangeRef.current = onOptionsChange
+  })
 
   React.useEffect(() => {
     let cancelled = false
@@ -48,17 +56,22 @@ export const RepresentativeSelect = ({
     const load = async () => {
       if (!entityId || !onDate) {
         setRows([])
+        onOptionsChangeRef.current?.([])
         return
       }
       setLoading(true)
       setError(null)
       try {
         const valid = await fetchValidRepresentatives(entityId, onDate)
-        if (!cancelled) setRows(valid)
+        if (!cancelled) {
+          setRows(valid)
+          onOptionsChangeRef.current?.(valid)
+        }
       } catch (err) {
         console.error("Error loading representatives:", err)
         if (!cancelled) {
           setRows([])
+          onOptionsChangeRef.current?.([])
           setError("No se pudieron cargar los representantes autorizados.")
         }
       } finally {

@@ -58,6 +58,28 @@ import {
 import ChangeContractDialog, {
   type CurrentContractInfo,
 } from "@/components/workers/ChangeContractDialog"
+import {
+  ContractFormalizationAlerts,
+  EMPTY_FORMALIZATION_PENDING,
+} from "@/components/contracts/ContractFormalizationAlerts"
+import {
+  ContractRetributionFields,
+  ContractSignatureFields,
+} from "@/components/contracts/ContractConditionsFields"
+import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
+import { ContractRetributionSummary } from "@/components/contracts/ContractRetributionSummary"
+import type { RepresentativePositionRow } from "@/lib/representatives"
+import {
+  buildComponentsPayload,
+  fetchComponentsByContract,
+  fetchPaymentMethods,
+  formatConditionDate,
+  hasInvalidComponent,
+  type CompensationComponentDraft,
+  type ContractCompensationComponent,
+  type ContractFormalizationPending,
+  type PaymentMethodOption,
+} from "@/lib/contract-conditions"
 import { SelectItem } from "@/components/ui/select"
 import {
   resolveApplicableScaleId,
@@ -154,6 +176,14 @@ interface WorkerDetail {
     representative_position_snapshot: string | null
     representative_captured_at: string | null
     entity_name_snapshot: string | null
+    // Fase 11A.5: condiciones formalizadas en el contrato
+    signature_date: string | null
+    signature_place: string | null
+    payment_method_id: string | null
+    total_compensation_snapshot: number | null
+    conditions_captured_at: string | null
+    salary_group: { id: string; sequence_number: number } | null
+    payment_method: { name: string; code: string } | null
     contract_type: {
       id: string
       name: string
@@ -213,7 +243,29 @@ const WorkerDetail = () => {
     startDate: string
     endDate: string
     representativeAssignmentId: string | null
-  }>({ contractTypeId: "", startDate: "", endDate: "", representativeAssignmentId: null })
+    // Fase 11A.5: condiciones formalizadas del contrato
+    signatureDate: string
+    signaturePlace: string
+    paymentMethodId: string
+    components: CompensationComponentDraft[]
+  }>({
+    contractTypeId: "",
+    startDate: "",
+    endDate: "",
+    representativeAssignmentId: null,
+    signatureDate: "",
+    signaturePlace: "",
+    paymentMethodId: "",
+    components: [],
+  })
+  // Fase 11A.5: catálogo de formas de pago, checklist y conceptos por contrato
+  const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodOption[]>([])
+  const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
+  const [formalizationPending, setFormalizationPending] =
+    React.useState<ContractFormalizationPending | null>(null)
+  const [componentsByContract, setComponentsByContract] = React.useState<
+    Record<string, ContractCompensationComponent[]>
+  >({})
   const [contractSubmitting, setContractSubmitting] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
 
@@ -300,6 +352,10 @@ const WorkerDetail = () => {
                   entity_name_snapshot, entity_organism_snapshot, entity_branch_snapshot,
                   entity_labor_code_snapshot, entity_address_snapshot, entity_province_snapshot,
                   entity_municipality_snapshot,
+                  signature_date, signature_place, payment_method_id, total_compensation_snapshot,
+                  conditions_captured_at,
+                  salary_group:salary_groups(id, sequence_number),
+                  payment_method:payment_methods(name, code),
                   contract_type:employment_contract_types(id, name, code)
                 )
               `)
@@ -316,6 +372,13 @@ const WorkerDetail = () => {
                       contract_type: Array.isArray(c.contract_type)
                         ? c.contract_type[0] || null
                         : c.contract_type,
+                      // Fase 11A.5: snapshot contractual (grupo y forma de pago formalizados)
+                      salary_group: Array.isArray(c.salary_group)
+                        ? c.salary_group[0] || null
+                        : c.salary_group,
+                      payment_method: Array.isArray(c.payment_method)
+                        ? c.payment_method[0] || null
+                        : c.payment_method,
                     }))
                   }
             if (mappedWorker.assignments) {
@@ -374,6 +437,25 @@ const WorkerDetail = () => {
       setLicenseCategories(personCatalogs.licenseCategories)
       setLicenseIds(workerLicenseIds)
       setContractTypes((ct.data as { id: string; name: string; code: string }[]) || [])
+
+      // Fase 11A.5: catálogo de formas de pago y conceptos retributivos por contrato.
+      // Los conceptos son históricos: cada contrato conserva los suyos.
+      try {
+        setPaymentMethods(await fetchPaymentMethods())
+      } catch (paymentErr) {
+        console.error("Error loading payment methods:", paymentErr)
+        setPaymentMethods([])
+      }
+      try {
+        setComponentsByContract(
+          await fetchComponentsByContract(
+            ((mappedWorker.contracts || []) as { id: string }[]).map((c) => c.id)
+          )
+        )
+      } catch (componentsErr) {
+        console.error("Error loading contract compensation components:", componentsErr)
+        setComponentsByContract({})
+      }
 
       // Bitácora de movimientos laborales (bajas, reincorporaciones, cambios de puesto)
       const { data: movData } = await supabase
@@ -533,10 +615,34 @@ const WorkerDetail = () => {
       setActionError("La fecha de fin debe ser posterior al inicio")
       return
     }
-    if (!contractForm.representativeAssignmentId) {
+    if (!contractForm.signatureDate) {
+      setActionError("La fecha de firma del contrato es obligatoria")
+      return
+    }
+    if (!contractForm.signaturePlace.trim()) {
+      setActionError("El lugar de firma es obligatorio")
+      return
+    }
+    if (!contractForm.paymentMethodId) {
+      setActionError("Selecciona la forma de pago")
+      return
+    }
+    if (hasInvalidComponent(contractForm.components)) {
       setActionError(
-        "No existe ningún representante autorizado configurado para la fecha del contrato."
+        "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)"
       )
+      return
+    }
+    if ((formalizationPending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0) {
+      setActionError(
+        `No se puede completar la formalización del contrato. Datos pendientes: ${(
+          formalizationPending || EMPTY_FORMALIZATION_PENDING
+        ).blocking.join(" · ")}`
+      )
+      return
+    }
+    if (!contractForm.representativeAssignmentId) {
+      setActionError("No hay representantes configurados para la fecha de firma seleccionada.")
       return
     }
 
@@ -548,6 +654,10 @@ const WorkerDetail = () => {
         p_contract_start_date: start,
         p_contract_end_date: selectedType?.code === "DETERMINADO" ? contractForm.endDate || null : null,
         p_representative_assignment_id: contractForm.representativeAssignmentId,
+        p_signature_date: contractForm.signatureDate,
+        p_signature_place: contractForm.signaturePlace.trim(),
+        p_payment_method_id: contractForm.paymentMethodId,
+        p_compensation_components: buildComponentsPayload(contractForm.components),
       })
       if (rpcError) throw rpcError
       setContractDialogOpen(false)
@@ -556,11 +666,30 @@ const WorkerDetail = () => {
         startDate: "",
         endDate: "",
         representativeAssignmentId: null,
+        signatureDate: "",
+        signaturePlace: "",
+        paymentMethodId: "",
+        components: [],
       })
       loadWorker()
     } catch (err) {
       console.error("Error registering contract:", err)
-      setActionError(err instanceof Error ? err.message : "Error al registrar el contrato")
+      const msg = err instanceof Error ? err.message : ""
+      let friendly = "Error al registrar el contrato"
+      if (/Datos pendientes/i.test(msg)) {
+        friendly = msg
+      } else if (/concepto retributivo|n[uú]mero v[aá]lido|negativo/i.test(msg)) {
+        friendly =
+          "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)"
+      } else if (/escala salarial/i.test(msg)) {
+        friendly =
+          "No existe una escala salarial aplicable configurada para esta entidad. Complete la configuración salarial antes de formalizar el contrato."
+      } else if (/representante/i.test(msg)) {
+        friendly = "No hay representantes configurados para la fecha de firma seleccionada."
+      } else if (msg) {
+        friendly = msg
+      }
+      setActionError(friendly)
     } finally {
       setContractSubmitting(false)
     }
@@ -1021,7 +1150,13 @@ const WorkerDetail = () => {
                           startDate: worker.hire_date || "",
                           endDate: "",
                           representativeAssignmentId: null,
+                          signatureDate: "",
+                          signaturePlace: "",
+                          paymentMethodId: "",
+                          components: [],
                         })
+                        setActionError(null)
+                        setFormalizationPending(null)
                         setContractDialogOpen(true)
                       }}
                     >
@@ -1056,44 +1191,69 @@ const WorkerDetail = () => {
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Inicio</dt>
-                    <dd className="text-sm text-ink">{currentContract.start_date}</dd>
+                    <dd className="text-sm text-ink">
+                      {formatConditionDate(currentContract.start_date)}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Finalización prevista</dt>
                     <dd className="text-sm text-ink">
-                      {currentContract.end_date || (
+                      {currentContract.end_date ? (
+                        formatConditionDate(currentContract.end_date)
+                      ) : (
                         <span className="text-muted-foreground">Sin fecha de fin</span>
+                      )}
+                    </dd>
+                  </div>
+                  {/* Fase 11A.5: la fecha de firma es independiente de la fecha de inicio */}
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Fecha de firma</dt>
+                    <dd className="text-sm text-ink">
+                      {currentContract.signature_date ? (
+                        formatConditionDate(currentContract.signature_date)
+                      ) : (
+                        <span className="italic text-muted-foreground">
+                          Sin información histórica
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Lugar de firma</dt>
+                    <dd className="text-sm text-ink">
+                      {currentContract.signature_place || (
+                        <span className="italic text-muted-foreground">
+                          Sin información histórica
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Forma de pago</dt>
+                    <dd className="text-sm text-ink">
+                      {currentContract.payment_method?.name || (
+                        <span className="italic text-muted-foreground">
+                          Sin información histórica
+                        </span>
                       )}
                     </dd>
                   </div>
                 </dl>
 
-                {/* Salario del contrato: snapshot histórico (Fase 11A) */}
-                <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Salario al inicio del contrato
-                  </p>
-                  {currentContract.salary_snapshot_status === "CAPTURED" &&
-                  currentContract.salary_amount !== null ? (
-                    <>
-                      <p className="mt-1 text-sm font-medium text-ink">
-                        {formatSalary({
-                          amount: Number(currentContract.salary_amount),
-                          currency_code: currentContract.salary_currency_code || "",
-                        })}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Vigente desde {formatContractDate(currentContract.salary_effective_date)}
-                        {!contractSalaryDiffers && " · coincide con el salario actual"}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-1 text-sm italic text-muted-foreground">
-                      No reconstruible: el importe histórico de este contrato no pudo determinarse de
-                      forma fiable y no se ha registrado ningún valor inventado.
-                    </p>
-                  )}
-                </div>
+                {/* Retribución formalizada en el contrato vs. salario actual (Fase 11A.5) */}
+                <ContractRetributionSummary
+                  className="mt-3"
+                  salaryAmount={currentContract.salary_amount}
+                  salaryCurrencyCode={currentContract.salary_currency_code}
+                  salarySnapshotStatus={currentContract.salary_snapshot_status}
+                  salaryEffectiveDate={currentContract.salary_effective_date}
+                  totalCompensationSnapshot={currentContract.total_compensation_snapshot}
+                  components={componentsByContract[currentContract.id] || []}
+                  capturedAt={currentContract.conditions_captured_at}
+                  salaryGroupSequence={currentContract.salary_group?.sequence_number ?? null}
+                  currentSalaryAmount={salary?.amount ?? null}
+                  currentSalaryCurrency={salary?.currency_code ?? null}
+                />
 
                 {/* Representante que comparece: snapshot histórico (Fase 11A.1) */}
                 <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3">
@@ -1324,6 +1484,40 @@ const WorkerDetail = () => {
                           }`
                         : "Representante: sin información histórica"}
                     </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {/* Fase 11A.5: firma, lugar y forma de pago formalizados (histórico) */}
+                      {c.signature_date || c.signature_place || c.payment_method?.name
+                        ? [
+                            c.signature_date
+                              ? `Firmado: ${formatConditionDate(c.signature_date)}`
+                              : null,
+                            c.signature_place ? `Lugar: ${c.signature_place}` : null,
+                            c.payment_method?.name
+                              ? `Forma de pago: ${c.payment_method.name}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : "Firma y forma de pago: sin información histórica"}
+                    </p>
+
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-medium text-sitecorp-primary">
+                        Ver condiciones retributivas formalizadas
+                      </summary>
+                      <ContractRetributionSummary
+                        className="mt-2 bg-background"
+                        title="Retribución de este contrato"
+                        salaryAmount={c.salary_amount}
+                        salaryCurrencyCode={c.salary_currency_code}
+                        salarySnapshotStatus={c.salary_snapshot_status}
+                        salaryEffectiveDate={c.salary_effective_date}
+                        totalCompensationSnapshot={c.total_compensation_snapshot}
+                        components={componentsByContract[c.id] || []}
+                        capturedAt={c.conditions_captured_at}
+                        salaryGroupSequence={c.salary_group?.sequence_number ?? null}
+                      />
+                    </details>
                   </li>
                 ))}
               </ul>
@@ -1425,6 +1619,20 @@ const WorkerDetail = () => {
                       ? "El contrato conserva el importe histórico con el que se firmó: las modificaciones posteriores de la escala no lo sobrescriben."
                       : "Coincide con el salario actual vigente."}
                   </p>
+
+                  {/* Fase 11A.5: retribución formalizada (salario de escala + conceptos + total) */}
+                  <ContractRetributionSummary
+                    className="mt-3 bg-background"
+                    title="Retribución formalizada en este contrato"
+                    salaryAmount={currentContract.salary_amount}
+                    salaryCurrencyCode={currentContract.salary_currency_code}
+                    salarySnapshotStatus={currentContract.salary_snapshot_status}
+                    salaryEffectiveDate={currentContract.salary_effective_date}
+                    totalCompensationSnapshot={currentContract.total_compensation_snapshot}
+                    components={componentsByContract[currentContract.id] || []}
+                    capturedAt={currentContract.conditions_captured_at}
+                    salaryGroupSequence={currentContract.salary_group?.sequence_number ?? null}
+                  />
                 </>
               ) : (
                 <SiteCorpAlert type="warning" title="Salario del contrato no reconstruible">
@@ -1754,11 +1962,12 @@ const WorkerDetail = () => {
 
       {/* Diálogo de registro de contrato */}
       <Dialog open={contractDialogOpen} onOpenChange={setContractDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
           <DialogHeader>
             <DialogTitle>Registrar contrato</DialogTitle>
             <DialogDescription>
-              Registra un contrato de trabajo para el puesto actual del trabajador.
+              Registra un contrato de trabajo para el puesto actual del trabajador, con sus
+              condiciones formalizadas (firma, forma de pago, representante y retribución).
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1810,13 +2019,93 @@ const WorkerDetail = () => {
               </div>
             </div>
 
+            {/* Fase 11A.5: condiciones formalizadas del contrato */}
+            <ContractSignatureFields
+              signatureDate={contractForm.signatureDate}
+              onSignatureDateChange={(value) =>
+                setContractForm((f) => ({ ...f, signatureDate: value }))
+              }
+              signaturePlace={contractForm.signaturePlace}
+              onSignaturePlaceChange={(value) =>
+                setContractForm((f) => ({ ...f, signaturePlace: value }))
+              }
+              paymentMethodId={contractForm.paymentMethodId}
+              onPaymentMethodIdChange={(value) =>
+                setContractForm((f) => ({ ...f, paymentMethodId: value }))
+              }
+              paymentMethods={paymentMethods}
+            />
+
+            <ContractFormalizationAlerts
+              entityId={entityId || ""}
+              positionId={position?.id ?? null}
+              signatureDate={contractForm.signatureDate || null}
+              signaturePlace={contractForm.signaturePlace || null}
+              paymentMethodId={contractForm.paymentMethodId || null}
+              representativeAssignmentId={contractForm.representativeAssignmentId}
+              canManage={canManage}
+              onPendingChange={setFormalizationPending}
+            />
+
             <RepresentativeSelect
               entityId={entityId || ""}
-              onDate={contractForm.startDate || worker.hire_date || ""}
+              onDate={contractForm.signatureDate}
               value={contractForm.representativeAssignmentId}
               onChange={(assignmentId) =>
                 setContractForm((f) => ({ ...f, representativeAssignmentId: assignmentId }))
               }
+              canManage={canManage}
+              label="Representante que suscribe el contrato *"
+              dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
+                contractForm.signatureDate
+              )}).`}
+              onOptionsChange={setRepresentatives}
+            />
+
+            <ContractRetributionFields
+              components={contractForm.components}
+              onComponentsChange={(next) => setContractForm((f) => ({ ...f, components: next }))}
+              baseSalaryAmount={salary?.amount ?? null}
+              baseSalaryCurrency={salary?.currency_code ?? null}
+              salaryGroupSequence={group?.sequence_number ?? null}
+              disabled={!position}
+            />
+
+            <ContractFormalizationSummary
+              workerName={fullName(worker)}
+              personIdentification={worker.identification}
+              positionName={position?.name || ""}
+              jobName={job?.name || null}
+              areaName={job?.area?.name || null}
+              contractTypeName={
+                contractTypes.find((t) => t.id === contractForm.contractTypeId)?.name || null
+              }
+              startDate={contractForm.startDate || worker.hire_date}
+              endDate={
+                contractTypes.find((t) => t.id === contractForm.contractTypeId)?.code ===
+                "DETERMINADO"
+                  ? contractForm.endDate || null
+                  : null
+              }
+              signatureDate={contractForm.signatureDate}
+              signaturePlace={contractForm.signaturePlace}
+              paymentMethodName={
+                paymentMethods.find((m) => m.id === contractForm.paymentMethodId)?.name || null
+              }
+              representativeName={
+                representatives.find(
+                  (row) => row.assignment_id === contractForm.representativeAssignmentId
+                )?.person_name || null
+              }
+              representativeTitle={
+                representatives.find(
+                  (row) => row.assignment_id === contractForm.representativeAssignmentId
+                )?.title || null
+              }
+              baseSalaryAmount={salary?.amount ?? null}
+              baseSalaryCurrency={salary?.currency_code ?? null}
+              salaryGroupSequence={group?.sequence_number ?? null}
+              components={contractForm.components}
             />
 
             <div className="flex justify-end gap-2 pt-2">
@@ -1829,7 +2118,15 @@ const WorkerDetail = () => {
               </SiteCorpButton>
               <SiteCorpButton
                 type="submit"
-                disabled={contractSubmitting || !contractForm.representativeAssignmentId}
+                disabled={
+                  contractSubmitting ||
+                  !contractForm.representativeAssignmentId ||
+                  !contractForm.signatureDate ||
+                  !contractForm.signaturePlace.trim() ||
+                  !contractForm.paymentMethodId ||
+                  hasInvalidComponent(contractForm.components) ||
+                  (formalizationPending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0
+                }
               >
                 {contractSubmitting ? "Registrando..." : "Registrar contrato"}
               </SiteCorpButton>
@@ -1874,6 +2171,15 @@ const WorkerDetail = () => {
           workerId={worker.id}
           entityId={entityId as string}
           current={currentContractInfo}
+          workerName={fullName(worker)}
+          workerIdentification={worker.identification}
+          positionId={position?.id ?? null}
+          positionName={position?.name ?? null}
+          jobName={job?.name ?? null}
+          areaName={job?.area?.name ?? null}
+          salaryGroupSequence={group?.sequence_number ?? null}
+          baseSalaryAmount={salary?.amount ?? null}
+          baseSalaryCurrency={salary?.currency_code ?? null}
           onSuccess={loadWorker}
         />
       )}

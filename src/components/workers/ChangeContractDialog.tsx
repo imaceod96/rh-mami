@@ -14,7 +14,27 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
 import { showSuccess, showError } from "@/utils/toast"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
-import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
+import type { RepresentativePositionRow } from "@/lib/representatives"
+import {
+  ContractFormalizationAlerts,
+  EMPTY_FORMALIZATION_PENDING,
+} from "@/components/contracts/ContractFormalizationAlerts"
+import {
+  ContractRetributionFields,
+  ContractSignatureFields,
+} from "@/components/contracts/ContractConditionsFields"
+import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
+import {
+  buildComponentsPayload,
+  fetchContractConditions,
+  fetchPaymentMethods,
+  formatConditionDate,
+  hasInvalidComponent,
+  toComponentDrafts,
+  type CompensationComponentDraft,
+  type ContractFormalizationPending,
+  type PaymentMethodOption,
+} from "@/lib/contract-conditions"
 import { FileSignature } from "lucide-react"
 
 interface ContractType {
@@ -37,6 +57,17 @@ interface ChangeContractDialogProps {
   workerId: string
   entityId: string
   current: CurrentContractInfo
+  /** Contexto derivado del puesto vigente (para el resumen contractual) */
+  workerName?: string
+  workerIdentification?: string | null
+  /** Puesto vigente (no cambia en este flujo) usado para validar la escala aplicable */
+  positionId?: string | null
+  positionName?: string | null
+  jobName?: string | null
+  areaName?: string | null
+  salaryGroupSequence?: number | null
+  baseSalaryAmount?: number | null
+  baseSalaryCurrency?: string | null
   onSuccess: () => void
 }
 
@@ -46,12 +77,24 @@ const addDays = (isoDate: string, days: number): string => {
   return d.toISOString().slice(0, 10)
 }
 
+/** Fase 11A.5 — cambio de tipo de contrato: crea un contrato NUEVO con sus propias
+ *  condiciones formalizadas. Las condiciones vigentes se precargan para revisión,
+ *  nunca se heredan silenciosamente (§69). */
 const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
   open,
   onOpenChange,
   workerId,
   entityId,
   current,
+  workerName = "",
+  workerIdentification = null,
+  positionId = null,
+  positionName = null,
+  jobName = null,
+  areaName = null,
+  salaryGroupSequence = null,
+  baseSalaryAmount = null,
+  baseSalaryCurrency = null,
   onSuccess,
 }) => {
   const [contractTypes, setContractTypes] = React.useState<ContractType[]>([])
@@ -60,6 +103,15 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
   const [effectiveDate, setEffectiveDate] = React.useState("")
   const [newEndDate, setNewEndDate] = React.useState("")
   const [notes, setNotes] = React.useState("")
+  // Fase 11A.5: condiciones formalizadas del nuevo contrato
+  const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodOption[]>([])
+  const [signatureDate, setSignatureDate] = React.useState("")
+  const [signaturePlace, setSignaturePlace] = React.useState("")
+  const [paymentMethodId, setPaymentMethodId] = React.useState("")
+  const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
+  const [preloaded, setPreloaded] = React.useState(false)
+  const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
+  const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
   const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
     null
   )
@@ -73,9 +125,17 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
     setEffectiveDate("")
     setNewEndDate("")
     setNotes("")
+    setSignatureDate("")
+    setSignaturePlace("")
+    setPaymentMethodId("")
+    setComponents([])
+    setPreloaded(false)
+    setRepresentatives([])
+    setPending(null)
     setRepresentativeAssignmentId(null)
     setError(null)
     setLoading(true)
+
     supabase
       .from("employment_contract_types")
       .select("id, name, code")
@@ -97,11 +157,40 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
         permission_code: "organization.manage",
       })
       .then(({ data }) => setCanManageOrganization(!!data))
-  }, [open, entityId])
+
+    // Fase 11A.5: catálogo de formas de pago + condiciones del contrato vigente
+    // precargadas como borrador revisable (no se heredan sin mostrar).
+    const loadConditions = async () => {
+      try {
+        setPaymentMethods(await fetchPaymentMethods())
+      } catch (err) {
+        console.error("Error loading payment methods:", err)
+      }
+      try {
+        const snapshot = await fetchContractConditions(current.id)
+        if (snapshot) {
+          setSignaturePlace(snapshot.signature_place || "")
+          setPaymentMethodId(snapshot.payment_method_id || "")
+          setComponents(toComponentDrafts(snapshot.components))
+          setPreloaded(
+            !!snapshot.signature_place ||
+              !!snapshot.payment_method_id ||
+              snapshot.components.length > 0
+          )
+        }
+      } catch (err) {
+        console.error("Error loading current contract conditions:", err)
+      }
+    }
+    loadConditions()
+  }, [open, entityId, current.id])
 
   const selectedType = contractTypes.find((t) => t.id === newContractTypeId) || null
   const isDetermined = selectedType?.code === "DETERMINADO"
   const minDate = current.startDate ? addDays(current.startDate, 1) : undefined
+  const formalizationBlocked = (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0
+  const selectedRepresentative =
+    representatives.find((row) => row.assignment_id === representativeAssignmentId) || null
 
   React.useEffect(() => {
     if (!isDetermined) setNewEndDate("")
@@ -130,10 +219,34 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
       setError("La fecha de finalización debe ser posterior a la fecha efectiva.")
       return
     }
-    if (!representativeAssignmentId) {
+    if (!signatureDate) {
+      setError("La fecha de firma del contrato es obligatoria.")
+      return
+    }
+    if (!signaturePlace.trim()) {
+      setError("El lugar de firma es obligatorio.")
+      return
+    }
+    if (!paymentMethodId) {
+      setError("Selecciona la forma de pago.")
+      return
+    }
+    if (hasInvalidComponent(components)) {
       setError(
-        "No existe ningún representante autorizado configurado para la fecha del contrato."
+        "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)."
       )
+      return
+    }
+    if (formalizationBlocked) {
+      setError(
+        `No se puede completar la formalización del contrato. Datos pendientes: ${(
+          pending || EMPTY_FORMALIZATION_PENDING
+        ).blocking.join(" · ")}`
+      )
+      return
+    }
+    if (!representativeAssignmentId) {
+      setError("No hay representantes configurados para la fecha de firma seleccionada.")
       return
     }
 
@@ -146,6 +259,10 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
         p_new_end_date: isDetermined ? newEndDate : null,
         p_notes: notes.trim() || null,
         p_representative_assignment_id: representativeAssignmentId,
+        p_signature_date: signatureDate,
+        p_signature_place: signaturePlace.trim(),
+        p_payment_method_id: paymentMethodId,
+        p_compensation_components: buildComponentsPayload(components),
       })
       if (rpcError) throw rpcError
 
@@ -161,8 +278,16 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
         friendly = "El contrato por tiempo determinado requiere una fecha de finalización."
       } else if (/posterior a la fecha efectiva/i.test(msg)) {
         friendly = "La fecha de finalización debe ser posterior a la fecha efectiva."
+      } else if (/Datos pendientes/i.test(msg)) {
+        friendly = msg
+      } else if (/concepto retributivo|n[uú]mero v[aá]lido|negativo/i.test(msg)) {
+        friendly =
+          "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)."
+      } else if (/escala salarial/i.test(msg)) {
+        friendly =
+          "No existe una escala salarial aplicable configurada para esta entidad. Complete la configuración salarial antes de formalizar el contrato."
       } else if (/representante/i.test(msg)) {
-        friendly = "No existe ningún representante autorizado configurado para la fecha del contrato."
+        friendly = "No hay representantes configurados para la fecha de firma seleccionada."
       } else if (/no tiene un contrato vigente/i.test(msg)) {
         friendly = "El trabajador no tiene un contrato vigente."
       } else if (/no est[aá] activo/i.test(msg)) {
@@ -181,7 +306,7 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[580px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>Cambiar contrato</DialogTitle>
           <DialogDescription>
@@ -202,12 +327,14 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Fecha de inicio</dt>
-              <dd className="text-sm font-medium text-ink">{current.startDate || "—"}</dd>
+              <dd className="text-sm font-medium text-ink">
+                {formatConditionDate(current.startDate)}
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Finalización prevista</dt>
               <dd className="text-sm font-medium text-ink">
-                {current.endDate || "Sin fecha de fin"}
+                {current.endDate ? formatConditionDate(current.endDate) : "Sin fecha de fin"}
               </dd>
             </div>
           </dl>
@@ -253,14 +380,56 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
             </div>
           </div>
 
-          <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
+          {/* Condiciones formalizadas del nuevo contrato */}
+          <ContractSignatureFields
+            signatureDate={signatureDate}
+            onSignatureDateChange={setSignatureDate}
+            signaturePlace={signaturePlace}
+            onSignaturePlaceChange={setSignaturePlace}
+            paymentMethodId={paymentMethodId}
+            onPaymentMethodIdChange={setPaymentMethodId}
+            paymentMethods={paymentMethods}
+          />
+
+          {preloaded && (
+            <SiteCorpAlert type="info">
+              Se precargaron la forma de pago, el lugar de firma y los conceptos retributivos del
+              contrato vigente. Revíselos antes de confirmar: el nuevo contrato conserva sus propias
+              condiciones formalizadas.
+            </SiteCorpAlert>
+          )}
+
+          <ContractFormalizationAlerts
+            entityId={entityId}
+            positionId={positionId}
+            signatureDate={signatureDate || null}
+            signaturePlace={signaturePlace || null}
+            paymentMethodId={paymentMethodId || null}
+            representativeAssignmentId={representativeAssignmentId}
+            canManage={canManageOrganization}
+            onPendingChange={setPending}
+          />
 
           <RepresentativeSelect
             entityId={entityId}
-            onDate={effectiveDate}
+            onDate={signatureDate}
             value={representativeAssignmentId}
             onChange={setRepresentativeAssignmentId}
             canManage={canManageOrganization}
+            label="Representante que suscribe el contrato *"
+            dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
+              signatureDate
+            )}). Los cambios posteriores de representante no modifican este contrato.`}
+            onOptionsChange={setRepresentatives}
+          />
+
+          <ContractRetributionFields
+            components={components}
+            onComponentsChange={setComponents}
+            baseSalaryAmount={baseSalaryAmount}
+            baseSalaryCurrency={baseSalaryCurrency}
+            salaryGroupSequence={salaryGroupSequence}
+            salaryHint="El salario de escala del nuevo contrato se deriva del cargo y la escala aplicable a la entidad."
           />
 
           <div className="space-y-2">
@@ -274,6 +443,29 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
             />
           </div>
 
+          <ContractFormalizationSummary
+            title="Resumen del nuevo contrato"
+            workerName={workerName}
+            personIdentification={workerIdentification}
+            positionName={positionName || "—"}
+            jobName={jobName}
+            areaName={areaName}
+            contractTypeName={selectedType?.name || null}
+            startDate={effectiveDate}
+            endDate={isDetermined ? newEndDate || null : null}
+            signatureDate={signatureDate}
+            signaturePlace={signaturePlace}
+            paymentMethodName={
+              paymentMethods.find((method) => method.id === paymentMethodId)?.name || null
+            }
+            representativeName={selectedRepresentative?.person_name || null}
+            representativeTitle={selectedRepresentative?.title || null}
+            baseSalaryAmount={baseSalaryAmount}
+            baseSalaryCurrency={baseSalaryCurrency}
+            salaryGroupSequence={salaryGroupSequence}
+            components={components}
+          />
+
           {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
         </div>
 
@@ -284,7 +476,17 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
           <SiteCorpButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || loading || !representativeAssignmentId}
+            disabled={
+              submitting ||
+              loading ||
+              !newContractTypeId ||
+              !signatureDate ||
+              !signaturePlace.trim() ||
+              !paymentMethodId ||
+              hasInvalidComponent(components) ||
+              formalizationBlocked ||
+              !representativeAssignmentId
+            }
           >
             <FileSignature className="mr-2 h-4 w-4" />
             {submitting ? "Procesando…" : "Confirmar cambio de contrato"}

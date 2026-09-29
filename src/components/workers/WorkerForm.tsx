@@ -9,8 +9,26 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
 import { ciToBirthDate } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import type { RepresentativePositionRow } from "@/lib/representatives"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
-import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
+import {
+  ContractFormalizationAlerts,
+  EMPTY_FORMALIZATION_PENDING,
+} from "@/components/contracts/ContractFormalizationAlerts"
+import {
+  ContractRetributionFields,
+  ContractSignatureFields,
+} from "@/components/contracts/ContractConditionsFields"
+import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
+import {
+  buildComponentsPayload,
+  fetchPaymentMethods,
+  formatConditionDate,
+  hasInvalidComponent,
+  type CompensationComponentDraft,
+  type ContractFormalizationPending,
+  type PaymentMethodOption,
+} from "@/lib/contract-conditions"
 import type { PositionScheduleSegment } from "@/lib/position-schedule"
 import {
   fetchPersonCatalogs,
@@ -182,6 +200,14 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
     null
   )
+  // Fase 11A.5: condiciones formalizadas del contrato (solo al crear trabajador)
+  const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodOption[]>([])
+  const [signatureDate, setSignatureDate] = React.useState<string>("")
+  const [signaturePlace, setSignaturePlace] = React.useState<string>("")
+  const [paymentMethodId, setPaymentMethodId] = React.useState<string>("")
+  const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
+  const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
+  const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
   const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -202,6 +228,12 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       setSkinColors(personCatalogs.skinColors)
       setLicenseCategories(personCatalogs.licenseCategories)
       setContractTypes((ct.data as ContractType[]) || [])
+      // Fase 11A.5: catálogo global de formas de pago
+      try {
+        setPaymentMethods(await fetchPaymentMethods())
+      } catch (paymentErr) {
+        console.error("Error loading payment methods:", paymentErr)
+      }
     }
     load().catch(err => {
       console.error("Error loading catalogs:", err)
@@ -257,23 +289,30 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   // La lógica contractual se basa en el código estable del catálogo global, no en el texto visible.
   const isDeterminedContract = selectedContractType?.code === "DETERMINADO"
 
+  // Fase 11A.5: fecha efectiva de inicio del contrato y bloqueo de formalización
+  const effectiveContractStart = contractStartDate || form.hire_date
+  const formalizationBlocked = (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0
+
   // Información derivada de solo lectura: Área / Cargo / Grupo / Salario referencia
   const derivedInfo = React.useMemo(() => {
     if (!selectedPosition) return null
     const job = selectedPosition.job
     const group = job?.salary_group
 
-    let salaryLabel: string | null = null
+    let salary: SalaryValue | null = null
     if (applicableScaleId && group && group.salary_scale_id === applicableScaleId) {
-      const value = salaryValuesByGroup[group.id]
-      salaryLabel = value ? formatSalary(value) : null
+      salary = salaryValuesByGroup[group.id] || null
     }
 
     return {
       areaLabel: job?.area?.name || "N/A",
       jobLabel: job?.name || "N/A",
       groupLabel: group ? `Grupo ${toRomanNumeral(group.sequence_number)}` : "N/A",
-      salaryLabel,
+      salaryLabel: salary ? formatSalary(salary) : null,
+      // Fase 11A.5: salario de escala derivado (snapshot del contrato se calcula en backend)
+      groupSequence: group?.sequence_number ?? null,
+      salaryAmount: salary?.amount ?? null,
+      salaryCurrency: salary?.currency_code ?? null,
     }
   }, [selectedPosition, applicableScaleId, salaryValuesByGroup])
 
@@ -325,7 +364,6 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       setFormError("El contrato por tiempo determinado requiere una fecha de fin")
       return
     }
-    const effectiveContractStart = contractStartDate || form.hire_date
     if (
       !isEditing &&
       contractEndDate &&
@@ -335,9 +373,35 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       setFormError("La fecha de fin del contrato debe ser posterior a su inicio")
         return
       }
+      if (!isEditing && !signatureDate) {
+        setFormError("La fecha de firma del contrato es obligatoria")
+        return
+      }
+      if (!isEditing && !signaturePlace.trim()) {
+        setFormError("El lugar de firma es obligatorio")
+        return
+      }
+      if (!isEditing && !paymentMethodId) {
+        setFormError("Selecciona la forma de pago")
+        return
+      }
+      if (!isEditing && hasInvalidComponent(components)) {
+        setFormError(
+          "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)"
+        )
+        return
+      }
+      if (!isEditing && (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0) {
+        setFormError(
+          `No se puede completar la formalización del contrato. Datos pendientes: ${(
+            pending || EMPTY_FORMALIZATION_PENDING
+          ).blocking.join(" · ")}`
+        )
+        return
+      }
       if (!isEditing && !representativeAssignmentId) {
         setFormError(
-          "No existe ningún representante autorizado configurado para la fecha del contrato."
+          "No hay representantes configurados para la fecha de firma seleccionada."
         )
         return
       }
@@ -405,6 +469,10 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           p_contract_end_date: isDeterminedContract ? contractEndDate || null : null,
           p_representative_assignment_id: representativeAssignmentId,
           p_driving_license_category_ids: licenseIds,
+          p_signature_date: signatureDate,
+          p_signature_place: signaturePlace.trim(),
+          p_payment_method_id: paymentMethodId,
+          p_compensation_components: buildComponentsPayload(components),
         })
 
         if (rpcError) throw rpcError
@@ -412,7 +480,20 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       }
     } catch (err) {
       console.error("Error saving worker:", err)
-      setFormError(err instanceof Error ? err.message : "Error al guardar el trabajador")
+      const msg = err instanceof Error ? err.message : ""
+      let friendly = "Error al guardar el trabajador"
+      if (/concepto retributivo|n[uú]mero v[aá]lido|negativo/i.test(msg)) {
+        friendly =
+          "Revisa los conceptos retributivos: cada uno necesita descripción e importe válido (mayor o igual que 0)"
+      } else if (/escala salarial/i.test(msg)) {
+        friendly =
+          "No existe una escala salarial aplicable configurada para esta entidad. Complete la configuración salarial antes de formalizar el contrato."
+      } else if (/representante/i.test(msg)) {
+        friendly = "No hay representantes configurados para la fecha de firma seleccionada."
+      } else if (msg) {
+        friendly = msg
+      }
+      setFormError(friendly)
     } finally {
       setSubmitting(false)
     }
@@ -754,15 +835,79 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
               </div>
             </div>
 
-            <div className="mt-4">
-              <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
+            <div className="mt-4 space-y-4">
+              <ContractSignatureFields
+                signatureDate={signatureDate}
+                onSignatureDateChange={setSignatureDate}
+                signaturePlace={signaturePlace}
+                onSignaturePlaceChange={setSignaturePlace}
+                paymentMethodId={paymentMethodId}
+                onPaymentMethodIdChange={setPaymentMethodId}
+                paymentMethods={paymentMethods}
+              />
+
+              <ContractFormalizationAlerts
+                entityId={entityId}
+                positionId={positionId || null}
+                signatureDate={signatureDate || null}
+                signaturePlace={signaturePlace || null}
+                paymentMethodId={paymentMethodId || null}
+                representativeAssignmentId={representativeAssignmentId}
+                canManage={canManageOrganization}
+                onPendingChange={setPending}
+              />
 
               <RepresentativeSelect
                 entityId={entityId}
-                onDate={contractStartDate || form.hire_date}
+                onDate={signatureDate}
                 value={representativeAssignmentId}
                 onChange={setRepresentativeAssignmentId}
                 canManage={canManageOrganization}
+                label="Representante que suscribe el contrato *"
+                dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
+                  signatureDate
+                )}).`}
+                onOptionsChange={setRepresentatives}
+              />
+
+              <ContractRetributionFields
+                components={components}
+                onComponentsChange={setComponents}
+                baseSalaryAmount={derivedInfo?.salaryAmount ?? null}
+                baseSalaryCurrency={derivedInfo?.salaryCurrency ?? null}
+                salaryGroupSequence={derivedInfo?.groupSequence ?? null}
+                disabled={!selectedPosition}
+              />
+
+              <ContractFormalizationSummary
+                title="Resumen de la contratación"
+                workerName={[form.first_name, form.first_surname, form.second_surname]
+                  .filter(Boolean)
+                  .join(" ")}
+                personIdentification={form.identification || null}
+                positionName={selectedPosition?.name || ""}
+                jobName={selectedPosition?.job?.name || null}
+                areaName={selectedPosition?.job?.area?.name || null}
+                contractTypeName={selectedContractType?.name || null}
+                startDate={effectiveContractStart}
+                endDate={isDeterminedContract ? contractEndDate || null : null}
+                signatureDate={signatureDate}
+                signaturePlace={signaturePlace}
+                paymentMethodName={
+                  paymentMethods.find((method) => method.id === paymentMethodId)?.name || null
+                }
+                representativeName={
+                  representatives.find((row) => row.assignment_id === representativeAssignmentId)
+                    ?.person_name || null
+                }
+                representativeTitle={
+                  representatives.find((row) => row.assignment_id === representativeAssignmentId)
+                    ?.title || null
+                }
+                baseSalaryAmount={derivedInfo?.salaryAmount ?? null}
+                baseSalaryCurrency={derivedInfo?.salaryCurrency ?? null}
+                salaryGroupSequence={derivedInfo?.groupSequence ?? null}
+                components={components}
               />
             </div>
           </div>
@@ -779,7 +924,19 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
         <SiteCorpButton variant="outline" type="button" onClick={onCancel}>
           Cancelar
         </SiteCorpButton>
-        <SiteCorpButton type="submit" disabled={submitting}>
+        <SiteCorpButton
+          type="submit"
+          disabled={
+            submitting ||
+            (!isEditing &&
+              (!signatureDate ||
+                !signaturePlace.trim() ||
+                !paymentMethodId ||
+                hasInvalidComponent(components) ||
+                (pending || EMPTY_FORMALIZATION_PENDING).blocking.length > 0 ||
+                !representativeAssignmentId))
+          }
+        >
           {submitting
             ? "Guardando..."
             : isEditing

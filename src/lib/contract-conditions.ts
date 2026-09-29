@@ -156,6 +156,39 @@ export const fetchContractCompensationComponents = async (
   })) as ContractCompensationComponent[]
 }
 
+/**
+ * Conceptos retributivos de VARIOS contratos, agrupados por contrato.
+ * Se usa para mostrar el historial contractual con sus propios snapshots.
+ */
+export const fetchComponentsByContract = async (
+  contractIds: string[]
+): Promise<Record<string, ContractCompensationComponent[]>> => {
+  const map: Record<string, ContractCompensationComponent[]> = {}
+  const ids = Array.from(new Set(contractIds.filter((id): id is string => !!id)))
+  if (ids.length === 0) return map
+
+  const { data, error } = await supabase
+    .from("employment_contract_compensation_components")
+    .select("id, employment_contract_id, component_type, description, amount, display_order")
+    .in("employment_contract_id", ids)
+    .order("display_order")
+
+  if (error) throw error
+  ;((data as any[]) || []).forEach((row) => {
+    const list =
+      map[row.employment_contract_id] || (map[row.employment_contract_id] = [])
+    list.push({
+      id: row.id,
+      component_type: row.component_type,
+      description: row.description,
+      amount: Number(row.amount),
+      display_order: row.display_order,
+    })
+  })
+
+  return map
+}
+
 /** Condiciones formalizadas de un contrato (snapshot histórico). */
 export const fetchContractConditions = async (
   contractId: string
