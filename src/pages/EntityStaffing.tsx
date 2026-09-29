@@ -438,6 +438,7 @@ const EntityStaffing = () => {
       marital_status_id: (w as any).marital_status_id || null,
       education_level_id: (w as any).education_level_id || null,
       specialty: (w as any).specialty || null,
+      profession_or_trade: (w as any).profession_or_trade || null,
       skin_color_id: (w as any).skin_color_id || null,
       address: (w as any).address || null,
       province: (w as any).province || null,

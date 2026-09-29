@@ -32,6 +32,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { WorkerForm } from "@/components/workers/WorkerForm"
 import { WorkerDocumentsTab } from "@/components/workers/WorkerDocumentsTab"
+import {
+  fetchPersonCatalogs,
+  fetchWorkerDrivingLicenseIds,
+  saveWorkerDrivingLicenseIds,
+  drivingLicenseLabels,
+  type CatalogOption,
+} from "@/lib/catalogs"
+import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 import ChangePositionDialog, {
   type WorkerCurrentSituation,
 } from "@/components/workers/ChangePositionDialog"
@@ -86,6 +94,7 @@ interface WorkerDetail {
   marital_status_id: string | null
   education_level_id: string | null
   specialty: string | null
+  profession_or_trade: string | null
   skin_color_id: string | null
   address: string | null
   province: string | null
@@ -179,6 +188,9 @@ const WorkerDetail = () => {
   const [maritalStatuses, setMaritalStatuses] = React.useState<Catalog[]>([])
   const [educationLevels, setEducationLevels] = React.useState<Catalog[]>([])
   const [skinColors, setSkinColors] = React.useState<Catalog[]>([])
+  // Fase 11A.4: licencias de conducción (catálogo global + selección del trabajador)
+  const [licenseCategories, setLicenseCategories] = React.useState<CatalogOption[]>([])
+  const [licenseIds, setLicenseIds] = React.useState<string[]>([])
   const [applicableScaleId, setApplicableScaleId] = React.useState<string | null>(null)
   const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<Record<string, SalaryValue | null>>({})
   const [loading, setLoading] = React.useState(true)
@@ -233,6 +245,12 @@ const WorkerDetail = () => {
   const isInactive = worker?.employment_status !== "active"
 
   const [editForm, setEditForm] = React.useState<Partial<WorkerDetail>>({})
+
+  // Etiquetas (A, B, C…) de las licencias del trabajador, en el orden del catálogo global.
+  const workerLicenseLabels = React.useMemo(
+    () => drivingLicenseLabels(licenseIds, licenseCategories),
+    [licenseIds, licenseCategories]
+  )
 
   const loadWorker = React.useCallback(async () => {
     if (!entityId || !workerId) {
@@ -340,17 +358,21 @@ const WorkerDetail = () => {
       }
 
       // Cargar catálogos
-      const [g, m, e, s, ct] = await Promise.all([
+      const [personCatalogs, workerLicenseIds, g, m, e, ct] = await Promise.all([
+        // Catálogos globales de la persona (mismos que utiliza el candidato)
+        fetchPersonCatalogs(),
+        fetchWorkerDrivingLicenseIds(mappedWorker.id),
         supabase.from("genders").select("id, name").order("name"),
         supabase.from("marital_statuses").select("id, name").order("name"),
         supabase.from("education_levels").select("id, name").order("name"),
-        supabase.from("skin_colors").select("id, name").order("name"),
         supabase.from("employment_contract_types").select("id, name, code").eq("is_active", true).order("name"),
       ])
       setGenders((g.data as Catalog[]) || [])
       setMaritalStatuses((m.data as Catalog[]) || [])
       setEducationLevels((e.data as Catalog[]) || [])
-      setSkinColors((s.data as Catalog[]) || [])
+      setSkinColors(personCatalogs.skinColors)
+      setLicenseCategories(personCatalogs.licenseCategories)
+      setLicenseIds(workerLicenseIds)
       setContractTypes((ct.data as { id: string; name: string; code: string }[]) || [])
 
       // Bitácora de movimientos laborales (bajas, reincorporaciones, cambios de puesto)
@@ -458,6 +480,7 @@ const WorkerDetail = () => {
         marital_status_id: editForm.marital_status_id || null,
         education_level_id: editForm.education_level_id || null,
         specialty: editForm.specialty || null,
+        profession_or_trade: editForm.profession_or_trade || null,
         skin_color_id: editForm.skin_color_id || null,
         address: editForm.address || null,
         province: editForm.province || null,
@@ -469,10 +492,23 @@ const WorkerDetail = () => {
 
     if (error) {
       setError(error.message)
-    } else {
-      setEditDialogOpen(false)
-      loadWorker()
+      return
     }
+
+    // Editar el trabajador nunca modifica al candidato: son registros independientes.
+    try {
+      await saveWorkerDrivingLicenseIds(worker.id, licenseIds)
+    } catch (licenseErr) {
+      setError(
+        licenseErr instanceof Error
+          ? `Trabajador guardado, pero no se pudieron guardar las licencias: ${licenseErr.message}`
+          : "Trabajador guardado, pero no se pudieron guardar las licencias"
+      )
+      return
+    }
+
+    setEditDialogOpen(false)
+    loadWorker()
   }
 
   const handleRegisterContract = async () => {
@@ -726,8 +762,8 @@ const WorkerDetail = () => {
                 <dt className="text-xs text-muted-foreground">Color de piel</dt>
                 <dd className="text-sm text-ink">
                   {worker.skin_color_id
-                    ? skinColors.find(s => s.id === worker.skin_color_id)?.name
-                    : "—"}
+                    ? skinColors.find(s => s.id === worker.skin_color_id)?.name || "No especificado"
+                    : "No especificado"}
                 </dd>
               </div>
             </dl>
@@ -762,6 +798,59 @@ const WorkerDetail = () => {
                 </div>
               )}
             </div>
+          </div>
+        </SiteCorpCard>
+
+        {/* Fase 11A.4: información profesional de la persona (no del cargo ni del puesto) */}
+        <SiteCorpCard>
+          <div className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-ink">Información profesional</h3>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditForm(worker)
+                    setEditDialogOpen(true)
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-ink"
+                  aria-label="Editar información profesional"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs text-muted-foreground">Profesión u oficio</dt>
+                <dd className="text-sm font-medium text-ink">
+                  {worker.profession_or_trade || "No especificado"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Licencias de conducción</dt>
+                <dd className="mt-1 flex flex-wrap gap-1.5">
+                  {workerLicenseLabels.length === 0 ? (
+                    <span className="text-sm text-ink">Sin licencia</span>
+                  ) : (
+                    workerLicenseLabels.map((label) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center rounded-full border border-sitecorp-primary/30 bg-sitecorp-primary/5 px-2.5 py-1 text-xs font-semibold text-sitecorp-primary"
+                      >
+                        {label}
+                      </span>
+                    ))
+                  )}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="mt-4 text-xs text-muted-foreground">
+              Estos datos pertenecen a la persona y se inicializaron desde el candidato al
+              contratar. No dependen del cargo, del puesto ni del contrato.
+            </p>
           </div>
         </SiteCorpCard>
 
@@ -1607,6 +1696,26 @@ const WorkerDetail = () => {
                 ))}
               </SiteCorpSelect>
             </div>
+
+            {/* Fase 11A.4: información profesional de la persona */}
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-sm font-medium text-ink">Información profesional</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Profesión u oficio</Label>
+              <SiteCorpInput
+                value={editForm.profession_or_trade || ""}
+                onChange={(e) => setEditForm(f => ({ ...f, profession_or_trade: e.target.value }))}
+                placeholder="Ej.: Chofer profesional"
+              />
+            </div>
+
+            <DrivingLicenseSelector
+              categories={licenseCategories}
+              value={licenseIds}
+              onChange={setLicenseIds}
+            />
 
             <div className="space-y-2">
               <Label>Dirección</Label>

@@ -209,6 +209,20 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     })
   }, [])
 
+  // Fase 11A.4: licencias del trabajador (solo en edición; se copian del candidato al contratar)
+  React.useEffect(() => {
+    if (!editingWorker?.id) return
+    let active = true
+    fetchWorkerDrivingLicenseIds(editingWorker.id)
+      .then((ids) => {
+        if (active) setLicenseIds(ids)
+      })
+      .catch((err) => console.error("Error loading worker driving licenses:", err))
+    return () => {
+      active = false
+    }
+  }, [editingWorker?.id])
+
   React.useEffect(() => {
     if (!entityId) return
     supabase
@@ -346,6 +360,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             marital_status_id: form.marital_status_id || null,
             education_level_id: form.education_level_id || null,
             specialty: form.specialty.trim() || null,
+            profession_or_trade: form.profession_or_trade.trim() || null,
             skin_color_id: form.skin_color_id || null,
             address: form.address.trim() || null,
             province: form.province || null,
@@ -357,6 +372,10 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           .eq("id", editingWorker!.id)
 
         if (updateError) throw updateError
+
+        // Reemplazo exacto de licencias (RPC transaccional)
+        await saveWorkerDrivingLicenseIds(editingWorker!.id, licenseIds)
+
         onSuccess()
       } else {
         const { error: rpcError } = await supabase.rpc("create_worker_with_position", {
@@ -371,6 +390,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             marital_status_id: form.marital_status_id,
             education_level_id: form.education_level_id,
             specialty: form.specialty.trim(),
+            profession_or_trade: form.profession_or_trade.trim(),
             skin_color_id: form.skin_color_id,
             address: form.address.trim(),
             province: form.province,
@@ -384,6 +404,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           p_contract_start_date: effectiveContractStart || null,
           p_contract_end_date: isDeterminedContract ? contractEndDate || null : null,
           p_representative_assignment_id: representativeAssignmentId,
+          p_driving_license_category_ids: licenseIds,
         })
 
         if (rpcError) throw rpcError
@@ -560,6 +581,33 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             value={form.email}
             onChange={(e) => setField("email", e.target.value)}
             placeholder="Opcional"
+          />
+        </div>
+      </div>
+
+      {/* Información profesional (propia de la persona) */}
+      <div className="border-t border-border pt-4">
+        <p className="mb-3 text-sm font-medium text-ink">Información profesional</p>
+        <div className="space-y-2">
+          <Label htmlFor="worker-profession">Profesión u oficio</Label>
+          <SiteCorpInput
+            id="worker-profession"
+            value={form.profession_or_trade}
+            onChange={(e) => setField("profession_or_trade", e.target.value)}
+            placeholder="Ej.: Chofer profesional"
+          />
+          <p className="text-xs text-muted-foreground">
+            Profesión real de la persona. No sustituye la profesión requerida del cargo.
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label>Licencias de conducción</Label>
+          <DrivingLicenseSelector
+            categories={licenseCategories}
+            value={licenseIds}
+            onChange={setLicenseIds}
+            disabled={submitting}
           />
         </div>
       </div>

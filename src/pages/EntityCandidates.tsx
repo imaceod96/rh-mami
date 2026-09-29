@@ -516,7 +516,7 @@ const EntityCandidates = () => {
             if (insertError) throw insertError
       
             // Licencias de conducción de la persona (relación 0..N) — reemplazo atómico
-            if (candidateData?.id && formData.driving_license_ids.length > 0) {
+            if (candidateData?.id) {
               await saveCandidateDrivingLicenseIds(candidateData.id, formData.driving_license_ids)
             }
       
