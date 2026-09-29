@@ -12,6 +12,13 @@ import { RepresentativeSelect } from "@/components/representatives/Representativ
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
 import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
 import type { PositionScheduleSegment } from "@/lib/position-schedule"
+import {
+  fetchPersonCatalogs,
+  fetchWorkerDrivingLicenseIds,
+  saveWorkerDrivingLicenseIds,
+  type CatalogOption,
+} from "@/lib/catalogs"
+import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 
 export interface WorkerPositionOption {
   id: string
@@ -49,6 +56,7 @@ export interface WorkerEditingData {
   marital_status_id: string | null
   education_level_id: string | null
   specialty: string | null
+  profession_or_trade: string | null
   skin_color_id: string | null
   address: string | null
   province: string | null
@@ -74,10 +82,7 @@ interface WorkerFormProps {
   onCancel: () => void
 }
 
-interface Catalog {
-  id: string
-  name: string
-}
+type Catalog = CatalogOption
 
 interface ContractType {
   id: string
@@ -95,6 +100,7 @@ interface WorkerFormState {
   marital_status_id: string
   education_level_id: string
   specialty: string
+  profession_or_trade: string
   skin_color_id: string
   address: string
   province: string
@@ -114,6 +120,7 @@ const emptyForm: WorkerFormState = {
   marital_status_id: "",
   education_level_id: "",
   specialty: "",
+  profession_or_trade: "",
   skin_color_id: "",
   address: "",
   province: "",
@@ -149,6 +156,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           marital_status_id: editingWorker.marital_status_id || "",
           education_level_id: editingWorker.education_level_id || "",
           specialty: editingWorker.specialty || "",
+          profession_or_trade: editingWorker.profession_or_trade || "",
           skin_color_id: editingWorker.skin_color_id || "",
           address: editingWorker.address || "",
           province: editingWorker.province || "",
@@ -164,6 +172,9 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const [maritalStatuses, setMaritalStatuses] = React.useState<Catalog[]>([])
   const [educationLevels, setEducationLevels] = React.useState<Catalog[]>([])
   const [skinColors, setSkinColors] = React.useState<Catalog[]>([])
+  // Fase 11A.4: licencias de conducción (catálogo global + selección de la persona)
+  const [licenseCategories, setLicenseCategories] = React.useState<Catalog[]>([])
+  const [licenseIds, setLicenseIds] = React.useState<string[]>([])
   const [contractTypes, setContractTypes] = React.useState<ContractType[]>([])
   const [contractTypeId, setContractTypeId] = React.useState<string>("")
   const [contractStartDate, setContractStartDate] = React.useState<string>("")
@@ -177,17 +188,19 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
 
   React.useEffect(() => {
     const load = async () => {
-      const [g, m, e, s, ct] = await Promise.all([
+      const [personCatalogs, g, m, e, ct] = await Promise.all([
+        // Catálogos globales de la persona: mismo origen que utiliza el candidato
+        fetchPersonCatalogs(),
         supabase.from("genders").select("id, name").order("name"),
         supabase.from("marital_statuses").select("id, name").order("name"),
         supabase.from("education_levels").select("id, name").order("name"),
-        supabase.from("skin_colors").select("id, name").order("name"),
         supabase.from("employment_contract_types").select("id, name, code").eq("is_active", true).order("name"),
       ])
       setGenders((g.data as Catalog[]) || [])
       setMaritalStatuses((m.data as Catalog[]) || [])
       setEducationLevels((e.data as Catalog[]) || [])
-      setSkinColors((s.data as Catalog[]) || [])
+      setSkinColors(personCatalogs.skinColors)
+      setLicenseCategories(personCatalogs.licenseCategories)
       setContractTypes((ct.data as ContractType[]) || [])
     }
     load().catch(err => {

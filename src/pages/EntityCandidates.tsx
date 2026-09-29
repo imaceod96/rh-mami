@@ -24,6 +24,12 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  fetchPersonCatalogs,
+  saveCandidateDrivingLicenseIds,
+  type CatalogOption,
+} from "@/lib/catalogs"
+import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 
 interface Candidate {
   id: string
@@ -91,6 +97,9 @@ interface CandidateFormData {
   province: string
   education_level_id: string
   specialty: string
+  profession_or_trade: string
+  skin_color_id: string
+  driving_license_ids: string[]
   political_affiliation: string
   is_retired_or_rehired: string
   has_disciplinary_measures: boolean
@@ -111,6 +120,9 @@ const emptyFormData: CandidateFormData = {
   province: "",
   education_level_id: "",
   specialty: "",
+  profession_or_trade: "",
+  skin_color_id: "",
+  driving_license_ids: [],
   political_affiliation: "",
   is_retired_or_rehired: "",
   has_disciplinary_measures: false,
@@ -179,6 +191,8 @@ const EntityCandidates = () => {
   const [genders, setGenders] = React.useState<Gender[]>([])
   const [maritalStatuses, setMaritalStatuses] = React.useState<MaritalStatus[]>([])
   const [educationLevels, setEducationLevels] = React.useState<EducationLevel[]>([])
+  const [skinColors, setSkinColors] = React.useState<CatalogOption[]>([])
+  const [licenseCategories, setLicenseCategories] = React.useState<CatalogOption[]>([])
   const [provinces, setProvinces] = React.useState<Province[]>([])
   const [municipalities, setMunicipalities] = React.useState<Municipality[]>([])
 
@@ -213,7 +227,9 @@ const EntityCandidates = () => {
   React.useEffect(() => {
     const fetchReferenceData = async () => {
       try {
-        const [gendersData, maritalStatusesData, educationLevelsData] = await Promise.all([
+        const [personCatalogs, gendersData, maritalStatusesData, educationLevelsData] = await Promise.all([
+          // Catálogos globales de la persona (color de piel y licencias de conducción)
+          fetchPersonCatalogs(),
           supabase.from("genders").select("id, name").order("name"),
           supabase.from("marital_statuses").select("id, name").order("name"),
           supabase.from("education_levels").select("id, name").order("name")
@@ -226,6 +242,8 @@ const EntityCandidates = () => {
         setGenders(gendersData.data || [])
         setMaritalStatuses(maritalStatusesData.data || [])
         setEducationLevels(educationLevelsData.data || [])
+        setSkinColors(personCatalogs.skinColors)
+        setLicenseCategories(personCatalogs.licenseCategories)
 
         // Set provinces from Cuba list
         setProvinces(CUBA_PROVINCES.map(name => ({ id: name, name })))
@@ -481,6 +499,8 @@ const EntityCandidates = () => {
               province: formData.province.trim() || null,
               education_level_id: formData.education_level_id || null,
               specialty: formData.specialty.trim() || null,
+              profession_or_trade: formData.profession_or_trade.trim() || null,
+              skin_color_id: formData.skin_color_id || null,
               political_affiliation: formData.political_affiliation || null,
               is_retired_or_rehired: formData.is_retired_or_rehired === "yes",
               has_disciplinary_measures: formData.has_disciplinary_measures,
@@ -494,6 +514,11 @@ const EntityCandidates = () => {
               .single()
       
             if (insertError) throw insertError
+      
+            // Licencias de conducción de la persona (relación 0..N) — reemplazo atómico
+            if (candidateData?.id && formData.driving_license_ids.length > 0) {
+              await saveCandidateDrivingLicenseIds(candidateData.id, formData.driving_license_ids)
+            }
       
             // If there's a disciplinary document uploaded, save it to candidate_documents
             if (disciplinaryDocumentPath && candidateData?.id) {
@@ -1106,7 +1131,41 @@ const EntityCandidates = () => {
                                 ))}
                               </SiteCorpSelect>
                             </div>
+                            <div className="space-y-1.5">
+                              <Label>Color de piel</Label>
+                              <SiteCorpSelect
+                                value={formData.skin_color_id || undefined}
+                                onValueChange={(value) => handleFormChange("skin_color_id", value === "__placeholder__" ? "" : value)}
+                              >
+                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                {skinColors.map(color => (
+                                  <SelectItem key={color.id} value={color.id}>
+                                    {color.name}
+                                  </SelectItem>
+                                ))}
+                              </SiteCorpSelect>
+                            </div>
                           </div>
+                        </div>
+
+            {/* Información profesional (propia de la persona) */}
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Información profesional</h3>
+                          <div className="space-y-1.5">
+                            <Label>Profesión u oficio</Label>
+                            <SiteCorpInput
+                              type="text"
+                              placeholder="Ej.: Chofer profesional, Albañil, Técnico en redes"
+                              value={formData.profession_or_trade}
+                              onChange={(e) => handleFormChange("profession_or_trade", e.target.value)}
+                            />
+                          </div>
+                          <DrivingLicenseSelector
+                            categories={licenseCategories}
+                            value={formData.driving_license_ids}
+                            onChange={(licenseIds) => setFormData(prev => ({ ...prev, driving_license_ids: licenseIds }))}
+                            hint="Puede seleccionar varias categorías o ninguna."
+                          />
                         </div>
 
             {/* Section 3: Contacto y dirección */}

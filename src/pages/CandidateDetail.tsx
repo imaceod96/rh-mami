@@ -43,6 +43,12 @@ import {
   UserPlus,
 } from "lucide-react"
 import HireCandidateDialog from "@/components/candidates/HireCandidateDialog"
+import {
+  drivingLicenseLabels,
+  fetchCandidateDrivingLicenseIds,
+  fetchPersonCatalogs,
+  type CatalogOption,
+} from "@/lib/catalogs"
 
 interface Candidate {
   id: string
@@ -62,6 +68,8 @@ interface Candidate {
   province: string | null
   education_level_id: string | null
   specialty: string | null
+  profession_or_trade: string | null
+  skin_color_id: string | null
   political_affiliation: string | null
   is_retired_or_rehired: boolean | null
   has_disciplinary_measures: boolean | null
@@ -209,6 +217,10 @@ const CandidateDetail = () => {
   } | null>(null)
   const [canManageWorkers, setCanManageWorkers] = React.useState(false)
   const [hireOpen, setHireOpen] = React.useState(false)
+  // Fase 11A.4: información propia de la persona (catálogos globales de SiteCorp)
+  const [skinColors, setSkinColors] = React.useState<CatalogOption[]>([])
+  const [licenseCategories, setLicenseCategories] = React.useState<CatalogOption[]>([])
+  const [drivingLicenseIds, setDrivingLicenseIds] = React.useState<string[]>([])
 
   const showNotice = (type: "success" | "danger", message: string) => {
     setNotice({ type, message })
@@ -259,7 +271,9 @@ const CandidateDetail = () => {
   React.useEffect(() => {
     const fetchReferenceData = async () => {
       try {
-        const [gendersData, maritalStatusesData, educationLevelsData] = await Promise.all([
+        const [personCatalogs, gendersData, maritalStatusesData, educationLevelsData] = await Promise.all([
+          // Catálogos globales de la persona: mismo origen que utiliza el trabajador
+          fetchPersonCatalogs(),
           supabase.from("genders").select("id, name").order("name"),
           supabase.from("marital_statuses").select("id, name").order("name"),
           supabase.from("education_levels").select("id, name").order("name")
@@ -272,6 +286,8 @@ const CandidateDetail = () => {
         setGenders(gendersData.data || [])
         setMaritalStatuses(maritalStatusesData.data || [])
         setEducationLevels(educationLevelsData.data || [])
+        setSkinColors(personCatalogs.skinColors)
+        setLicenseCategories(personCatalogs.licenseCategories)
       } catch (err) {
         console.error("Error fetching reference data:", err)
       }
@@ -361,6 +377,9 @@ const CandidateDetail = () => {
         }
 
         setCandidate(data)
+
+        // Licencias de conducción de la persona (relación 0..N)
+        setDrivingLicenseIds(await fetchCandidateDrivingLicenseIds(candidateId))
 
         // Si el candidato está vinculado a un trabajador, cargar su estado
         if (data.worker_id) {
@@ -935,6 +954,14 @@ const CandidateDetail = () => {
     return level?.name || "—"
   }
 
+  // Fase 11A.4: datos propios de la persona
+  const getSkinColorName = (skinColorId: string | null) => {
+    if (!skinColorId) return "No especificado"
+    return skinColors.find(s => s.id === skinColorId)?.name || "No especificado"
+  }
+
+  const licenseLabels = drivingLicenseLabels(drivingLicenseIds, licenseCategories)
+
   const getSpecialtyDisplay = (candidate: Candidate) => {
     if (!candidate.specialty) return "—"
     if (candidate.education_level_id) {
@@ -1257,12 +1284,30 @@ const CandidateDetail = () => {
                 <h3 className="text-lg font-semibold text-ink mb-4">INFORMACIÓN PROFESIONAL</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Profesión u oficio:</span>
+                    <span className="font-medium text-ink">{candidate.profession_or_trade || "—"}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Nivel educacional:</span>
                     <span className="font-medium text-ink">{getEducationLevelName(candidate.education_level_id)}</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Especialidad:</span>
                     <span className="font-medium text-ink">{getSpecialtyDisplay(candidate)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-4 py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Licencias de conducción:</span>
+                    <span className="flex flex-wrap justify-end gap-1.5">
+                      {licenseLabels.length === 0 ? (
+                        <span className="font-medium text-ink">Sin licencia</span>
+                      ) : (
+                        licenseLabels.map((label) => (
+                          <SiteCorpStatusBadge key={label} status="info">
+                            {label}
+                          </SiteCorpStatusBadge>
+                        ))
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Experiencia laboral total:</span>
@@ -1329,6 +1374,10 @@ const CandidateDetail = () => {
                     <span className="text-sm text-muted-foreground">Estado civil:</span>
                     <span className="font-medium text-ink">{getMaritalStatusName(candidate.marital_status_id)}</span>
                   </div>
+                  <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Color de piel:</span>
+                    <span className="font-medium text-ink">{getSkinColorName(candidate.skin_color_id)}</span>
+                  </div>
                 </div>
               </div>
 
@@ -1359,8 +1408,12 @@ const CandidateDetail = () => {
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold text-ink mb-4">INFORMACIÓN EDUCACIONAL</h3>
+                <h3 className="text-lg font-semibold text-ink mb-4">INFORMACIÓN PROFESIONAL Y EDUCACIONAL</h3>
                 <div className="space-y-3">
+                  <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Profesión u oficio:</span>
+                    <span className="font-medium text-ink">{candidate.profession_or_trade || "—"}</span>
+                  </div>
                   <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Nivel educacional:</span>
                     <span className="font-medium text-ink">{getEducationLevelName(candidate.education_level_id)}</span>
@@ -1368,6 +1421,20 @@ const CandidateDetail = () => {
                   <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Especialidad:</span>
                     <span className="font-medium text-ink">{getSpecialtyDisplay(candidate)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-4 py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Licencias de conducción:</span>
+                    <span className="flex flex-wrap justify-end gap-1.5">
+                      {licenseLabels.length === 0 ? (
+                        <span className="font-medium text-ink">Sin licencia</span>
+                      ) : (
+                        licenseLabels.map((label) => (
+                          <SiteCorpStatusBadge key={label} status="info">
+                            {label}
+                          </SiteCorpStatusBadge>
+                        ))
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>

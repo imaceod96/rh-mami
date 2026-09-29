@@ -15,6 +15,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ciToBirthDate } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
+import {
+  fetchCandidateDrivingLicenseIds,
+  fetchPersonCatalogs,
+  saveCandidateDrivingLicenseIds,
+  type CatalogOption,
+} from "@/lib/catalogs"
+import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 
 export interface Candidate {
   id: string
@@ -34,6 +41,7 @@ export interface Candidate {
   province: string | null
   education_level_id: string | null
   specialty: string | null
+  profession_or_trade: string | null
   political_affiliation: string | null
   is_retired_or_rehired: boolean | null
   has_disciplinary_measures: boolean | null
@@ -58,17 +66,6 @@ export interface EducationLevel {
   name: string
 }
 
-export interface SkinColor {
-  id: string
-  name: string
-}
-
-export interface DrivingLicenseCategory {
-  id: string
-  name: string
-  code: string
-}
-
 export interface CandidateFormData {
   first_name: string
   first_surname: string
@@ -84,6 +81,7 @@ export interface CandidateFormData {
   province: string
   education_level_id: string
   specialty: string
+  profession_or_trade: string
   political_affiliation: string
   is_retired_or_rehired: string
   has_disciplinary_measures: boolean
@@ -106,6 +104,7 @@ export const emptyFormData: CandidateFormData = {
   province: "",
   education_level_id: "",
   specialty: "",
+  profession_or_trade: "",
   political_affiliation: "",
   is_retired_or_rehired: "",
   has_disciplinary_measures: false,
@@ -142,9 +141,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
   const [genders, setGenders] = React.useState<Gender[]>([])
   const [maritalStatuses, setMaritalStatuses] = React.useState<MaritalStatus[]>([])
   const [educationLevels, setEducationLevels] = React.useState<EducationLevel[]>([])
-  const [skinColors, setSkinColors] = React.useState<SkinColor[]>([])
-  const [drivingLicenseCategories, setDrivingLicenseCategories] = React.useState<DrivingLicenseCategory[]>([])
-  const [candidateDrivingLicenses, setCandidateDrivingLicenses] = React.useState<string[]>([])
+  const [skinColors, setSkinColors] = React.useState<CatalogOption[]>([])
+  const [drivingLicenseCategories, setDrivingLicenseCategories] = React.useState<CatalogOption[]>([])
   const [provinces, setProvinces] = React.useState<{ id: string; name: string }[]>([])
   const [municipalities, setMunicipalities] = React.useState<{ id: string; name: string }[]>([])
 
@@ -160,25 +158,24 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
   React.useEffect(() => {
     const fetchReferenceData = async () => {
       try {
-        const [gendersData, maritalStatusesData, educationLevelsData, skinColorsData, drivingLicenseData] = await Promise.all([
+        // Catálogos globales de la persona (color de piel y licencias): misma fuente
+        // que utiliza el trabajador, sin catálogos paralelos por formulario.
+        const [{ skinColors: skinColorOptions, licenseCategories }, gendersData, maritalStatusesData, educationLevelsData] = await Promise.all([
+          fetchPersonCatalogs(),
           supabase.from("genders").select("id, name").order("name"),
           supabase.from("marital_statuses").select("id, name").order("name"),
           supabase.from("education_levels").select("id, name").order("name"),
-          supabase.from("skin_colors").select("id, name").order("name"),
-          supabase.from("driving_license_categories").select("id, name, code").order("name"),
         ])
 
         if (gendersData.error) throw gendersData.error
         if (maritalStatusesData.error) throw maritalStatusesData.error
         if (educationLevelsData.error) throw educationLevelsData.error
-        if (skinColorsData.error) throw skinColorsData.error
-        if (drivingLicenseData.error) throw drivingLicenseData.error
 
         setGenders(gendersData.data || [])
         setMaritalStatuses(maritalStatusesData.data || [])
         setEducationLevels(educationLevelsData.data || [])
-        setSkinColors(skinColorsData.data || [])
-        setDrivingLicenseCategories(drivingLicenseData.data || [])
+        setSkinColors(skinColorOptions)
+        setDrivingLicenseCategories(licenseCategories)
 
         setProvinces(CUBA_PROVINCES_FULL.map(name => ({ id: name, name })))
       } catch (err) {
@@ -225,14 +222,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
 
         setCandidate(data)
 
-        // Fetch candidate's driving licenses
-        const { data: dlcData } = await supabase
-          .from("candidate_driving_license_categories")
-          .select("driving_license_category_id")
-          .eq("candidate_id", candidateId)
-
-        const licenseIds = (dlcData || []).map((d: any) => d.driving_license_category_id)
-        setCandidateDrivingLicenses(licenseIds)
+        // Licencias de conducción de la persona (relación 0..N)
+        const licenseIds = await fetchCandidateDrivingLicenseIds(candidateId)
 
         // Pre-populate form
         setFormData({
@@ -250,6 +241,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           province: data.province || "",
           education_level_id: data.education_level_id || "",
           specialty: data.specialty || "",
+          profession_or_trade: data.profession_or_trade || "",
           political_affiliation: data.political_affiliation || "",
           is_retired_or_rehired: data.is_retired_or_rehired ? "yes" : "",
           has_disciplinary_measures: data.has_disciplinary_measures || false,
@@ -275,20 +267,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleDrivingLicenseChange = (licenseId: string, checked: boolean) => {
-    setCandidateDrivingLicenses(prev => {
-      if (checked) {
-        return [...prev, licenseId]
-      } else {
-        return prev.filter(id => id !== licenseId)
-      }
-    })
-    setFormData(prev => ({
-      ...prev,
-      driving_license_ids: checked
-        ? [...prev.driving_license_ids, licenseId]
-        : prev.driving_license_ids.filter(id => id !== licenseId)
-    }))
+  const handleDrivingLicensesChange = (licenseIds: string[]) => {
+    setFormData(prev => ({ ...prev, driving_license_ids: licenseIds }))
   }
 
   const handleIdentificationChange = (value: string) => {
@@ -362,6 +342,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
         province: formData.province.trim() || null,
         education_level_id: formData.education_level_id || null,
         specialty: formData.specialty.trim() || null,
+        profession_or_trade: formData.profession_or_trade.trim() || null,
         political_affiliation: formData.political_affiliation || null,
         is_retired_or_rehired: formData.is_retired_or_rehired === "yes",
         has_disciplinary_measures: formData.has_disciplinary_measures,
@@ -377,23 +358,9 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
 
       if (updateError) throw updateError
 
-      // Update driving licenses
-      // First delete existing
-      await supabase
-        .from("candidate_driving_license_categories")
-        .delete()
-        .eq("candidate_id", candidateId)
-
-      // Then insert new ones
-      if (formData.driving_license_ids.length > 0) {
-        const licenseRows = formData.driving_license_ids.map(licenseId => ({
-          candidate_id: candidateId,
-          driving_license_category_id: licenseId,
-        }))
-        await supabase
-          .from("candidate_driving_license_categories")
-          .insert(licenseRows)
-      }
+      // Licencias de conducción: reemplazo exacto y atómico (RPC transaccional),
+      // de forma que el resultado en base de datos coincida con la selección.
+      await saveCandidateDrivingLicenseIds(candidateId!, formData.driving_license_ids)
 
       setFormSuccess(true)
 
@@ -647,23 +614,29 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           </div>
         </SiteCorpCard>
 
-        {/* Section 5: Licencias de conducción */}
+        {/* Section 5: Información profesional (propia de la persona) */}
         <SiteCorpCard>
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-ink border-b pb-2">Licencias de conducción</h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {drivingLicenseCategories.map(license => (
-                <label key={license.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.driving_license_ids.includes(license.id)}
-                    onChange={(e) => handleDrivingLicenseChange(license.id, e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <span className="text-sm text-ink">{license.name}</span>
-                </label>
-              ))}
+            <h3 className="text-sm font-semibold text-ink border-b pb-2">Información profesional</h3>
+            <div className="space-y-1.5">
+              <Label>Profesión u oficio</Label>
+              <SiteCorpInput
+                type="text"
+                placeholder="Ej.: Chofer profesional, Albañil, Técnico en redes"
+                value={formData.profession_or_trade}
+                onChange={(e) => handleFormChange("profession_or_trade", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Dato propio de la persona. No sustituye al cargo ni al puesto que ocupe.
+              </p>
             </div>
+
+            <DrivingLicenseSelector
+              categories={drivingLicenseCategories}
+              value={formData.driving_license_ids}
+              onChange={handleDrivingLicensesChange}
+              hint="Seleccione todas las categorías vigentes. Puede dejarlo vacío si no conduce."
+            />
           </div>
         </SiteCorpCard>
 
