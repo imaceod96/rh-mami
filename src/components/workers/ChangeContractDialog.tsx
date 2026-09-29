@@ -14,6 +14,7 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
 import { showSuccess, showError } from "@/utils/toast"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
 import { FileSignature } from "lucide-react"
 
 interface ContractType {
@@ -251,6 +252,8 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
               )}
             </div>
           </div>
+
+          <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
 
           <RepresentativeSelect
             entityId={entityId}

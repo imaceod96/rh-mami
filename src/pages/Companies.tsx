@@ -14,6 +14,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpFormSection } from "@/components/ui/sitecorp-form-section"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpError } from "@/components/ui/sitecorp-error"
+import { createWorkspace, updateWorkspace } from "@/lib/workspaces"
 import { Pencil, Plus, Power, LogIn, Trash2 } from "lucide-react"
 
 interface Tenant {
@@ -35,7 +36,6 @@ const Companies = () => {
   const [editingTenant, setEditingTenant] = React.useState<Tenant | null>(null)
   const [formData, setFormData] = React.useState({
     name: "",
-    code: "",
     description: "",
     is_active: true,
   })
@@ -65,14 +65,13 @@ const Companies = () => {
 
   const startCreate = () => {
     setEditingTenant(null)
-    setFormData({ name: "", code: "", description: "", is_active: true })
+    setFormData({ name: "", description: "", is_active: true })
   }
 
   const startEdit = (tenant: Tenant) => {
     setEditingTenant(tenant)
     setFormData({
       name: tenant.name,
-      code: tenant.code,
       description: tenant.description || "",
       is_active: tenant.is_active,
     })
@@ -81,23 +80,17 @@ const Companies = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      // El código del workspace se genera automáticamente en el servidor.
       if (editingTenant) {
-        const { error } = await supabase
-          .from("tenants")
-          .update(formData)
-          .eq("id", editingTenant.id)
-
-        if (error) throw error
+        await updateWorkspace(editingTenant.id, formData)
       } else {
-        const { error } = await supabase.from("tenants").insert(formData)
-
-        if (error) throw error
+        await createWorkspace(formData)
       }
       setEditingTenant(null)
-      setFormData({ name: "", code: "", description: "", is_active: true })
+      setFormData({ name: "", description: "", is_active: true })
       await loadTenants()
     } catch (err) {
-      setError("No se pudo guardar la empresa.")
+      setError(err instanceof Error ? err.message : "No se pudo guardar la empresa.")
     }
   }
 
@@ -214,23 +207,18 @@ const Companies = () => {
           description={editingTenant ? "Actualiza los datos de la cuenta de cliente" : "Registra una nueva cuenta de cliente"}
         >
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-ink">Nombre</label>
-                <SiteCorpInput
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-ink">Código</label>
-                <SiteCorpInput
-                  value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  required
-                />
-              </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-ink">Nombre</label>
+              <SiteCorpInput
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-ink">Código</label>
+              <SiteCorpInput value={editingTenant?.code || "Se genera automáticamente"} disabled />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-ink">Descripción</label>
@@ -248,7 +236,7 @@ const Companies = () => {
                 variant="outline"
                 onClick={() => {
                   setEditingTenant(null)
-                  setFormData({ name: "", code: "", description: "", is_active: true })
+                  setFormData({ name: "", description: "", is_active: true })
                 }}
               >
                 Cancelar

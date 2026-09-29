@@ -23,6 +23,7 @@ import { SelectItem } from "@/components/ui/select"
 import EntityUsersDialog, {
   type OrganizationEntity,
 } from "@/components/entity-users-dialog"
+import { createWorkspace, updateWorkspace } from "@/lib/workspaces"
 import {
   OrganizationEntityDialog,
 } from "@/components/organization-entity-dialog"
@@ -54,14 +55,12 @@ interface Tenant {
 
 interface TenantForm {
   name: string
-  code: string
   description: string
   is_active: boolean
 }
 
 const emptyTenantForm: TenantForm = {
   name: "",
-  code: "",
   description: "",
   is_active: true,
 }
@@ -82,9 +81,6 @@ const friendlyTenantError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? "")
   const normalized = message.toLowerCase()
 
-  if (normalized.includes("tenants_code_key")) {
-    return "Ya existe un workspace con ese código."
-  }
   if (normalized.includes("row-level security")) {
     return "No tienes permiso para crear o editar workspaces."
   }
@@ -224,7 +220,6 @@ const Organizations = () => {
     setEditingTenant(tenant)
     setTenantForm({
       name: tenant.name,
-      code: tenant.code,
       description: tenant.description || "",
       is_active: tenant.is_active,
     })
@@ -238,21 +233,24 @@ const Organizations = () => {
     try {
       setTenantError(null)
       if (!tenantForm.name.trim()) throw new Error("El nombre es obligatorio.")
-      if (!tenantForm.code.trim()) throw new Error("El código es obligatorio.")
 
       setTenantSaving(true)
-      const payload = {
-        name: tenantForm.name.trim(),
-        code: tenantForm.code.trim().toUpperCase(),
-        description: tenantForm.description.trim() || null,
-        is_active: tenantForm.is_active,
+
+      // El código del workspace lo genera la base de datos (nombre normalizado +
+      // sufijo único) y es inmutable: nunca se envía desde el formulario.
+      if (editingTenant) {
+        await updateWorkspace(editingTenant.id, {
+          name: tenantForm.name,
+          description: tenantForm.description,
+          isActive: tenantForm.is_active,
+        })
+      } else {
+        await createWorkspace({
+          name: tenantForm.name,
+          description: tenantForm.description,
+          isActive: tenantForm.is_active,
+        })
       }
-
-      const response = editingTenant
-        ? await supabase.from("tenants").update(payload).eq("id", editingTenant.id)
-        : await supabase.from("tenants").insert(payload)
-
-      if (response.error) throw response.error
 
       setTenantDialogOpen(false)
       setEditingTenant(null)
@@ -578,8 +576,8 @@ const Organizations = () => {
               {editingTenant ? `Editar ${editingTenant.name}` : "Crear workspace"}
             </DialogTitle>
             <DialogDescription>
-              Un workspace es un árbol organizativo aislado técnicamente. No sustituye a las cuentas
-              SiteCorp de cada entidad.
+              Un workspace es un árbol organizativo aislado técnicamente y agrupa sus grupos
+              empresariales, empresas y UEB. No sustituye a las cuentas SiteCorp de cada entidad.
             </DialogDescription>
           </DialogHeader>
 
@@ -590,29 +588,35 @@ const Organizations = () => {
           )}
 
           <form onSubmit={submitTenant} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-ink">Nombre</label>
-                <SiteCorpInput
-                  value={tenantForm.name}
-                  onChange={(event) =>
-                    setTenantForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  required
-                />
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ink">Nombre</label>
+              <SiteCorpInput
+                value={tenantForm.name}
+                onChange={(event) =>
+                  setTenantForm((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Ej.: Grupo Empresarial Mayabeque"
+                required
+              />
+            </div>
+
+            {/* El código no se introduce: se genera automáticamente en el servidor. */}
+            {editingTenant ? (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-ink">Código</label>
-                <SiteCorpInput
-                  value={tenantForm.code}
-                  onChange={(event) =>
-                    setTenantForm((current) => ({ ...current, code: event.target.value }))
-                  }
-                  placeholder="WORKSPACE-A"
-                  required
-                />
+                <SiteCorpInput value={editingTenant.code} disabled />
+                <p className="text-xs text-muted-foreground">
+                  Identificador estable generado automáticamente. No cambia al renombrar el
+                  workspace.
+                </p>
               </div>
-            </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                El código del workspace se genera automáticamente a partir del nombre (por ejemplo{" "}
+                <span className="font-mono">GRUPO-EMPRESARIAL-MAYABEQUE-A7K4P2</span>) y no se
+                modifica al renombrarlo.
+              </p>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-ink">Descripción</label>
@@ -660,7 +664,8 @@ const Organizations = () => {
         entities={entities}
         editingEntity={editingEntity}
         defaultEntityType={entityDefaultType}
-        defaultRegime="presupuestada"
+        defaultParentId={entityDefaultParent}
+        defaultRegime="PRESUPUESTADA"
       />
 
       <EntityUsersDialog

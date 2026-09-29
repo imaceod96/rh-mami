@@ -23,6 +23,7 @@ import {
 } from "@/lib/salary"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
+import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
@@ -448,6 +449,8 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
               )}
             </div>
           </div>
+
+          <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
 
           <RepresentativeSelect
             entityId={entityId}

@@ -10,6 +10,7 @@ import { ciToBirthDate } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
+import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
 import type { PositionScheduleSegment } from "@/lib/position-schedule"
 
 export interface WorkerPositionOption {
@@ -693,6 +694,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             </div>
 
             <div className="mt-4">
+              <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
+
               <RepresentativeSelect
                 entityId={entityId}
                 onDate={contractStartDate || form.hire_date}

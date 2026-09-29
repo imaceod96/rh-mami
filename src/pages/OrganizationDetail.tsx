@@ -690,7 +690,8 @@ const OrganizationDetail = () => {
                 entity?.entity_type === "company" ? "ueb" :
                 "business_group"
               }
-              defaultRegime="presupuestada"
+              defaultParentId={entity?.id}
+              defaultRegime="PRESUPUESTADA"
             />
       
       <EntityUsersDialog

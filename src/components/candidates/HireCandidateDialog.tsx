@@ -26,6 +26,7 @@ import {
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
+import { EntityContractualDataNotice } from "@/components/entities/EntityContractualDataNotice"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
@@ -728,6 +729,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
             )}
           </div>
         </div>
+
+        <EntityContractualDataNotice entityId={entityId} canManage={canManageOrganization} />
 
         <RepresentativeSelect
           entityId={entityId}

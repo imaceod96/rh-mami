@@ -12,7 +12,6 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Building2, Factory, Layers, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { CUBA_PROVINCES, MUNICIPIOS_BY_PROVINCE } from "@/data/cuba-locations"
 
 interface Tenant {
   id: string
@@ -44,8 +43,6 @@ interface OrganizationEntityFormData {
   name: string
   entity_type: "business_group" | "company" | "ueb"
   regime_id: string | null
-  province: string | null
-  municipality: string | null
   is_active: boolean
   description: string | null
   is_sitecorp_account: boolean
@@ -59,9 +56,10 @@ const entityTypeOptions = [
   { value: "ueb", label: "UEB" },
 ]
 
+// Códigos canónicos del catálogo `entity_regimes` (determinan la escala salarial aplicable)
 const regimeOptions = [
-  { value: "presupuestada", label: "Presupuestada" },
-  { value: "empresarial", label: "Empresarial" },
+  { value: "PRESUPUESTADA", label: "Presupuestada" },
+  { value: "EMPRESARIAL", label: "Empresarial" },
 ]
 
 const statusOptions = [
@@ -80,17 +78,25 @@ const generateCode = (entityType: "business_group" | "company" | "ueb"): string 
   return `${prefixes[entityType]}-${timestamp}`
 }
 
+// El domicilio (dirección, provincia, municipio) ya no forma parte del alta de la
+// entidad: se gestiona en Entidad → Ajustes → Datos contractuales.
 const organizationEntitySchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
   entity_type: z.enum(["business_group", "company", "ueb"]),
-  regime_id: z.enum(["presupuestada", "empresarial"]).nullable(),
-  province: z.string().nullable(),
-  municipality: z.string().nullable(),
+  regime_id: z.enum(["PRESUPUESTADA", "EMPRESARIAL"]).nullable(),
   is_active: z.boolean().default(true),
   description: z.string().nullable(),
   is_sitecorp_account: z.boolean().default(false),
   account_code: z.string().nullable(),
   parent_id: z.string().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.entity_type !== "business_group" && !data.parent_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["parent_id"],
+      message: "Selecciona la entidad superior.",
+    })
+  }
 })
 
 type OrganizationEntityFormDataZod = z.infer<typeof organizationEntitySchema>
@@ -103,6 +109,8 @@ interface OrganizationEntityDialogProps {
   entities: OrganizationEntity[]
   editingEntity: OrganizationEntity | null
   defaultEntityType?: OrganizationEntity["entity_type"]
+  /** Entidad superior preseleccionada según el nodo desde el que se crea */
+  defaultParentId?: string
   defaultRegime?: OrganizationEntity["regime_id"]
 }
 
@@ -114,7 +122,8 @@ export const OrganizationEntityDialog = ({
   entities,
   editingEntity,
   defaultEntityType = "business_group",
-  defaultRegime = "presupuestada",
+  defaultParentId,
+  defaultRegime = "PRESUPUESTADA",
 }: OrganizationEntityDialogProps) => {
   const { user } = useAuth()
   const { currentTenant } = useCurrentTenant()
@@ -136,13 +145,12 @@ export const OrganizationEntityDialog = ({
     defaultValues: {
           name: "",
           entity_type: defaultEntityType,
-          regime_id: defaultRegime as "presupuestada" | "empresarial" | null,
-          province: null,
-          municipality: null,
+          regime_id: defaultRegime as "PRESUPUESTADA" | "EMPRESARIAL" | null,
           is_active: true,
           description: null,
           is_sitecorp_account: false,
           account_code: null,
+          parent_id: null,
         },
   })
 
@@ -152,39 +160,28 @@ export const OrganizationEntityDialog = ({
               reset({
                 name: editingEntity.name,
                 entity_type: editingEntity.entity_type,
-                regime_id: editingEntity.regime_id as "presupuestada" | "empresarial" | null,
-                province: editingEntity.province,
-                municipality: editingEntity.municipality,
+                regime_id: editingEntity.regime_id as "PRESUPUESTADA" | "EMPRESARIAL" | null,
                 is_active: editingEntity.is_active,
                 description: editingEntity.description,
                 is_sitecorp_account: editingEntity.is_sitecorp_account,
                 account_code: editingEntity.account_code,
+                parent_id: editingEntity.parent_id,
               })
-        // When editing, keep the code unchanged
+        // Al editar, el código interno de la entidad se conserva sin cambios
       } else {
               reset({
                 name: "",
                 entity_type: defaultEntityType,
-                regime_id: defaultRegime as "presupuestada" | "empresarial" | null,
-                province: null,
-                municipality: null,
+                regime_id: defaultRegime as "PRESUPUESTADA" | "EMPRESARIAL" | null,
                 is_active: true,
                 description: null,
                 is_sitecorp_account: false,
                 account_code: null,
+                parent_id: defaultParentId ?? null,
               })
             }
     }
-  }, [open, editingEntity, reset, defaultEntityType, defaultRegime])
-
-  // When entity type changes, filter parent entities accordingly
-    React.useEffect(() => {
-      const entityType = watch("entity_type")
-      if (entityType === "business_group") {
-        // Business groups cannot have parents, clear any existing parent
-        ;(setValue as any)("parent_id", null)
-      }
-    }, [watch("entity_type"), setValue])
+  }, [open, editingEntity, reset, defaultEntityType, defaultParentId, defaultRegime])
 
   const onSubmit = async (data: OrganizationEntityFormDataZod) => {
     if (!user) return
@@ -192,13 +189,13 @@ export const OrganizationEntityDialog = ({
     try {
       setSaving(true)
 
-      // Generate automatic code if not provided and not editing
+      // Código interno de la entidad: se sigue generando automáticamente (nunca se pide)
       const entityData = {
         ...data,
         tenant_id: defaultTenantId,
         code: data.entity_type === "business_group" || !editingEntity ? generateCode(data.entity_type) : editingEntity?.code || generateCode(data.entity_type),
         updated_by: user.id,
-        parent_id: data.entity_type === "business_group" ? null : (editingEntity?.parent_id || null),
+        parent_id: data.entity_type === "business_group" ? null : data.parent_id || null,
       }
 
       if (editingEntity) {
@@ -270,6 +267,20 @@ export const OrganizationEntityDialog = ({
     })
   }, [watch("entity_type"), parentEntities])
 
+  // La entidad superior debe ser coherente con el tipo: los grupos no tienen padre y
+  // al cambiar de tipo se descarta una selección que ya no es válida.
+  const watchedEntityType = watch("entity_type")
+  const watchedParentId = watch("parent_id")
+  React.useEffect(() => {
+    if (watchedEntityType === "business_group") {
+      if (watchedParentId) setValue("parent_id", null)
+      return
+    }
+    if (watchedParentId && !filteredParentEntities.some((e) => e.id === watchedParentId)) {
+      setValue("parent_id", null)
+    }
+  }, [watchedEntityType, watchedParentId, filteredParentEntities, setValue])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl rounded-2xl">
@@ -318,8 +329,7 @@ export const OrganizationEntityDialog = ({
               </SiteCorpSelect>
             </div>
 
-            {/* Tenant is auto-assigned, not shown in form */}
-            {/* Regime selector */}
+            {/* El workspace (tenant) se asigna automáticamente desde el contexto */}
             <div className="space-y-2 sm:col-span-full">
               <label className="text-sm font-medium text-ink">Régimen *</label>
               <SiteCorpSelect
@@ -339,49 +349,41 @@ export const OrganizationEntityDialog = ({
               </SiteCorpSelect>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Provincia *</label>
-              <SiteCorpSelect
-                value={watch("province")}
-                onValueChange={(value) =>
-                  setValue("province", value as OrganizationEntityFormDataZod["province"])
-                }
-              >
-                <option value="" disabled>
-                  Seleccionar provincia
-                </option>
-                {CUBA_PROVINCES.map((province) => (
-                  <option key={province.id} value={province.id}>
-                    {province.name}
-                  </option>
-                ))}
-              </SiteCorpSelect>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-ink">Municipio *</label>
-              <SiteCorpSelect
-                value={watch("municipality")}
-                onValueChange={(value) =>
-                  setValue(
-                    "municipality",
-                    value as OrganizationEntityFormDataZod["municipality"]
-                  )
-                }
-                disabled={!watch("province")}
-              >
-                <option value="" disabled>
-                  Seleccionar municipio
-                </option>
-                {watch("province") &&
-                MUNICIPIOS_BY_PROVINCE[watch("province")] &&
-                MUNICIPIOS_BY_PROVINCE[watch("province")].map((municipio) => (
-                  <option key={municipio} value={municipio}>
-                    {municipio}
-                  </option>
-                ))}
-              </SiteCorpSelect>
-            </div>
+            {/* Jerarquía: Grupo sin entidad superior; Empresa en un grupo; UEB en una empresa */}
+            {watch("entity_type") !== "business_group" && (
+              <div className="space-y-2 sm:col-span-full">
+                <label className="text-sm font-medium text-ink">Entidad superior *</label>
+                <SiteCorpSelect
+                  value={watch("parent_id") || ""}
+                  onValueChange={(value) =>
+                    setValue("parent_id", value || null, { shouldValidate: true })
+                  }
+                  disabled={filteredParentEntities.length === 0}
+                >
+                  <option value="">Seleccionar entidad superior</option>
+                  {filteredParentEntities.map((parent) => (
+                    <option key={parent.id} value={parent.id}>
+                      {parent.name} ·{" "}
+                      {parent.entity_type === "business_group" ? "Grupo empresarial" : "Empresa"}
+                    </option>
+                  ))}
+                </SiteCorpSelect>
+                <p className="text-xs text-muted-foreground">
+                  {errors.parent_id?.message
+                    ? errors.parent_id.message
+                    : watch("entity_type") === "company"
+                      ? "La empresa pertenece a un grupo empresarial del mismo workspace."
+                      : "La UEB pertenece a una empresa del mismo workspace."}
+                </p>
+                {filteredParentEntities.length === 0 && (
+                  <p className="text-xs text-sitecorp-warning">
+                    {watch("entity_type") === "company"
+                      ? "Este workspace todavía no tiene grupos empresariales."
+                      : "Este workspace todavía no tiene empresas en ese grupo empresarial."}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Description and sitecorp account are conditional */}

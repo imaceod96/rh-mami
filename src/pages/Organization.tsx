@@ -282,7 +282,7 @@ const Organization = () => {
               entities={entities}
               editingEntity={editingEntity}
               defaultEntityType="company"
-              defaultRegime="presupuestada"
+              defaultRegime="PRESUPUESTADA"
             />
       
       <Dialog

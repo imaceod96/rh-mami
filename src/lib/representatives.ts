@@ -47,6 +47,37 @@ export interface EntityContractDataInput {
   municipality: string | null
 }
 
+/**
+ * Datos contractuales pendientes de la entidad, derivados dinámicamente.
+ * No se almacena ningún indicador de «datos completos»: se calcula al vuelo.
+ */
+export function pendingEntityContractualData(data: EntityContractData | null): string[] {
+  if (!data) {
+    return [
+      "Organismo al que pertenece",
+      "Rama",
+      "Código de identificación laboral/organizacional",
+      "Dirección",
+      "Provincia",
+      "Municipio",
+    ]
+  }
+
+  const missing = (value: string | null) => !value || !value.trim()
+  const pending: string[] = []
+
+  if (missing(data.organism)) pending.push("Organismo al que pertenece")
+  if (missing(data.branch)) pending.push("Rama")
+  if (missing(data.labor_identification_code)) {
+    pending.push("Código de identificación laboral/organizacional")
+  }
+  if (missing(data.address)) pending.push("Dirección")
+  if (missing(data.province)) pending.push("Provincia")
+  if (missing(data.municipality)) pending.push("Municipio")
+
+  return pending
+}
+
 /** Datos contractuales de la entidad (organismo, rama, código laboral y domicilio). */
 export async function fetchEntityContractData(
   entityId: string
