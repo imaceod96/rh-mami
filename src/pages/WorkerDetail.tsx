@@ -38,6 +38,15 @@ import ChangePositionDialog, {
 import SeparateWorkerDialog from "@/components/workers/SeparateWorkerDialog"
 import ReincorporateWorkerDialog from "@/components/workers/ReincorporateWorkerDialog"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import {
+  NO_WORK_INFO_LABEL,
+  fetchPositionScheduleSegments,
+  formatBreak,
+  formatJornada,
+  formatScheduleByDay,
+  formatScheduleSummary,
+  type PositionScheduleSegment,
+} from "@/lib/position-schedule"
 import ChangeContractDialog, {
   type CurrentContractInfo,
 } from "@/components/workers/ChangeContractDialog"
@@ -98,6 +107,13 @@ interface WorkerDetail {
       name: string
       code: string
       is_active: boolean
+      // Fase 11A.3: información laboral del puesto
+      work_location: string | null
+      daily_hours: number | null
+      weekly_hours: number | null
+      monthly_hours: number | null
+      break_minutes: number | null
+      schedule_notes: string | null
       job: {
         id: string
         name: string
@@ -178,6 +194,8 @@ const WorkerDetail = () => {
   const [movements, setMovements] = React.useState<WorkerMovement[]>([])
   const [salaryHistory, setSalaryHistory] = React.useState<WorkerSalaryHistoryEntry[]>([])
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
+  // Fase 11A.3: horario habitual del puesto vigente (no se copia al trabajador)
+  const [positionSegments, setPositionSegments] = React.useState<PositionScheduleSegment[]>([])
   const [contractForm, setContractForm] = React.useState<{
     contractTypeId: string
     startDate: string
@@ -248,8 +266,9 @@ const WorkerDetail = () => {
                 assignments:worker_position_assignments(
                   id, position_id, start_date, end_date, is_current,
                   position:organization_positions(
-                    id, name, code, is_active, job_id,
-                    job:organization_jobs(
+                      id, name, code, is_active, job_id,
+                      work_location, daily_hours, weekly_hours, monthly_hours, break_minutes, schedule_notes,
+                      job:organization_jobs(
                       id, name, code, is_active, area_id,
                       area:organization_areas(id, name),
                       salary_group:salary_groups(id, salary_scale_id, sequence_number)
@@ -300,6 +319,25 @@ const WorkerDetail = () => {
               }))
             }
             setWorker(mappedWorker as WorkerDetail)
+
+      // Fase 11A.3: horario habitual del puesto vigente (o del último puesto si está inactivo)
+      const requestedPositionId =
+        mappedWorker.assignments?.find((a: any) => a.is_current && !a.end_date)?.position_id ||
+        [...(mappedWorker.assignments || [])].sort((a: any, b: any) =>
+          a.start_date < b.start_date ? 1 : -1
+        )[0]?.position_id ||
+        null
+
+      if (requestedPositionId) {
+        try {
+          setPositionSegments(await fetchPositionScheduleSegments(requestedPositionId))
+        } catch (segmentsErr) {
+          console.error("Error loading position schedule segments:", segmentsErr)
+          setPositionSegments([])
+        }
+      } else {
+        setPositionSegments([])
+      }
 
       // Cargar catálogos
       const [g, m, e, s, ct] = await Promise.all([
@@ -526,6 +564,20 @@ const WorkerDetail = () => {
   const lastBaja = React.useMemo(
     () => movements.find((m) => m.movement_type === "BAJA") || null,
     [movements]
+  )
+
+  // Fase 11A.3: jornada, descanso y horario resueltos desde el puesto
+  const jornadaPuesto = position
+    ? formatJornada({
+        daily_hours: position.daily_hours,
+        weekly_hours: position.weekly_hours,
+        monthly_hours: position.monthly_hours,
+      })
+    : null
+  const descansoPuesto = position ? formatBreak(position.break_minutes) : null
+  const positionScheduleByDay = React.useMemo(
+    () => formatScheduleByDay(positionSegments),
+    [positionSegments]
   )
 
   const currentContractInfo: CurrentContractInfo | null = React.useMemo(() => {
@@ -814,6 +866,55 @@ const WorkerDetail = () => {
 
               )}
             </dl>
+
+            {/* Información laboral del puesto (Fase 11A.3): se resuelve desde el
+                puesto vigente, nunca se copia al trabajador. */}
+            {position && (
+              <div className="mt-4 rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Información laboral del puesto
+                </p>
+                <dl className="mt-2 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Lugar de trabajo</dt>
+                    <dd className="text-sm text-ink">
+                      {position.work_location || NO_WORK_INFO_LABEL}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Jornada</dt>
+                    <dd className="text-sm text-ink">{jornadaPuesto || NO_WORK_INFO_LABEL}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Descanso</dt>
+                    <dd className="text-sm text-ink">{descansoPuesto || NO_WORK_INFO_LABEL}</dd>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <dt className="text-xs text-muted-foreground">Horario habitual</dt>
+                    <dd className="text-sm text-ink">
+                      {positionScheduleByDay.length === 0 ? (
+                        NO_WORK_INFO_LABEL
+                      ) : (
+                        <ul className="space-y-0.5">
+                          {positionScheduleByDay.map((row) => (
+                            <li key={row.day}>
+                              <span className="font-medium">{row.day}</span>{" "}
+                              <span className="text-muted-foreground">{row.ranges}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </dd>
+                  </div>
+                  {position.schedule_notes && (
+                    <div className="sm:col-span-3">
+                      <dt className="text-xs text-muted-foreground">Observaciones del horario</dt>
+                      <dd className="text-sm text-ink">{position.schedule_notes}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
 
             {/* Contratación */}
             <div className="mt-5 border-t border-border pt-4">

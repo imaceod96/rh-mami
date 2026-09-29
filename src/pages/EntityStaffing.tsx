@@ -67,6 +67,13 @@ interface PositionRow {
   is_active: boolean
   job_id: string
   authorized_quantity: number
+  // Fase 11A.3: información laboral del puesto (solo lectura)
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
   job: JobRef | null
 }
 
@@ -106,6 +113,9 @@ const EntityStaffing = () => {
   const [areas, setAreas] = React.useState<OrganizationArea[]>([])
   const [jobs, setJobs] = React.useState<JobRef[]>([])
   const [positions, setPositions] = React.useState<PositionRow[]>([])
+  const [segmentsByPosition, setSegmentsByPosition] = React.useState<
+    Record<string, PositionScheduleSegment[]>
+  >({})
   const [workers, setWorkers] = React.useState<WorkerRow[]>([])
   const [applicableScaleId, setApplicableScaleId] = React.useState<string | null>(null)
   const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<Record<string, SalaryValue | null>>({})
@@ -184,6 +194,7 @@ const EntityStaffing = () => {
                     .from("organization_positions")
                     .select(`
                       id, name, code, is_active, job_id, authorized_quantity,
+                      work_location, daily_hours, weekly_hours, monthly_hours, break_minutes, schedule_notes,
                       job:organization_jobs(
                         id, name, code, is_active, area_id,
                         area:organization_areas(id, name),
@@ -205,6 +216,9 @@ const EntityStaffing = () => {
                       : null,
                   })) as unknown as PositionRow[]) || []
                   setPositions(positionsRows)
+
+                  // Fase 11A.3: horarios habituales de los puestos (solo lectura)
+                  setSegmentsByPosition(await fetchEntityScheduleSegments(entityId))
 
       const { data: workersData, error: workersError } = await supabase
         .from("workers")
@@ -321,6 +335,13 @@ const EntityStaffing = () => {
             occupied: isOccupied(p.id),
             authorized_quantity: p.authorized_quantity,
             currentAssignments: assignmentsPerPosition.get(p.id) || 0,
+            work_location: p.work_location,
+            daily_hours: p.daily_hours,
+            weekly_hours: p.weekly_hours,
+            monthly_hours: p.monthly_hours,
+            break_minutes: p.break_minutes,
+            schedule_notes: p.schedule_notes,
+            schedule_segments: segmentsByPosition[p.id] || [],
             job: p.job
               ? {
                   id: p.job.id,
@@ -336,7 +357,7 @@ const EntityStaffing = () => {
                 }
               : null,
           })),
-        [positions, occupiedPositionIds, assignmentsPerPosition]
+        [positions, occupiedPositionIds, assignmentsPerPosition, segmentsByPosition]
       )
 
   // ---------- Filtros en cascada ----------

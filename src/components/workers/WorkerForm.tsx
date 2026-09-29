@@ -9,6 +9,8 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
 import { ciToBirthDate } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
+import type { PositionScheduleSegment } from "@/lib/position-schedule"
 
 export interface WorkerPositionOption {
   id: string
@@ -18,6 +20,14 @@ export interface WorkerPositionOption {
   occupied: boolean
   authorized_quantity: number
   currentAssignments: number
+  // Fase 11A.3: información laboral del puesto (solo lectura)
+  work_location?: string | null
+  daily_hours?: number | null
+  weekly_hours?: number | null
+  monthly_hours?: number | null
+  break_minutes?: number | null
+  schedule_notes?: string | null
+  schedule_segments?: PositionScheduleSegment[]
   job: {
     id: string
     name: string
@@ -600,6 +610,18 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
                 </dd>
               </div>
             </dl>
+
+            {/* Fase 11A.3: configuración estructural del puesto (solo lectura) */}
+            <PositionWorkInfoReadOnly
+              className="mt-3"
+              workLocation={selectedPosition?.work_location}
+              dailyHours={selectedPosition?.daily_hours}
+              weeklyHours={selectedPosition?.weekly_hours}
+              monthlyHours={selectedPosition?.monthly_hours}
+              breakMinutes={selectedPosition?.break_minutes}
+              scheduleNotes={selectedPosition?.schedule_notes}
+              segments={selectedPosition?.schedule_segments || []}
+            />
           </div>
         )}
 

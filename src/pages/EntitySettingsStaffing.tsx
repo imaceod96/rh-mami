@@ -49,6 +49,16 @@ import {
   NO_OCCUPATIONAL_CATEGORY_LABEL,
   fetchOccupationalCategories,
 } from "@/lib/occupational-categories"
+import {
+  NO_WORK_INFO_LABEL,
+  fetchEntityScheduleSegments,
+  formatBreak,
+  formatJornada,
+  formatScheduleByDay,
+  formatScheduleSummary,
+  hasWorkInfo,
+  type PositionScheduleSegment,
+} from "@/lib/position-schedule"
 import { JobForm } from "@/components/JobForm"
 import { AreaForm } from "@/components/AreaForm"
 import { PositionForm, type PositionJobOption, type PositionEditingData } from "@/components/PositionForm"
@@ -125,6 +135,14 @@ interface OrganizationPosition {
   created_at: string
   updated_at: string
   authorized_quantity: number
+  // Fase 11A.3: información laboral del puesto
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  schedule_segments?: PositionScheduleSegment[]
   job: {
     id: string
     name: string
@@ -386,7 +404,16 @@ const EntitySettingsStaffing = () => {
         .order("created_at")
 
       if (positionsError) throw positionsError
-      setPositions((positionsData as OrganizationPosition[]) || [])
+
+      // Fase 11A.3: horarios habituales de todos los puestos de la entidad
+      const segmentsByPosition = await fetchEntityScheduleSegments(entityId)
+
+      setPositions(
+        ((positionsData as OrganizationPosition[]) || []).map(position => ({
+          ...position,
+          schedule_segments: segmentsByPosition[position.id] || [],
+        }))
+      )
     } catch (err) {
       console.error("Error loading data:", err)
       setError(err instanceof Error ? err.message : "Error al cargar los datos")
@@ -543,6 +570,13 @@ const EntitySettingsStaffing = () => {
         name: position.name,
         description: position.description,
         authorized_quantity: position.authorized_quantity,
+        work_location: position.work_location,
+        daily_hours: position.daily_hours,
+        weekly_hours: position.weekly_hours,
+        monthly_hours: position.monthly_hours,
+        break_minutes: position.break_minutes,
+        schedule_notes: position.schedule_notes,
+        schedule_segments: position.schedule_segments || [],
       })
       setFormError(null)
       setPositionDialogOpen(true)
@@ -1217,8 +1251,9 @@ const EntitySettingsStaffing = () => {
                       return (
                         <div
                           key={position.id}
-                          className="flex flex-col gap-2 rounded-xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                          className="rounded-xl border border-border bg-white p-4"
                         >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="text-sm font-medium text-ink">
                               {position.name}
@@ -1288,6 +1323,10 @@ const EntitySettingsStaffing = () => {
                               )}
                             </div>
                           )}
+                          </div>
+
+                          {/* Fase 11A.3: información laboral del puesto */}
+                          <PositionWorkDetail position={position} />
                         </div>
                       )
                     })}
@@ -1377,13 +1416,13 @@ const EntitySettingsStaffing = () => {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[660px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingPosition ? "Editar puesto" : "Nuevo puesto"}</DialogTitle>
             <DialogDescription>
               {editingPosition
-                ? "Modifica los datos del puesto."
-                : "Crea uno o varios puestos a partir de un cargo de esta entidad."}
+                ? "Modifica los datos, la ubicación, la jornada y el horario habitual del puesto."
+                : "Crea un puesto a partir de un cargo de esta entidad, con su ubicación, jornada y horario habitual."}
             </DialogDescription>
           </DialogHeader>
           <PositionForm
@@ -1401,6 +1440,99 @@ const EntitySettingsStaffing = () => {
           />
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+/**
+ * Información laboral del puesto (Fase 11A.3): lugar de trabajo, jornada,
+ * horario habitual y descanso. Datos estructurales del puesto: los trabajadores
+ * asignados al mismo puesto los comparten.
+ */
+const PositionWorkDetail = ({ position }: { position: OrganizationPosition }) => {
+  const [open, setOpen] = React.useState(false)
+
+  const segments = position.schedule_segments || []
+  const jornada = formatJornada(position)
+  const scheduleSummary = formatScheduleSummary(segments)
+  const descanso = formatBreak(position.break_minutes)
+  const configured = hasWorkInfo(position, segments)
+
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2 text-xs text-muted-foreground">
+        <span>
+          Lugar: <span className="text-ink">{position.work_location || NO_WORK_INFO_LABEL}</span>
+        </span>
+        <span>
+          Jornada: <span className="text-ink">{jornada || NO_WORK_INFO_LABEL}</span>
+        </span>
+        <span>
+          Horario: <span className="text-ink">{scheduleSummary || NO_WORK_INFO_LABEL}</span>
+        </span>
+        {configured && (
+          <button
+            type="button"
+            onClick={() => setOpen(prev => !prev)}
+            className="font-medium text-sitecorp-primary underline-offset-2 hover:underline"
+          >
+            {open ? "Ocultar detalle" : "Ver detalle"}
+          </button>
+        )}
+      </div>
+
+      {open && configured && (
+        <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-muted-foreground">Lugar de trabajo</dt>
+              <dd className="text-sm text-ink">{position.work_location || NO_WORK_INFO_LABEL}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Jornada</dt>
+              <dd className="text-sm text-ink">
+                {position.daily_hours !== null && position.daily_hours !== undefined && (
+                  <span className="mr-2 block">{position.daily_hours} h/día</span>
+                )}
+                {position.weekly_hours !== null && position.weekly_hours !== undefined && (
+                  <span className="mr-2 block">{position.weekly_hours} h/semana</span>
+                )}
+                {position.monthly_hours !== null && position.monthly_hours !== undefined && (
+                  <span className="mr-2 block">{position.monthly_hours} h/mes</span>
+                )}
+                {!jornada && NO_WORK_INFO_LABEL}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Horario</dt>
+              <dd className="text-sm text-ink">
+                {formatScheduleByDay(segments).length === 0 ? (
+                  NO_WORK_INFO_LABEL
+                ) : (
+                  <ul className="space-y-0.5">
+                    {formatScheduleByDay(segments).map(row => (
+                      <li key={row.day}>
+                        <span className="font-medium">{row.day}</span>{" "}
+                        <span className="text-muted-foreground">{row.ranges}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Descanso</dt>
+              <dd className="text-sm text-ink">{descanso || NO_WORK_INFO_LABEL}</dd>
+            </div>
+            {position.schedule_notes && (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-muted-foreground">Observaciones del horario</dt>
+                <dd className="text-sm text-ink">{position.schedule_notes}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      )}
     </div>
   )
 }

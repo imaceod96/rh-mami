@@ -3,10 +3,19 @@ import { supabase } from "@/lib/supabase"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
+import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import {
+  WEEK_DAYS,
+  formatTime,
+  weekDayLabel,
+  type PositionScheduleSegment,
+} from "@/lib/position-schedule"
+import { CalendarClock, Plus, X } from "lucide-react"
 
 export interface PositionJobOption {
   id: string
@@ -33,6 +42,14 @@ export interface PositionEditingData {
   name: string
   description: string | null
   authorized_quantity: number
+  // Fase 11A.3: información laboral del puesto
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  schedule_segments?: PositionScheduleSegment[]
 }
 
 interface PositionFormProps {
@@ -63,6 +80,19 @@ const generatePositionCode = (): string => {
 const formatSalary = (value: { amount: number; currency_code: string }) =>
   `${value.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${value.currency_code}`
 
+/** "08:00:00" | "08:00" → "08:00" (la BD guarda `time`). */
+const normalizeTime = (time: string): string => {
+  const [hours, minutes] = time.split(":")
+  return `${(hours || "00").padStart(2, "0")}:${(minutes || "00").padStart(2, "0")}`
+}
+
+const parseNullableNumber = (raw: string): number | null => {
+  const trimmed = raw.trim().replace(",", ".")
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : NaN
+}
+
 export const PositionForm: React.FC<PositionFormProps> = ({
   entityId,
   jobs,
@@ -84,6 +114,43 @@ export const PositionForm: React.FC<PositionFormProps> = ({
   const [description, setDescription] = React.useState<string>(
     editingPosition?.description || ""
   )
+  // Fase 11A.3
+  const [workLocation, setWorkLocation] = React.useState<string>(
+    editingPosition?.work_location || ""
+  )
+  const [dailyHours, setDailyHours] = React.useState<string>(
+    editingPosition?.daily_hours !== null && editingPosition?.daily_hours !== undefined
+      ? String(editingPosition.daily_hours)
+      : ""
+  )
+  const [weeklyHours, setWeeklyHours] = React.useState<string>(
+    editingPosition?.weekly_hours !== null && editingPosition?.weekly_hours !== undefined
+      ? String(editingPosition.weekly_hours)
+      : ""
+  )
+  const [monthlyHours, setMonthlyHours] = React.useState<string>(
+    editingPosition?.monthly_hours !== null && editingPosition?.monthly_hours !== undefined
+      ? String(editingPosition.monthly_hours)
+      : ""
+  )
+  const [breakMinutes, setBreakMinutes] = React.useState<string>(
+    editingPosition?.break_minutes !== null && editingPosition?.break_minutes !== undefined
+      ? String(editingPosition.break_minutes)
+      : ""
+  )
+  const [scheduleNotes, setScheduleNotes] = React.useState<string>(
+    editingPosition?.schedule_notes || ""
+  )
+  const [segments, setSegments] = React.useState<PositionScheduleSegment[]>(
+    (editingPosition?.schedule_segments || []).map((segment) => ({
+      day_of_week: segment.day_of_week,
+      start_time: normalizeTime(segment.start_time),
+      end_time: normalizeTime(segment.end_time),
+    }))
+  )
+  const [draftDays, setDraftDays] = React.useState<number[]>([1])
+  const [draftStart, setDraftStart] = React.useState<string>("08:00")
+  const [draftEnd, setDraftEnd] = React.useState<string>("16:30")
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
 
@@ -137,6 +204,68 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     }
   }, [selectedJob, applicableScaleId, salaryValuesByGroup])
 
+  const sortedSegments = React.useMemo(
+    () =>
+      [...segments].sort(
+        (a, b) =>
+          a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)
+      ),
+    [segments]
+  )
+
+  const toggleDraftDay = (day: number) => {
+    setDraftDays(prev => (prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]))
+  }
+
+  const handleAddSegments = () => {
+    setFormError(null)
+
+    if (draftDays.length === 0) {
+      setFormError("Selecciona al menos un día para el horario")
+      return
+    }
+    if (!draftStart || !draftEnd) {
+      setFormError("Indica la hora desde y hasta del horario")
+      return
+    }
+    if (normalizeTime(draftStart) === normalizeTime(draftEnd)) {
+      setFormError("La hora desde y hasta no pueden ser iguales")
+      return
+    }
+
+    const start = normalizeTime(draftStart)
+    const end = normalizeTime(draftEnd)
+
+    setSegments(prev => {
+      const next = [...prev]
+      draftDays.forEach(day => {
+        const duplicated = next.some(
+          segment =>
+            segment.day_of_week === day &&
+            normalized(segment.start_time) === start &&
+            normalized(segment.end_time) === end
+        )
+        if (!duplicated) {
+          next.push({ day_of_week: day, start_time: start, end_time: end })
+        }
+      })
+      return next
+    })
+  }
+
+  const removeSegment = (segment: PositionScheduleSegment) => {
+    setSegments(prev =>
+      prev.filter(
+        item =>
+          !(
+            item.day_of_week === segment.day_of_week &&
+            item.start_time === segment.start_time &&
+            item.end_time === segment.end_time
+          )
+      )
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!entityId) return
@@ -169,48 +298,66 @@ export const PositionForm: React.FC<PositionFormProps> = ({
       return
     }
 
+    const daily = parseNullableNumber(dailyHours)
+    const weekly = parseNullableNumber(weeklyHours)
+    const monthly = parseNullableNumber(monthlyHours)
+    const breakValue = parseNullableNumber(breakMinutes)
+
+    // Los valores deben ser >= 0; no se imponen límites legales no definidos
+    const hourFields: [string, number | null][] = [
+      ["Horas diarias", daily],
+      ["Horas semanales", weekly],
+      ["Horas mensuales", monthly],
+    ]
+    for (const [label, value] of hourFields) {
+      if (value !== null && (Number.isNaN(value) || value < 0)) {
+        setFormError(`${label} debe ser un número mayor o igual a 0`)
+        return
+      }
+    }
+    if (breakValue !== null) {
+      if (Number.isNaN(breakValue) || breakValue < 0) {
+        setFormError("El descanso debe ser un número de minutos mayor o igual a 0")
+        return
+      }
+      if (!Number.isInteger(breakValue)) {
+        setFormError("El descanso debe expresarse en minutos enteros")
+        return
+      }
+    }
+
     setSubmitting(true)
 
     try {
-      if (isEditing) {
-        const { error: updateError } = await supabase
-          .from("organization_positions")
-          .update({
-            job_id: selectedJobId,
-            name,
-            description: description.trim() || null,
-            authorized_quantity: qty,
-          })
-          .eq("id", editingPosition!.id)
+      const { error: rpcError } = await supabase.rpc("save_position_with_schedule", {
+        p_entity_id: entityId,
+        p_position_id: isEditing ? editingPosition!.id : null,
+        p_job_id: selectedJobId,
+        p_code: isEditing ? editingPosition!.code : generatePositionCode(),
+        p_name: name,
+        p_description: description.trim() || null,
+        p_authorized_quantity: qty,
+        p_work_location: workLocation.trim() || null,
+        p_daily_hours: daily,
+        p_weekly_hours: weekly,
+        p_monthly_hours: monthly,
+        p_break_minutes: breakValue,
+        p_schedule_notes: scheduleNotes.trim() || null,
+        p_segments: sortedSegments.map((segment, index) => ({
+          day_of_week: segment.day_of_week,
+          start_time: segment.start_time,
+          end_time: segment.end_time,
+          display_order: index + 1,
+        })),
+      })
 
-        if (updateError) throw updateError
-        onSuccess()
-      } else {
-        // Un solo registro con authorized_quantity
-        const code = generatePositionCode()
-        const { error: insertError } = await supabase
-          .from("organization_positions")
-          .insert({
-            organization_entity_id: entityId,
-            job_id: selectedJobId,
-            code,
-            name,
-            description: description.trim() || null,
-            position_order: 0,
-            is_active: true,
-            authorized_quantity: qty,
-          })
-
-        if (insertError) throw insertError
-        onSuccess()
-      }
+      if (rpcError) throw rpcError
+      onSuccess()
     } catch (err) {
       console.error("Error saving position:", err)
-      const message =
-        err instanceof Error ? err.message : "Error al guardar el puesto"
-      if (message.includes("organization_positions_entity_code_unique")) {
-        setFormError("Conflicto de código, inténtalo de nuevo")
-      } else if (message.includes("organization_positions_job_id_code_unique")) {
+      const message = err instanceof Error ? err.message : "Error al guardar el puesto"
+      if (message.includes("organization_positions_entity_code_unique") ||
+          message.includes("organization_positions_job_id_code_unique")) {
         setFormError("Conflicto de código, inténtalo de nuevo")
       } else {
         setFormError(message)
@@ -221,108 +368,317 @@ export const PositionForm: React.FC<PositionFormProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {formError && <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>}
 
-      <div className="space-y-2">
-        <Label htmlFor="position-job">Cargo *</Label>
-        <SiteCorpSelect
-          value={selectedJobId}
-          onValueChange={handleJobChange}
-        >
-          <option value="">Seleccionar cargo</option>
-          {jobOptions.map((job) => (
-            <option key={job.id} value={job.id}>
-              {job.name} ({job.code}){!job.is_active ? " — inactivo" : ""}
-            </option>
-          ))}
-        </SiteCorpSelect>
-        <p className="text-xs text-muted-foreground">
-          Solo cargos activos de esta entidad.
+      {/* INFORMACIÓN GENERAL */}
+      <div className="space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Información general
         </p>
-      </div>
 
-      {derivedInfo && (
-        <div className="rounded-lg border border-border bg-muted/30 p-3">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Información derivada del cargo (solo lectura)
-          </p>
-          <dl className="grid gap-2 sm:grid-cols-3">
-            <div>
-              <dt className="text-xs text-muted-foreground">Área</dt>
-              <dd className="text-sm font-medium text-ink">{derivedInfo.areaLabel}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Grupo salarial</dt>
-              <dd className="text-sm font-medium text-ink">{derivedInfo.groupLabel}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Salario actual</dt>
-              <dd className="text-sm font-medium text-ink">
-                {derivedInfo.salaryLabel ? (
-                  derivedInfo.salaryLabel
-                ) : (
-                  <span className="text-muted-foreground">
-                    {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
-                  </span>
-                )}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="position-name">Nombre del puesto *</Label>
-        <SiteCorpInput
-          id="position-name"
-          value={baseName}
-          onChange={(e) => setBaseName(e.target.value)}
-          placeholder="Ej.: Almacenero"
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="position-quantity">Cantidad de puestos *</Label>
-        <SiteCorpInput
-          id="position-quantity"
-          type="number"
-          min={1}
-          max={MAX_QUANTITY}
-          value={authorizedQuantity}
-          onChange={(e) => setAuthorizedQuantity(e.target.value)}
-          required
-        />
-        <p className="text-xs text-muted-foreground">
-          Número máximo de trabajadores que pueden ocupar este puesto simultáneamente.
-        </p>
-      </div>
-
-      {isEditing && (
         <div className="space-y-2">
-          <Label htmlFor="position-code">Código</Label>
+          <Label htmlFor="position-job">Cargo *</Label>
+          <SiteCorpSelect
+            value={selectedJobId}
+            onValueChange={handleJobChange}
+          >
+            <option value="">Seleccionar cargo</option>
+            {jobOptions.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.name} ({job.code}){!job.is_active ? " — inactivo" : ""}
+              </option>
+            ))}
+          </SiteCorpSelect>
+          <p className="text-xs text-muted-foreground">
+            Solo cargos activos de esta entidad. El área, el grupo salarial y el contenido de
+            trabajo se heredan del cargo.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="position-name">Nombre del puesto *</Label>
+            <SiteCorpInput
+              id="position-name"
+              value={baseName}
+              onChange={(e) => setBaseName(e.target.value)}
+              placeholder="Ej.: Almacenero"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="position-code">Código</Label>
+            <SiteCorpInput
+              id="position-code"
+              value={isEditing ? editingPosition!.code : "Se genera automáticamente"}
+              disabled
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="position-description">Descripción</Label>
+          <Textarea
+            id="position-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Descripción opcional del puesto"
+            rows={2}
+          />
+        </div>
+      </div>
+
+      {/* CAPACIDAD */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Capacidad
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="position-quantity">Cantidad autorizada *</Label>
           <SiteCorpInput
-            id="position-code"
-            value={editingPosition!.code}
-            disabled
+            id="position-quantity"
+            type="number"
+            min={1}
+            max={MAX_QUANTITY}
+            value={authorizedQuantity}
+            onChange={(e) => setAuthorizedQuantity(e.target.value)}
+            required
           />
           <p className="text-xs text-muted-foreground">
-            El código se genera automáticamente y no puede modificarse.
+            Número máximo de trabajadores que pueden ocupar este puesto simultáneamente. Es un
+            único puesto con N plazas autorizadas; las vacantes se calculan según las asignaciones
+            activas.
           </p>
         </div>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="position-description">Descripción</Label>
-        <Textarea
-          id="position-description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Descripción opcional del puesto"
-          rows={2}
-        />
       </div>
+
+      {/* UBICACIÓN */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Ubicación
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="position-work-location">Lugar de trabajo</Label>
+          <SiteCorpInput
+            id="position-work-location"
+            value={workLocation}
+            onChange={(e) => setWorkLocation(e.target.value)}
+            placeholder="Ej.: Almacén Central"
+          />
+          <p className="text-xs text-muted-foreground">
+            Ubicación habitual donde se ejecuta el trabajo. Es independiente del área
+            organizativa del cargo.
+          </p>
+        </div>
+      </div>
+
+      {/* JORNADA */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Jornada
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="position-daily-hours">Horas diarias</Label>
+            <SiteCorpInput
+              id="position-daily-hours"
+              inputMode="decimal"
+              value={dailyHours}
+              onChange={(e) => setDailyHours(e.target.value)}
+              placeholder="Ej.: 8"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="position-weekly-hours">Horas semanales</Label>
+            <SiteCorpInput
+              id="position-weekly-hours"
+              inputMode="decimal"
+              value={weeklyHours}
+              onChange={(e) => setWeeklyHours(e.target.value)}
+              placeholder="Ej.: 44"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="position-monthly-hours">Horas mensuales</Label>
+            <SiteCorpInput
+              id="position-monthly-hours"
+              inputMode="decimal"
+              value={monthlyHours}
+              onChange={(e) => setMonthlyHours(e.target.value)}
+              placeholder="Ej.: 190.6"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Se almacenan por separado: las horas mensuales no se calculan multiplicando las
+          semanales.
+        </p>
+        <div className="space-y-2 sm:max-w-[240px]">
+          <Label htmlFor="position-break">Descanso (minutos)</Label>
+          <SiteCorpInput
+            id="position-break"
+            inputMode="numeric"
+            value={breakMinutes}
+            onChange={(e) => setBreakMinutes(e.target.value)}
+            placeholder="Ej.: 30"
+          />
+          <p className="text-xs text-muted-foreground">Se guarda como número de minutos.</p>
+        </div>
+      </div>
+
+      {/* HORARIO HABITUAL */}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Horario habitual
+        </p>
+
+        <div className="rounded-xl border border-border bg-muted/30 p-3">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            Selecciona los días y el rango horario; se añadirá a cada día seleccionado.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {WEEK_DAYS.map((day) => {
+              const selected = draftDays.includes(day.value)
+              return (
+                <button
+                  key={day.value}
+                  type="button"
+                  onClick={() => toggleDraftDay(day.value)}
+                  title={day.label}
+                  className={cn(
+                    "h-8 w-8 rounded-lg border text-xs font-semibold transition-colors",
+                    selected
+                      ? "border-sitecorp-primary bg-sitecorp-primary text-white"
+                      : "border-border bg-white text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {day.short}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="schedule-start" className="text-xs">
+                Desde
+              </Label>
+              <SiteCorpInput
+                id="schedule-start"
+                type="time"
+                value={draftStart}
+                onChange={(e) => setDraftStart(e.target.value)}
+                className="w-[120px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="schedule-end" className="text-xs">
+                Hasta
+              </Label>
+              <SiteCorpInput
+                id="schedule-end"
+                type="time"
+                value={draftEnd}
+                onChange={(e) => setDraftEnd(e.target.value)}
+                className="w-[120px]"
+              />
+            </div>
+            <SiteCorpButton type="button" variant="outline" onClick={handleAddSegments}>
+              <Plus className="mr-2 h-4 w-4" /> Añadir horario
+            </SiteCorpButton>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Si la hora final es anterior a la inicial, se interpreta como turno que cruza
+            medianoche (por ejemplo 20:00 → 04:00).
+          </p>
+        </div>
+
+        {sortedSegments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Sin configurar: no se ha definido ningún horario para este puesto.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {sortedSegments.map((segment) => (
+              <li
+                key={`${segment.day_of_week}-${segment.start_time}-${segment.end_time}`}
+                className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-3 py-2"
+              >
+                <span className="flex items-center gap-2 text-sm text-ink">
+                  <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{weekDayLabel(segment.day_of_week)}</span>
+                  <span className="text-muted-foreground">
+                    {formatTime(segment.start_time)}–{formatTime(segment.end_time)}
+                    {segment.end_time < segment.start_time ? " (+1 día)" : ""}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeSegment(segment)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-sitecorp-danger"
+                  aria-label="Eliminar horario"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="position-schedule-notes">Observaciones del horario</Label>
+          <Textarea
+            id="position-schedule-notes"
+            value={scheduleNotes}
+            onChange={(e) => setScheduleNotes(e.target.value)}
+            placeholder="Ej.: disponibilidad para turnos rotativos"
+            rows={2}
+          />
+          <p className="text-xs text-muted-foreground">
+            Sólo para información que no pueda representarse con los segmentos de horario.
+          </p>
+        </div>
+      </div>
+
+      {/* RETRIBUCIÓN (derivada del cargo) */}
+      {derivedInfo && (
+        <div className="space-y-4 border-t border-border pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Retribución (heredada del cargo)
+          </p>
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Información derivada del cargo (solo lectura)
+              </p>
+              <SiteCorpStatusBadge status="info">No editable aquí</SiteCorpStatusBadge>
+            </div>
+            <dl className="grid gap-2 sm:grid-cols-3">
+              <div>
+                <dt className="text-xs text-muted-foreground">Área</dt>
+                <dd className="text-sm font-medium text-ink">{derivedInfo.areaLabel}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Grupo salarial</dt>
+                <dd className="text-sm font-medium text-ink">{derivedInfo.groupLabel}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Salario actual</dt>
+                <dd className="text-sm font-medium text-ink">
+                  {derivedInfo.salaryLabel ? (
+                    derivedInfo.salaryLabel
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-2">
         <SiteCorpButton variant="outline" type="button" onClick={onCancel}>
@@ -339,3 +695,6 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     </form>
   )
 }
+
+/** Helper local para comparar horas ya normalizadas. */
+const normalized = (time: string): string => normalizeTime(time)

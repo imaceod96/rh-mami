@@ -22,6 +22,11 @@ import {
   type SalaryValue,
 } from "@/lib/salary"
 import { ArrowRight, AlertTriangle } from "lucide-react"
+import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
+import {
+  fetchEntityScheduleSegments,
+  type PositionScheduleSegment,
+} from "@/lib/position-schedule"
 
 interface PositionRow {
   id: string
@@ -29,6 +34,13 @@ interface PositionRow {
   code: string | null
   is_active: boolean
   authorized_quantity: number
+  // Fase 11A.3: información laboral del puesto (solo lectura)
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
   job: {
     id: string
     name: string
@@ -95,6 +107,9 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
   const [notes, setNotes] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [segmentsByPosition, setSegmentsByPosition] = React.useState<
+    Record<string, PositionScheduleSegment[]>
+  >({})
 
   const loadPositions = React.useCallback(async () => {
     if (!entityId) return
@@ -105,6 +120,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
         .from("organization_positions")
         .select(
           `id, name, code, is_active, authorized_quantity,
+           work_location, daily_hours, weekly_hours, monthly_hours, break_minutes, schedule_notes,
            job:organization_jobs(
              id, name, code, is_active, area_id,
              area:organization_areas(id, name),
@@ -127,6 +143,9 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
           : null,
       })) as PositionRow[]
       setPositions(mapped)
+
+      // Fase 11A.3: horarios habituales de los puestos (solo lectura)
+      setSegmentsByPosition(await fetchEntityScheduleSegments(entityId))
 
       // Ocupación: asignación actual con trabajador activo (mismo patrón que la Plantilla Operativa)
       const { data: workersData, error: workersError } = await supabase
@@ -413,6 +432,19 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Fase 11A.3: configuración estructural del nuevo puesto (solo lectura) */}
+              <PositionWorkInfoReadOnly
+                className="mt-3"
+                title="Información laboral del nuevo puesto"
+                workLocation={selected.work_location}
+                dailyHours={selected.daily_hours}
+                weeklyHours={selected.weekly_hours}
+                monthlyHours={selected.monthly_hours}
+                breakMinutes={selected.break_minutes}
+                scheduleNotes={selected.schedule_notes}
+                segments={segmentsByPosition[selected.id] || []}
+              />
             </div>
           )}
 
