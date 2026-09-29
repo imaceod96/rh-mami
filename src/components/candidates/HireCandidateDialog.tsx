@@ -1,5 +1,6 @@
 import * as React from "react"
 import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
+import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Label } from "@/components/ui/label"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { showSuccess, showError } from "@/utils/toast"
@@ -21,7 +23,7 @@ import {
   formatSalary,
   type SalaryValue,
 } from "@/lib/salary"
-import { AlertTriangle, UserPlus, RefreshCw } from "lucide-react"
+import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 
 interface PositionRow {
   id: string
@@ -43,34 +45,70 @@ interface ContractType {
   code: string
 }
 
+interface LinkedWorker {
+  id: string
+  code: string
+  employment_status: string
+}
+
+interface CandidateRow {
+  id: string
+  first_name: string
+  first_surname: string
+  second_surname: string | null
+  identification: string
+  email: string | null
+  phone: string | null
+  worker: LinkedWorker | null
+}
+
 export interface HireCandidateTarget {
   id: string
   fullName: string
   identification: string
+  /** Trabajador vinculado (si la persona ya tuvo un expediente laboral) */
+  worker?: LinkedWorker | null
 }
 
 interface HireCandidateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   entityId: string
-  candidate: HireCandidateTarget
-  mode: "NEW" | "REINCORPORATION"
+  /** Persona ya definida (flujo desde la ficha del candidato) */
+  candidate?: HireCandidateTarget | null
+  /** Puesto ya definido (flujo «Cubrir puesto» desde Contratación) */
+  presetPositionId?: string | null
   onSuccess: (workerId: string) => void
 }
 
+const fullNameOf = (c: {
+  first_name: string
+  first_surname: string
+  second_surname: string | null
+}) => [c.first_name, c.first_surname, c.second_surname].filter(Boolean).join(" ")
+
 const groupLabel = (sequence: number | null | undefined) =>
   sequence == null ? "—" : `Grupo ${toRomanNumeral(sequence)}`
+
+const hasAvailableCapacity = (
+  position: PositionRow | null,
+  occupancy: Record<string, number>
+) => {
+  if (!position || !position.is_active) return false
+  return (occupancy[position.id] || 0) < (position.authorized_quantity || 0)
+}
 
 const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   open,
   onOpenChange,
   entityId,
-  candidate,
-  mode,
+  candidate = null,
+  presetPositionId = null,
   onSuccess,
 }) => {
   const [positions, setPositions] = React.useState<PositionRow[]>([])
   const [occupancy, setOccupancy] = React.useState<Record<string, number>>({})
+  const [candidates, setCandidates] = React.useState<CandidateRow[]>([])
   const [contractTypes, setContractTypes] = React.useState<ContractType[]>([])
   const [applicableScaleId, setApplicableScaleId] = React.useState<string | null>(null)
   const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<
@@ -80,6 +118,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const [positionId, setPositionId] = React.useState("")
+  const [selectedCandidateId, setSelectedCandidateId] = React.useState("")
+  const [candidateSearch, setCandidateSearch] = React.useState("")
   const [hireDate, setHireDate] = React.useState("")
   const [contractTypeId, setContractTypeId] = React.useState("")
   const [contractStartDate, setContractStartDate] = React.useState("")
@@ -139,6 +179,24 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       })
       setOccupancy(counts)
 
+      // Personas disponibles: se excluyen las que ya son trabajadores activos.
+      const { data: candidatesData, error: candidatesError } = await supabase
+        .from("candidates")
+        .select(
+          `id, first_name, first_surname, second_surname, identification, email, phone,
+           worker:workers(id, code, employment_status)`
+        )
+        .eq("organization_entity_id", entityId)
+        .order("first_surname")
+        .order("first_name")
+      if (candidatesError) throw candidatesError
+      setCandidates(
+        (((candidatesData as any[]) || []).map((c: any) => ({
+          ...c,
+          worker: Array.isArray(c.worker) ? c.worker[0] || null : c.worker || null,
+        })) as CandidateRow[]) || []
+      )
+
       const { data: ctData, error: ctError } = await supabase
         .from("employment_contract_types")
         .select("id, name, code")
@@ -154,7 +212,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setSalaryValuesByGroup(await fetchActiveSalaryValuesForGroups(groupIds))
     } catch (err) {
       console.error("Error loading hiring data:", err)
-      setLoadError("No se pudieron cargar los puestos disponibles.")
+      setLoadError("No se pudieron cargar los datos para la contratación.")
     } finally {
       setLoading(false)
     }
@@ -162,7 +220,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
 
   React.useEffect(() => {
     if (!open) return
-    setPositionId("")
+    setPositionId(presetPositionId || "")
+    setSelectedCandidateId(candidate?.id || "")
+    setCandidateSearch("")
     setHireDate("")
     setContractTypeId("")
     setContractStartDate("")
@@ -171,9 +231,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setError(null)
     setOccupancy({})
     loadData()
-  }, [open, loadData])
+  }, [open, candidate?.id, presetPositionId, loadData])
 
-  const selectable = React.useMemo(
+  const vacantPositions = React.useMemo(
     () =>
       positions.filter(
         (p) => p.is_active && (occupancy[p.id] || 0) < (p.authorized_quantity || 0)
@@ -185,6 +245,38 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     () => positions.find((p) => p.id === positionId) || null,
     [positions, positionId]
   )
+
+  const selectableCandidates = React.useMemo(
+    () => candidates.filter((c) => c.worker?.employment_status !== "active"),
+    [candidates]
+  )
+
+  const filteredCandidates = React.useMemo(() => {
+    const search = candidateSearch.trim().toLowerCase()
+    if (!search) return selectableCandidates
+    return selectableCandidates.filter((c) =>
+      [c.first_name, c.first_surname, c.second_surname, c.identification, c.email, c.phone]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search)
+    )
+  }, [selectableCandidates, candidateSearch])
+
+  const selectedCandidate = React.useMemo<HireCandidateTarget | null>(() => {
+    if (candidate) return candidate
+    const found = candidates.find((c) => c.id === selectedCandidateId)
+    if (!found) return null
+    return {
+      id: found.id,
+      fullName: fullNameOf(found),
+      identification: found.identification,
+      worker: found.worker,
+    }
+  }, [candidate, candidates, selectedCandidateId])
+
+  const isReincorporation =
+    !!selectedCandidate?.worker && selectedCandidate.worker.employment_status !== "active"
 
   const selectedGroup = selected?.job?.salary_group || null
   const selectedSalary = salaryForGroup(applicableScaleId, selectedGroup, salaryValuesByGroup)
@@ -201,6 +293,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const handleSubmit = async () => {
     setError(null)
 
+    if (!selectedCandidate) {
+      setError("Selecciona la persona a contratar.")
+      return
+    }
     if (!positionId) {
       setError("Selecciona un puesto.")
       return
@@ -226,7 +322,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setSubmitting(true)
     try {
       const { data, error: rpcError } = await supabase.rpc("hire_candidate", {
-        p_candidate_id: candidate.id,
+        p_candidate_id: selectedCandidate.id,
         p_position_id: positionId,
         p_hire_date: hireDate,
         p_contract_type_id: contractTypeId,
@@ -237,7 +333,11 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       if (rpcError) throw rpcError
 
       const workerId = (data as any)?.worker_id as string | undefined
-      showSuccess("Candidato contratado correctamente.")
+      showSuccess(
+        isReincorporation
+          ? "Trabajador reincorporado correctamente."
+          : "Trabajador contratado correctamente."
+      )
       onOpenChange(false)
       if (workerId) onSuccess(workerId)
     } catch (err) {
@@ -271,90 +371,149 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     }
   }
 
-  const isReincorporation = mode === "REINCORPORATION"
+  const positionFixed = !!presetPositionId
+  const hasVacancy = hasAvailableCapacity(selected, occupancy)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[640px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>{isReincorporation ? "Reincorporar candidato" : "Contratar candidato"}</DialogTitle>
+          <DialogTitle>
+            {positionFixed
+              ? "Cubrir puesto"
+              : isReincorporation
+                ? "Reincorporar candidato"
+                : "Contratar candidato"}
+          </DialogTitle>
           <DialogDescription>
-            {isReincorporation
-              ? "Esta persona fue trabajador anteriormente. Se reincorporará con el mismo expediente: se creará un nuevo período laboral y un nuevo contrato."
-              : "Se creará un trabajador, una asignación de puesto y un contrato laboral."}
+            {positionFixed
+              ? "Seleccione la persona que ocupará el puesto, el tipo de contrato y la fecha de incorporación."
+              : "Se creará la asignación del puesto y el contrato laboral correspondiente."}
           </DialogDescription>
         </DialogHeader>
+
+        {loadError && <SiteCorpAlert type="danger">{loadError}</SiteCorpAlert>}
+
+        {/* ---------- Persona ---------- */}
+        <div className="rounded-xl border border-border bg-muted/30 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Persona
+          </p>
+
+          {candidate ? (
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs text-muted-foreground">Nombre</dt>
+                <dd className="text-sm font-medium text-ink">{candidate.fullName}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Carné de identidad</dt>
+                <dd className="text-sm font-medium text-ink">{candidate.identification}</dd>
+              </div>
+            </dl>
+          ) : loading ? (
+            <p className="text-sm text-muted-foreground">Cargando candidatos…</p>
+          ) : selectableCandidates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No hay candidatos disponibles. Registre un candidato o revise que no sea ya un
+              trabajador activo.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <SiteCorpInput
+                  value={candidateSearch}
+                  onChange={(e) => setCandidateSearch(e.target.value)}
+                  placeholder="Buscar por nombre, apellidos, CI, correo o teléfono…"
+                  className="pl-9"
+                />
+              </div>
+
+              {filteredCandidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Ningún candidato coincide con la búsqueda.
+                </p>
+              ) : (
+                <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-lg border border-border bg-background p-2">
+                  {filteredCandidates.map((c) => {
+                    const reinc = !!c.worker
+                    const selectedRow = selectedCandidateId === c.id
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedCandidateId(c.id)}
+                        className={cn(
+                          "w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                          selectedRow
+                            ? "border-sitecorp-primary bg-sitecorp-primary/5"
+                            : "border-transparent hover:bg-muted"
+                        )}
+                      >
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="text-sm font-medium text-ink">{fullNameOf(c)}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            CI: {c.identification}
+                          </span>
+                          {reinc && (
+                            <SiteCorpStatusBadge status="info">
+                              Trabajador anterior · Reincorporación
+                            </SiteCorpStatusBadge>
+                          )}
+                        </div>
+                        {(c.email || c.phone) && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {[c.email, c.phone].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {selectedCandidate && (
+                <p className="text-xs text-muted-foreground">
+                  Seleccionado:{" "}
+                  <span className="font-medium text-ink">{selectedCandidate.fullName}</span> · CI{" "}
+                  {selectedCandidate.identification}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         {isReincorporation && (
           <SiteCorpAlert type="info">
             <span className="flex items-start gap-2">
               <RefreshCw className="mt-0.5 h-4 w-4 shrink-0" />
-              Se reutilizará el trabajador existente (trayectoria, contratos y documentos se
-              conservan).
+              Esta persona fue trabajador anteriormente. Se reincorporará con el mismo expediente: se
+              creará un nuevo período laboral y un nuevo contrato, conservando su trayectoria y
+              documentos.
             </span>
           </SiteCorpAlert>
         )}
 
-        {loadError && <SiteCorpAlert type="danger">{loadError}</SiteCorpAlert>}
-
-        {/* Datos de la persona */}
-        <div className="rounded-xl border border-border bg-muted/30 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Persona
-          </p>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs text-muted-foreground">Nombre</dt>
-              <dd className="text-sm font-medium text-ink">{candidate.fullName}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Carné de identidad</dt>
-              <dd className="text-sm font-medium text-ink">{candidate.identification}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Puesto *</Label>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Cargando puestos…</p>
-            ) : selectable.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No hay puestos con vacantes disponibles en esta entidad.
-              </p>
-            ) : (
-              <SiteCorpSelect value={positionId} onValueChange={setPositionId}>
-                <option value="">Seleccionar puesto</option>
-                {selectable.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {p.job ? ` · ${p.job.name}` : ""} ({occupancy[p.id] || 0}/
-                    {p.authorized_quantity})
-                  </option>
-                ))}
-              </SiteCorpSelect>
-            )}
-          </div>
-
-          {/* Información derivada */}
-          {selected && (
+        {/* ---------- Puesto ---------- */}
+        {positionFixed ? (
+          selected && (
             <div className="rounded-xl border border-border bg-sitecorp-primary/5 p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sitecorp-primary">
-                Situación laboral resultante
+                Puesto seleccionado
               </p>
               <dl className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Área</dt>
-                  <dd className="text-sm font-medium text-ink">{selected.job?.area?.name || "—"}</dd>
+                  <dt className="text-xs text-muted-foreground">Puesto</dt>
+                  <dd className="text-sm font-medium text-ink">{selected.name}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Cargo</dt>
                   <dd className="text-sm font-medium text-ink">{selected.job?.name || "—"}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Puesto</dt>
-                  <dd className="text-sm font-medium text-ink">{selected.name}</dd>
+                  <dt className="text-xs text-muted-foreground">Área</dt>
+                  <dd className="text-sm font-medium text-ink">{selected.job?.area?.name || "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Grupo salarial</dt>
@@ -373,9 +532,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Capacidad</dt>
+                  <dt className="text-xs text-muted-foreground">Vacantes disponibles</dt>
                   <dd className="text-sm font-medium text-ink">
-                    {occupancy[selected.id] || 0}/{selected.authorized_quantity} ·{" "}
+                    {occupancy[selected.id] || 0}/{selected.authorized_quantity} ocupados ·{" "}
                     {vacancies} vacante(s)
                   </dd>
                 </div>
@@ -387,72 +546,140 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
                 </p>
               )}
             </div>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>{isReincorporation ? "Fecha de reincorporación *" : "Fecha de incorporación *"}</Label>
-              <SiteCorpInput
-                type="date"
-                value={hireDate}
-                onChange={(e) => {
-                  setHireDate(e.target.value)
-                  if (!contractStartDate) setContractStartDate(e.target.value)
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo de contrato *</Label>
-              <SiteCorpSelect value={contractTypeId} onValueChange={setContractTypeId}>
-                <option value="">Seleccionar tipo</option>
-                {contractTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+          )
+        ) : (
+          <div className="space-y-2">
+            <Label>Puesto *</Label>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Cargando puestos…</p>
+            ) : vacantPositions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay puestos con vacantes disponibles en esta entidad.
+              </p>
+            ) : (
+              <SiteCorpSelect value={positionId} onValueChange={setPositionId}>
+                <option value="">Seleccionar puesto</option>
+                {vacantPositions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.job ? ` · ${p.job.name}` : ""} ({occupancy[p.id] || 0}/
+                    {p.authorized_quantity})
                   </option>
                 ))}
               </SiteCorpSelect>
-            </div>
-          </div>
+            )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Inicio del contrato *</Label>
-              <SiteCorpInput
-                type="date"
-                value={contractStartDate || hireDate}
-                onChange={(e) => setContractStartDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Final del contrato{isDetermined ? " *" : ""}</Label>
-              <SiteCorpInput
-                type="date"
-                value={contractEndDate}
-                onChange={(e) => setContractEndDate(e.target.value)}
-                disabled={!isDetermined}
-                min={contractStartDate || hireDate || undefined}
-              />
-              {!isDetermined && (
-                <p className="text-xs text-muted-foreground">
-                  La modalidad de tiempo indeterminado no requiere fecha final.
+            {selected && (
+              <div className="rounded-xl border border-border bg-sitecorp-primary/5 p-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sitecorp-primary">
+                  Situación laboral resultante
                 </p>
-              )}
-            </div>
+                <dl className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Área</dt>
+                    <dd className="text-sm font-medium text-ink">
+                      {selected.job?.area?.name || "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Cargo</dt>
+                    <dd className="text-sm font-medium text-ink">{selected.job?.name || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Grupo salarial</dt>
+                    <dd className="text-sm font-medium text-ink">
+                      {groupLabel(selectedGroup?.sequence_number)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Salario de referencia</dt>
+                    <dd className="text-sm font-medium text-ink">
+                      {selectedSalary
+                        ? formatSalary(selectedSalary)
+                        : selectedGroup
+                          ? "Salario no configurado"
+                          : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Capacidad</dt>
+                    <dd className="text-sm font-medium text-ink">
+                      {occupancy[selected.id] || 0}/{selected.authorized_quantity} · {vacancies}{" "}
+                      vacante(s)
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            )}
           </div>
+        )}
 
+        {/* ---------- Contrato ---------- */}
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Observaciones</Label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sitecorp-primary"
-              placeholder="Opcional"
+            <Label>
+              {isReincorporation ? "Fecha de reincorporación *" : "Fecha de incorporación *"}
+            </Label>
+            <SiteCorpInput
+              type="date"
+              value={hireDate}
+              onChange={(e) => {
+                setHireDate(e.target.value)
+                if (!contractStartDate) setContractStartDate(e.target.value)
+              }}
             />
           </div>
-
-          {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
+          <div className="space-y-2">
+            <Label>Tipo de contrato *</Label>
+            <SiteCorpSelect value={contractTypeId} onValueChange={setContractTypeId}>
+              <option value="">Seleccionar tipo</option>
+              {contractTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </SiteCorpSelect>
+          </div>
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Inicio del contrato *</Label>
+            <SiteCorpInput
+              type="date"
+              value={contractStartDate || hireDate}
+              onChange={(e) => setContractStartDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Final del contrato{isDetermined ? " *" : ""}</Label>
+            <SiteCorpInput
+              type="date"
+              value={contractEndDate}
+              onChange={(e) => setContractEndDate(e.target.value)}
+              disabled={!isDetermined}
+              min={contractStartDate || hireDate || undefined}
+            />
+            {!isDetermined && (
+              <p className="text-xs text-muted-foreground">
+                La modalidad de tiempo indeterminado no requiere fecha final.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Observaciones</Label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sitecorp-primary"
+            placeholder="Opcional"
+          />
+        </div>
+
+        {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
 
         <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
           <SiteCorpButton variant="outline" type="button" onClick={() => onOpenChange(false)}>
@@ -461,10 +688,14 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           <SiteCorpButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || loading || selectable.length === 0}
+            disabled={submitting || loading || !selectedCandidate || !hasVacancy}
           >
             <UserPlus className="mr-2 h-4 w-4" />
-            {submitting ? "Procesando…" : isReincorporation ? "Confirmar reincorporación" : "Confirmar contratación"}
+            {submitting
+              ? "Procesando…"
+              : isReincorporation
+                ? "Confirmar reincorporación"
+                : "Confirmar contratación"}
           </SiteCorpButton>
         </div>
       </DialogContent>

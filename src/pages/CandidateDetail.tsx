@@ -1072,8 +1072,8 @@ const CandidateDetail = () => {
           id: candidate.id,
           fullName: formatFullName(candidate),
           identification: candidate.identification,
+          worker: linkedWorker,
         }}
-        mode={linkedWorker ? "REINCORPORATION" : "NEW"}
         onSuccess={(workerId) =>
           navigate(`/entity/${entityId}/staffing/workers/${workerId}`)
         }
