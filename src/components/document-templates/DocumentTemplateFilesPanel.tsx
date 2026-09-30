@@ -118,24 +118,24 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
       <div className="space-y-4">
         {fileRow(
           "ORIGINAL",
-          "Plantilla original (DOCX)",
+          "Documento original (DOCX)",
           version.original_file_path,
           version.original_file_name,
           version.original_file_size,
           version.original_uploaded_at,
-          "Documento base que define la estructura y los marcadores."
+          "Modelo oficial de la entidad, conservado intacto: nunca se modifica ni se sobrescribe."
         )}
 
         {fileRow(
           "CONFIGURED",
-          "Versión configurada (opcional)",
+          "Documento configurado (DOCX)",
           version.configured_file_path,
           version.configured_file_name,
           version.configured_file_size,
           version.configured_uploaded_at,
           effectivePath === version.configured_file_path && version.configured_file_path
-            ? "Es el archivo vigente de esta versión: se usa para validar y para generar."
-            : "Si se carga, pasa a ser el archivo vigente y sustituye al original en el análisis."
+            ? "Es el documento analizado: define las variables requeridas de esta versión."
+            : "Cópielo del original y sustituya los datos que cambian por las variables del catálogo. Es obligatorio para activar."
         )}
 
         {!isDraft && (
@@ -147,7 +147,8 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
           <p className="text-xs text-muted-foreground">
-            Cualquier cambio de archivo invalida el análisis anterior: vuelva a analizarlo.
+            Cada archivo cargado se conserva por separado y cualquier cambio invalida el análisis
+            anterior: vuelva a analizarlo.
           </p>
           <SiteCorpButton
             size="sm"

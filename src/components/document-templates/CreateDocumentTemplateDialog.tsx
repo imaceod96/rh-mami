@@ -212,8 +212,9 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              El archivo no se modifica. Escriba los marcadores como {"{{worker.full_name}}"}; puede
-              consultarlos y copiarlos desde el detalle de la plantilla.
+              Suba el modelo oficial tal cual. No se modifica ni se sobrescribe: en el detalle de la
+              plantilla podrá descargarlo, insertar en Word los marcadores ({"{{worker.full_name}}"}) y
+              subirlo como documento configurado.
             </p>
           </div>
 

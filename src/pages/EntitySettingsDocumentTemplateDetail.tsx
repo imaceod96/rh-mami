@@ -3,22 +3,20 @@ import { useNavigate, useParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
+import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { showSuccess, showError } from "@/utils/toast"
 import {
   activateTemplateVersion,
   analyzeAndStoreTemplateFile,
   createDocumentTemplateVersion,
   deactivateTemplateVersion,
-  deleteDocumentTemplate,
   describeTemplateFileProblem,
   fetchDocumentTemplate,
   fetchDocumentTemplateTypes,
-  fetchRequiredVariableKeys,
   uploadTemplateFile,
   validateTemplateVersion,
   type DocumentTemplate,
@@ -29,11 +27,11 @@ import DocumentTemplateFilesPanel from "@/components/document-templates/Document
 import DocumentTemplateValidationPanel from "@/components/document-templates/DocumentTemplateValidationPanel"
 import DocumentTemplateVersionsPanel from "@/components/document-templates/DocumentTemplateVersionsPanel"
 import DocumentTemplateVariablesPanel from "@/components/document-templates/DocumentTemplateVariablesPanel"
-import { ArrowLeft, FileWarning, Trash2 } from "lucide-react"
+import { ArrowLeft, ListChecks } from "lucide-react"
 
 /**
  * Fase 11B.1 — Detalle de una plantilla documental: archivos, análisis,
- * validación, versionado y variables disponibles (§37–§44/§51/§75/§77).
+ * validación estructural, versionado y variables disponibles (§30/§53/§77).
  */
 
 const EntitySettingsDocumentTemplateDetail = () => {
@@ -50,12 +48,10 @@ const EntitySettingsDocumentTemplateDetail = () => {
   const [canManage, setCanManage] = React.useState(false)
   const [template, setTemplate] = React.useState<DocumentTemplate | null>(null)
   const [typeName, setTypeName] = React.useState("")
-  const [requiredKeys, setRequiredKeys] = React.useState<string[]>([])
   const [selectedVersionId, setSelectedVersionId] = React.useState<string | null>(null)
   const [validation, setValidation] = React.useState<TemplateValidation | null>(null)
   const [validationLoading, setValidationLoading] = React.useState(false)
   const [busyLabel, setBusyLabel] = React.useState<string | null>(null)
-  const [showDelete, setShowDelete] = React.useState(false)
 
   const busy = busyLabel !== null
 
@@ -144,22 +140,16 @@ const EntitySettingsDocumentTemplateDetail = () => {
         versions.find((version) => version.status === "ACTIVE")?.id ?? versions[0]?.id ?? null
       setSelectedVersionId(nextId)
 
-      const [types, required] = await Promise.all([
-        fetchDocumentTemplateTypes(),
-        fetchRequiredVariableKeys(fresh.document_type_code),
-      ])
+      const types = await fetchDocumentTemplateTypes()
       setTypeName(
         types.find((type) => type.code === fresh.document_type_code)?.name ||
           fresh.document_type_code
       )
-      setRequiredKeys(required)
 
       await loadValidation(nextId)
     } catch (err) {
       console.error("Error loading document template:", err)
-      setNotAllowed(
-        err instanceof Error ? err.message : "No se pudo cargar la plantilla documental."
-      )
+      setNotAllowed(err instanceof Error ? err.message : "No se pudo cargar la plantilla documental.")
     } finally {
       setLoading(false)
     }
@@ -175,7 +165,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
   }
 
   const handleUpload = async (file: File, kind: "ORIGINAL" | "CONFIGURED") => {
-    if (!selectedVersion || !template || !templateId) return
+    if (!selectedVersion || !templateId) return
 
     const problem = await describeTemplateFileProblem(file)
     if (problem) {
@@ -184,7 +174,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
     }
 
     try {
-      setBusyLabel("Subiendo el archivo…")
+      setBusyLabel("Subiendo el documento…")
       const path = await uploadTemplateFile({
         entityId,
         templateId,
@@ -197,7 +187,11 @@ const EntitySettingsDocumentTemplateDetail = () => {
       const analysis = await analyzeAndStoreTemplateFile(selectedVersion.id, path)
 
       if (analysis.valid_docx) {
-        showSuccess("Archivo cargado y analizado correctamente.")
+        showSuccess(
+          kind === "CONFIGURED"
+            ? "Documento configurado cargado y analizado."
+            : "Documento original cargado y analizado."
+        )
       } else {
         showError("El archivo se cargó, pero no es un DOCX válido.")
       }
@@ -214,7 +208,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
     if (!selectedVersion) return
     const path = selectedVersion.configured_file_path || selectedVersion.original_file_path
     if (!path) {
-      showError("La versión no tiene ningún archivo para analizar.")
+      showError("La versión no tiene ningún documento para analizar.")
       return
     }
     try {
@@ -225,7 +219,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
       await reload(selectedVersion.id)
     } catch (err) {
       setBusyLabel(null)
-      showError(err instanceof Error ? err.message : "No se pudo analizar el archivo.")
+      showError(err instanceof Error ? err.message : "No se pudo analizar el documento.")
     }
   }
 
@@ -251,7 +245,9 @@ const EntitySettingsDocumentTemplateDetail = () => {
     try {
       setBusyLabel("Desactivando la versión…")
       await deactivateTemplateVersion(version.id)
-      showSuccess("La versión quedó inactiva. La entidad no tiene plantilla vigente de este tipo.")
+      showSuccess(
+        "La versión quedó inactiva y se conserva como histórico. La entidad no tiene plantilla vigente de este tipo."
+      )
       setBusyLabel(null)
       await reload(version.id)
     } catch (err) {
@@ -271,21 +267,6 @@ const EntitySettingsDocumentTemplateDetail = () => {
     } catch (err) {
       setBusyLabel(null)
       showError(err instanceof Error ? err.message : "No se pudo crear la versión.")
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!template || !templateId) return
-    try {
-      setBusyLabel("Eliminando la plantilla…")
-      await deleteDocumentTemplate(templateId, template.versions)
-      showSuccess("Plantilla eliminada.")
-      setBusyLabel(null)
-      setShowDelete(false)
-      navigate(`/entity/${entityId}/settings/document-templates`)
-    } catch (err) {
-      setBusyLabel(null)
-      showError(err instanceof Error ? err.message : "No se pudo eliminar la plantilla.")
     }
   }
 
@@ -323,7 +304,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
         description={typeName || template.document_type_code}
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
         <SiteCorpButton
           variant="outline"
           size="sm"
@@ -332,18 +313,24 @@ const EntitySettingsDocumentTemplateDetail = () => {
           <ArrowLeft className="mr-1 h-3.5 w-3.5" />
           Volver al listado
         </SiteCorpButton>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <SiteCorpStatusBadge status="neutral">
-            {template.versions.length} versión(es)
+        <SiteCorpStatusBadge status="neutral">{template.versions.length} versión(es)</SiteCorpStatusBadge>
+        {selectedVersion && (
+          <SiteCorpStatusBadge
+            status={
+              selectedVersion.status === "ACTIVE"
+                ? "success"
+                : selectedVersion.status === "DRAFT"
+                  ? "warning"
+                  : "neutral"
+            }
+          >
+            {selectedVersion.status === "ACTIVE"
+              ? "Versión activa"
+              : selectedVersion.status === "DRAFT"
+                ? "Borrador"
+                : "Inactiva"}
           </SiteCorpStatusBadge>
-          {canManage && (
-            <SiteCorpButton variant="outline" size="sm" onClick={() => setShowDelete(true)}>
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Eliminar plantilla
-            </SiteCorpButton>
-          )}
-        </div>
+        )}
       </div>
 
       {busyLabel && <SiteCorpAlert type="info">{busyLabel}</SiteCorpAlert>}
@@ -354,6 +341,35 @@ const EntitySettingsDocumentTemplateDetail = () => {
           plantillas de esta entidad.
         </SiteCorpAlert>
       )}
+
+      <SiteCorpCard title="Cómo configurar la plantilla" description="El documento no se redacta en SiteCorp: se prepara en Word.">
+        <ol className="list-inside list-decimal space-y-1 text-sm text-muted-foreground">
+          <li>Descargue el documento original de esta versión.</li>
+          <li>Ábralo en Word.</li>
+          <li>Identifique únicamente los datos que cambian en cada contrato (nombres, fechas, importes…).</li>
+          <li>Copie desde el catálogo inferior las variables correspondientes.</li>
+          <li>Sustituya esos datos por los marcadores, por ejemplo:</li>
+        </ol>
+        <div className="mt-3 space-y-2 rounded-xl border border-border bg-muted/30 p-3 text-sm">
+          <p className="text-muted-foreground">
+            <span className="font-medium text-ink">Antes:</span> D. Juan Pérez García, trabajador con
+            CI 90010112345
+          </p>
+          <p className="text-muted-foreground">
+            <span className="font-medium text-ink">Después:</span> D.{" "}
+            <code className="font-mono text-ink">{"{{worker.full_name}}"}</code>, trabajador con CI{" "}
+            <code className="font-mono text-ink">{"{{worker.identification}}"}</code>
+          </p>
+        </div>
+        <ol className="mt-3 list-inside list-decimal space-y-1 text-sm text-muted-foreground" start={6}>
+          <li>Guarde el documento como DOCX conservando todo el formato legal y de firma.</li>
+          <li>Súbalo como documento configurado y analícelo: la plantilla quedará lista para activar.</li>
+        </ol>
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <ListChecks className="h-3.5 w-3.5" />
+          Sólo se exigen las variables que el documento configurado contiene realmente.
+        </div>
+      </SiteCorpCard>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
@@ -390,38 +406,8 @@ const EntitySettingsDocumentTemplateDetail = () => {
 
       <DocumentTemplateVariablesPanel
         templateTypeCode={template.document_type_code}
-        requiredKeys={requiredKeys}
+        usedVariables={validation?.recognized ?? []}
       />
-
-      <Dialog open={showDelete} onOpenChange={setShowDelete}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileWarning className="h-5 w-5 text-sitecorp-danger" />
-              Eliminar plantilla
-            </DialogTitle>
-            <DialogDescription>
-              Se eliminará «{template.name}» con sus {template.versions.length} versión(es) y sus
-              archivos DOCX. Esta acción no puede deshacerse.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <SiteCorpAlert type="warning">
-              Los contratos y anexos ya formalizados no se modifican: sólo se pierde la plantilla de
-              configuración.
-            </SiteCorpAlert>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <SiteCorpButton variant="outline" onClick={() => setShowDelete(false)} disabled={busy}>
-                Cancelar
-              </SiteCorpButton>
-              <SiteCorpButton onClick={handleDelete} disabled={busy}>
-                {busy ? "Eliminando…" : "Eliminar definitivamente"}
-              </SiteCorpButton>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -24,7 +24,7 @@ export const MAX_TEMPLATE_FILE_BYTES = 10485760
 export type DocumentTemplateTypeCode =
   | "EMPLOYMENT_CONTRACT_DETERMINED"
   | "EMPLOYMENT_CONTRACT_INDETERMINED"
-  | "CONTRACT_ADDENDUM"
+  | "EMPLOYMENT_CONTRACT_ADDENDUM"
 
 export type DocumentTemplateVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE"
 
@@ -32,7 +32,7 @@ export type DocumentTemplateFileKind = "ORIGINAL" | "CONFIGURED"
 
 /** Código de documento de 11A.7 al que pertenece cada tipo de plantilla (§19). */
 export const documentTypeCodeForTemplateType = (templateTypeCode: string): DocumentTypeCode =>
-  templateTypeCode === "CONTRACT_ADDENDUM" ? "ADDENDUM" : "CONTRACT"
+  templateTypeCode === "EMPLOYMENT_CONTRACT_ADDENDUM" ? "ADDENDUM" : "CONTRACT"
 
 export interface DocumentTemplateType {
   code: string
@@ -54,6 +54,12 @@ export interface TemplateMalformed {
   snippet: string
 }
 
+export interface TemplateIncompatibleVariable {
+  key: string
+  label: string | null
+  count: number
+}
+
 export interface DocumentTemplateAnalysis {
   analyzed_at: string | null
   file_path: string
@@ -66,12 +72,15 @@ export interface DocumentTemplateAnalysis {
   scanned_parts: string[]
   paragraphs_scanned: number
   occurrences: TemplateOccurrence[]
+  /** Variables válidas realmente presentes en el DOCX analizado (§8). */
   recognized: TemplateOccurrence[]
+  /** `requiredVariables` de ESTA plantilla, derivadas del DOCX configurado. */
+  required_variables: string[]
   unknown_variables: { key: string; count: number }[]
+  incompatible_variables: TemplateIncompatibleVariable[]
   malformed_placeholders: TemplateMalformed[]
   split_run_placeholders: number
   warnings: string[]
-  missing_required: { key: string; label: string }[]
 }
 
 export interface DocumentTemplateVersion {
@@ -94,6 +103,7 @@ export interface DocumentTemplateVersion {
   analysis: DocumentTemplateAnalysis | null
   analysis_at: string | null
   created_at: string
+  updated_at: string
 }
 
 export interface DocumentTemplate {
@@ -111,11 +121,13 @@ export interface TemplateValidationChecks {
   original_file_present: boolean
   configured_file_present: boolean
   analysis_present: boolean
-  analysis_current: boolean
+  analysis_matches_configured: boolean
   valid_docx: boolean
   no_unknown_variables: boolean
+  no_incompatible_variables: boolean
   no_malformed_placeholders: boolean
-  required_variables_present: boolean
+  effective_dates_coherent: boolean
+  no_simultaneous_active: boolean
   has_placeholders: boolean
 }
 
@@ -127,15 +139,23 @@ export interface TemplateValidation {
   status: DocumentTemplateVersionStatus
   effective_from: string | null
   effective_to: string | null
-  source_file_kind: DocumentTemplateFileKind
-  source_file_path: string | null
+  original_file_name: string | null
+  configured_file_name: string | null
   analyzed_file_path: string | null
   ready: boolean
   checks: TemplateValidationChecks
+  variables_found: number
+  variables_valid: number
+  variables_unknown: number
+  variables_incompatible: number
+  occurrences_total: number
+  occurrences_invalid: number
+  required_variables: string[]
   recognized: TemplateOccurrence[]
   unknown_variables: { key: string; count: number }[]
+  incompatible_variables: TemplateIncompatibleVariable[]
   malformed_placeholders: TemplateMalformed[]
-  missing_required: { key: string; label: string }[]
+  warnings: string[]
   analysis: DocumentTemplateAnalysis | null
 }
 
@@ -219,14 +239,19 @@ export const fetchDocumentTemplate = async (
   }
 }
 
-/** Variables obligatorias del tipo de plantilla (catálogo global `document_variables`). */
-export const fetchRequiredVariableKeys = async (
+/**
+ * Claves de variables compatibles con un tipo de plantilla, según el registro
+ * central (`document_variables`). OJO: es el catálogo de variables DISPONIBLES,
+ * no una lista de variables obligatorias (§4). La plantilla sólo requiere las
+ * que realmente contiene su DOCX configurado.
+ */
+export const fetchCompatibleVariableKeys = async (
   templateTypeCode: string
 ): Promise<string[]> => {
   const { data, error } = await supabase
     .from("document_variables")
     .select("key")
-    .contains("required_for", [templateTypeCode])
+    .contains("document_types", [templateTypeCode])
 
   throwIfError(error)
   return ((data as { key: string }[]) || []).map((row) => row.key)
@@ -280,11 +305,11 @@ export const createDocumentTemplateVersion = async (
   return data as { version_id: string; version_number: number }
 }
 
-/** Verificación previa en cliente (§93): informe rápido, sin sustituir al backend. */
+/** Verificación previa en cliente: informe rápido, sin sustituir al backend (§23). */
 export const describeTemplateFileProblem = async (file: File): Promise<string | null> => {
   const name = file.name.toLowerCase()
   if (!name.endsWith(".docx")) {
-    return "El archivo debe tener formato DOCX (.docx). Los PDF o los .doc antiguos no son válidos."
+    return "Las plantillas deben estar en formato .docx (no se admiten .doc, .pdf, .odt ni .rtf)."
   }
   if (file.size === 0) {
     return "El archivo está vacío."
@@ -329,9 +354,8 @@ export const uploadTemplateFile = async ({
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(
     now.getHours()
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  // Cada carga usa un nombre propio: nunca se sobrescribe un DOCX ya cargado (§22/§29).
   const path = `entity/${entityId}/templates/${templateId}/v${version.version_number}/${kind.toLowerCase()}-${stamp}.docx`
-  const previousPath =
-    kind === "ORIGINAL" ? version.original_file_path : version.configured_file_path
 
   const { error: uploadError } = await supabase.storage
     .from(DOCUMENT_TEMPLATES_BUCKET)
@@ -350,13 +374,10 @@ export const uploadTemplateFile = async ({
   })
 
   if (rpcError) {
-    // La versión no se actualizó: no se deja el archivo huérfano.
+    // La versión no se actualizó: se retira únicamente el archivo recién subido.
+    // Los archivos anteriores nunca se eliminan (§29).
     await supabase.storage.from(DOCUMENT_TEMPLATES_BUCKET).remove([path])
     throw new Error(rpcError.message)
-  }
-
-  if (previousPath && previousPath !== path) {
-    await supabase.storage.from(DOCUMENT_TEMPLATES_BUCKET).remove([previousPath])
   }
 
   return path
@@ -461,22 +482,6 @@ export const getTemplateFileUrl = async (path: string): Promise<string | null> =
 
   if (error || !data?.signedUrl) return null
   return data.signedUrl
-}
-
-export const deleteDocumentTemplate = async (
-  templateId: string,
-  versions: DocumentTemplateVersion[]
-): Promise<void> => {
-  const paths = versions
-    .flatMap((version) => [version.original_file_path, version.configured_file_path])
-    .filter((path): path is string => !!path)
-
-  if (paths.length > 0) {
-    await supabase.storage.from(DOCUMENT_TEMPLATES_BUCKET).remove(paths)
-  }
-
-  const { error } = await supabase.from("document_templates").delete().eq("id", templateId)
-  throwIfError(error)
 }
 
 export const formatTemplateFileSize = (bytes: number | null | undefined): string => {

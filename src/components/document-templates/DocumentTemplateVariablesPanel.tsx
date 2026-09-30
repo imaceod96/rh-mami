@@ -1,25 +1,34 @@
 import * as React from "react"
 import { DOCUMENT_VARIABLES, type DocumentVariableDefinition } from "@/lib/document-variables"
-import { documentTypeCodeForTemplateType } from "@/lib/document-templates"
+import {
+  documentTypeCodeForTemplateType,
+  type TemplateOccurrence,
+} from "@/lib/document-templates"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
+import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { showSuccess, showError } from "@/utils/toast"
 import { Copy, Search, Braces } from "lucide-react"
 
 /**
- * Fase 11B.1 — Panel de variables documentales disponibles (§74/§75/§76).
+ * Fase 11B.1 — Catálogo de variables documentales DISPONIBLES (§16/§27/§28/§60).
  *
- * Lee el registro central de 11A.7 (`DOCUMENT_VARIABLES`): no existe una lista
- * paralela escrita a mano. Sólo muestra las variables que aplican al tipo de
- * documento de la plantilla y señala las obligatorias.
+ * Lee el registro central de 11A.7: no existe una lista paralela escrita a mano.
+ * Este catálogo NO es una lista de variables obligatorias: la plantilla sólo
+ * requiere las variables que realmente aparecen en su DOCX configurado (§4/§38).
  */
 
 interface Props {
   templateTypeCode: string
-  requiredKeys: string[]
+  /** Variables detectadas en el DOCX configurado de la versión en pantalla. */
+  usedVariables: TemplateOccurrence[]
 }
+
+type UsageFilter = "ALL" | "USED" | "UNUSED"
+
+export const templatePlaceholder = (key: string): string => `{{${key}}}`
 
 const dataTypeLabel: Record<DocumentVariableDefinition["dataType"], string> = {
   text: "Texto",
@@ -29,14 +38,16 @@ const dataTypeLabel: Record<DocumentVariableDefinition["dataType"], string> = {
   hours: "Horas",
 }
 
-export const templatePlaceholder = (key: string): string => `{{${key}}}`
-
-const DocumentTemplateVariablesPanel = ({ templateTypeCode, requiredKeys }: Props) => {
+const DocumentTemplateVariablesPanel = ({ templateTypeCode, usedVariables }: Props) => {
   const [search, setSearch] = React.useState("")
-  const [onlyRequired, setOnlyRequired] = React.useState(false)
+  const [usageFilter, setUsageFilter] = React.useState<UsageFilter>("ALL")
 
   const documentType = documentTypeCodeForTemplateType(templateTypeCode)
-  const requiredSet = React.useMemo(() => new Set(requiredKeys), [requiredKeys])
+  const usage = React.useMemo(() => {
+    const map = new Map<string, number>()
+    usedVariables.forEach((occurrence) => map.set(occurrence.key, occurrence.count))
+    return map
+  }, [usedVariables])
 
   const applicable = React.useMemo(
     () => DOCUMENT_VARIABLES.filter((definition) => definition.documentTypes.includes(documentType)),
@@ -46,15 +57,18 @@ const DocumentTemplateVariablesPanel = ({ templateTypeCode, requiredKeys }: Prop
   const filtered = React.useMemo(() => {
     const term = search.trim().toLowerCase()
     return applicable.filter((definition) => {
-      if (onlyRequired && !requiredSet.has(definition.key)) return false
+      const isUsed = usage.has(definition.key)
+      if (usageFilter === "USED" && !isUsed) return false
+      if (usageFilter === "UNUSED" && isUsed) return false
       if (!term) return true
       return (
         definition.key.toLowerCase().includes(term) ||
         definition.label.toLowerCase().includes(term) ||
-        definition.category.toLowerCase().includes(term)
+        definition.category.toLowerCase().includes(term) ||
+        definition.description.toLowerCase().includes(term)
       )
     })
-  }, [applicable, onlyRequired, requiredSet, search])
+  }, [applicable, search, usage, usageFilter])
 
   const byCategory = React.useMemo(() => {
     const map = new Map<string, DocumentVariableDefinition[]>()
@@ -67,49 +81,49 @@ const DocumentTemplateVariablesPanel = ({ templateTypeCode, requiredKeys }: Prop
   }, [filtered])
 
   const handleCopy = async (key: string) => {
-    const placeholder = templatePlaceholder(key)
     try {
-      await navigator.clipboard.writeText(placeholder)
-      showSuccess(`Marcador copiado: ${placeholder}`)
+      await navigator.clipboard.writeText(templatePlaceholder(key))
+      showSuccess("Variable copiada")
     } catch {
-      showError("No se pudo copiar el marcador al portapapeles.")
+      showError("No se pudo copiar la variable al portapapeles.")
     }
   }
 
   return (
     <SiteCorpCard
-      title="Variables documentales disponibles"
-      description={`Marcadores que esta plantilla puede usar (${applicable.length} disponibles para este tipo de documento).`}
+      title="Variables disponibles"
+      description={`Variables del registro documental compatibles con este tipo de documento (${applicable.length}). La plantilla utiliza sólo las que necesite.`}
     >
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <SiteCorpInput
               className="pl-9"
               value={search}
-              placeholder="Buscar por nombre, marcador o categoría…"
+              placeholder="Buscar por nombre, variable, descripción o categoría…"
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-input text-sitecorp-primary focus:ring-sitecorp-primary"
-              checked={onlyRequired}
-              onChange={(event) => setOnlyRequired(event.target.checked)}
-            />
-            Ver solo obligatorias ({requiredKeys.length})
-          </label>
+          <SiteCorpSelect
+            className="sm:w-64"
+            value={usageFilter}
+            onValueChange={(value) => setUsageFilter(value as UsageFilter)}
+          >
+            <option value="ALL">Todas las variables</option>
+            <option value="USED">Sólo las usadas en esta plantilla</option>
+            <option value="UNUSED">Sólo las no usadas</option>
+          </SiteCorpSelect>
         </div>
 
         <p className="rounded-xl border border-sitecorp-primary/20 bg-sitecorp-primary/5 p-3 text-xs text-muted-foreground">
-          Cada marcador se escribe en el DOCX entre dobles llaves. Word puede dividir el texto en
-          varios fragmentos internos: el analizador central los une antes de verificar la plantilla.
+          Copie la variable y péguela en Word en el lugar del dato que cambia. El analizador central
+          une los fragmentos internos del DOCX, por lo que un marcador partido por Word sigue siendo
+          reconocido. Las variables que no aparezcan en el documento no se exigen ni se añaden solas.
         </p>
 
         {byCategory.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay variables que coincidan con la búsqueda.</p>
+          <p className="text-sm text-muted-foreground">No hay variables que coincidan con el filtro.</p>
         ) : (
           <div className="space-y-5">
             {byCategory.map(([category, definitions]) => (
@@ -119,7 +133,7 @@ const DocumentTemplateVariablesPanel = ({ templateTypeCode, requiredKeys }: Prop
                 </p>
                 <div className="space-y-2">
                   {definitions.map((definition) => {
-                    const isRequired = requiredSet.has(definition.key)
+                    const occurrences = usage.get(definition.key)
                     return (
                       <div
                         key={definition.key}
@@ -128,11 +142,15 @@ const DocumentTemplateVariablesPanel = ({ templateTypeCode, requiredKeys }: Prop
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <Braces className="h-3.5 w-3.5 text-sitecorp-primary" />
+                            <span className="text-sm font-medium text-ink">{definition.label}</span>
                             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-ink">
                               {templatePlaceholder(definition.key)}
                             </code>
-                            <span className="text-sm font-medium text-ink">{definition.label}</span>
-                            {isRequired && <SiteCorpStatusBadge status="warning">Obligatoria</SiteCorpStatusBadge>}
+                            {occurrences !== undefined && (
+                              <SiteCorpStatusBadge status="success">
+                                {occurrences === 1 ? "1 aparición" : `${occurrences} apariciones`}
+                              </SiteCorpStatusBadge>
+                            )}
                             {definition.kind === "CALCULATED" && (
                               <SiteCorpStatusBadge status="info">Calculada</SiteCorpStatusBadge>
                             )}
