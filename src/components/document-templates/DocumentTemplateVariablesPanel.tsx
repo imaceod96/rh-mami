@@ -17,7 +17,7 @@ import { Copy, Search, Braces } from "lucide-react"
  *
  * Lee el registro central de 11A.7: no existe una lista paralela escrita a mano.
  * Este catálogo NO es una lista de variables obligatorias: la plantilla sólo
- * requiere las variables que realmente aparecen en su DOCX configurado (§4/§38).
+ * requiere las variables que realmente aparecen en su documento configurado (§4/§38).
  */
 
 interface Props {

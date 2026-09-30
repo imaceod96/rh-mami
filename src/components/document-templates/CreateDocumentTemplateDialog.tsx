@@ -1,10 +1,10 @@
 import * as React from "react"
 import {
+  WORD_ACCEPT,
   createDocumentTemplate,
   describeTemplateFileProblem,
   fetchDocumentTemplateTypes,
-  uploadTemplateFile,
-  analyzeAndStoreTemplateFile,
+  registerTemplateFile,
   type DocumentTemplateType,
   type DocumentTemplateTypeCode,
 } from "@/lib/document-templates"
@@ -20,8 +20,12 @@ import { FileUp, FileText, Rocket } from "lucide-react"
 /**
  * Fase 11B.1 — Creación de una plantilla documental (§34/§83).
  *
- * Secuencia: se crea la plantilla y su versión 1 (backend) → se sube el DOCX
- * original → el analizador central verifica el contenido → se registra el análisis.
+ * Secuencia: se crea la plantilla y su versión 1 (backend) → se sube el documento
+ * Word original (.doc o .docx) → el analizador central detecta el formato real y,
+ * si es OOXML, verifica el contenido → se registra el análisis.
+ *
+ * Un original `.doc` se conserva y se identifica, pero no puede analizarse en esta
+ * instalación (§10): el configurado deberá ser `.docx` para poder activar.
  */
 
 interface Props {
@@ -82,7 +86,7 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
       return
     }
     if (!file) {
-      setError("Adjunte el archivo DOCX de la plantilla.")
+      setError("Adjunte el documento Word de la plantilla (.doc o .docx).")
       return
     }
 
@@ -97,8 +101,8 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
         effectiveFrom: effectiveFrom || null,
       })
 
-      setProgress("Subiendo el DOCX original…")
-      const path = await uploadTemplateFile({
+      setProgress("Subiendo el documento original…")
+      const registered = await registerTemplateFile({
         entityId,
         templateId: created.template_id,
         version: {
@@ -111,13 +115,14 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
         file,
       })
 
-      setProgress("Analizando el contenido de la plantilla…")
-      const analysis = await analyzeAndStoreTemplateFile(created.version_id, path)
-
-      if (analysis.valid_docx) {
+      if (registered.format === "DOC") {
+        showSuccess(
+          "Plantilla creada. El original se conservó en formato .doc: cargue el documento configurado en .docx para poder analizarlo y activar la plantilla."
+        )
+      } else if (registered.analysis?.valid_docx) {
         showSuccess("Plantilla creada y analizada correctamente.")
       } else {
-        showError("La plantilla se creó, pero el archivo no es un DOCX válido.")
+        showError("La plantilla se creó, pero el documento no es un paquete Word (.docx) válido.")
       }
       onOpenChange(false)
       onCreated(created.template_id)
@@ -141,7 +146,7 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
           </DialogTitle>
           <DialogDescription>
             La plantilla se crea como versión 1 en borrador: sólo podrá activarse cuando el
-            contenido del DOCX sea válido.
+            contenido del documento configurado haya sido analizado correctamente.
           </DialogDescription>
         </DialogHeader>
 
@@ -196,21 +201,25 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
           </div>
 
           <div className="space-y-2">
-            <Label>Archivo DOCX original *</Label>
+            <Label>Documento Word original *</Label>
             <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3 text-sm">
               <span className="flex items-center gap-2 text-ink">
                 <FileUp className="h-4 w-4 text-sitecorp-primary" />
-                {file ? file.name : "Seleccionar archivo .docx"}
+                {file ? file.name : "Subir documento Word"}
               </span>
               <span className="text-xs text-muted-foreground">Máx. 10 MB</span>
               <input
                 type="file"
-                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                accept={WORD_ACCEPT}
                 className="hidden"
                 disabled={saving}
                 onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
               />
             </label>
+            <p className="text-xs text-muted-foreground">
+              Formatos admitidos: .doc y .docx. Se recomienda .docx para que SiteCorp pueda analizar
+              automáticamente los marcadores.
+            </p>
             <p className="text-xs text-muted-foreground">
               Suba el modelo oficial tal cual. No se modifica ni se sobrescribe: en el detalle de la
               plantilla podrá descargarlo, insertar en Word los marcadores ({"{{worker.full_name}}"}) y

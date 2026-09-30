@@ -9,14 +9,24 @@ import type { DocumentTypeCode } from "@/lib/document-variables"
  *    activarse) vive en la base de datos: este archivo sólo la invoca y tipa.
  *  - El contenido de una plantilla sólo lo interpreta el analizador central
  *    (edge function `analyze-document-template`).
- *  - Los DOCX viven en el bucket privado `document-templates`, bajo la ruta
- *    `entity/{entityId}/templates/{templateId}/v{version}/{kind}-{stamp}.docx`.
+ *  - Los documentos Word viven en el bucket privado `document-templates`, bajo la
+ *    ruta `entity/{entityId}/templates/{templateId}/v{version}/{kind}-{stamp}.{ext}`,
+ *    conservando SIEMPRE la extensión real del archivo subido (§5/§16/§17).
+ *  - Se admiten documentos Word `.doc` y `.docx` (§2). El `.doc` es un formato
+ *    binario OLE/CFB: nunca se abre como ZIP ni se pasa por el parser OOXML.
  */
 
 export const DOCUMENT_TEMPLATES_BUCKET = "document-templates"
 
 export const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+export const DOC_MIME = "application/msword"
+
+/** Atributo `accept` para cualquier input de plantillas (§19). */
+export const WORD_ACCEPT = `.doc,.docx,${DOC_MIME},${DOCX_MIME}`
+
+/** Formatos admitidos que el detector central puede reconocer. */
+export type WordDocumentFormat = "DOC" | "DOCX" | "UNSUPPORTED"
 
 /** Límite de tamaño por archivo (10 MB). */
 export const MAX_TEMPLATE_FILE_BYTES = 10485760
@@ -95,13 +105,21 @@ export interface DocumentTemplateVersion {
   original_file_path: string | null
   original_file_name: string | null
   original_file_size: number | null
+  /** Formato real detectado del original: `DOC` | `DOCX` (§6). */
+  original_file_format: string | null
+  original_mime_type: string | null
   original_uploaded_at: string | null
   configured_file_path: string | null
   configured_file_name: string | null
   configured_file_size: number | null
+  /** Formato real detectado del configurado: `DOC` | `DOCX` (§6). */
+  configured_file_format: string | null
+  configured_mime_type: string | null
   configured_uploaded_at: string | null
   analysis: DocumentTemplateAnalysis | null
   analysis_at: string | null
+  /** Motivo por el que el documento no puede analizarse (p. ej. un `.doc`) (§24). */
+  analysis_issue: string | null
   created_at: string
   updated_at: string
 }
@@ -120,6 +138,8 @@ export interface DocumentTemplate {
 export interface TemplateValidationChecks {
   original_file_present: boolean
   configured_file_present: boolean
+  /** El configurado es un paquete OOXML (`.docx`) analizable (§25). */
+  configured_format_analyzable: boolean
   analysis_present: boolean
   analysis_matches_configured: boolean
   valid_docx: boolean
@@ -140,7 +160,12 @@ export interface TemplateValidation {
   effective_from: string | null
   effective_to: string | null
   original_file_name: string | null
+  original_file_format: string | null
+  original_mime_type: string | null
   configured_file_name: string | null
+  configured_file_format: string | null
+  configured_mime_type: string | null
+  analysis_issue: string | null
   analyzed_file_path: string | null
   ready: boolean
   checks: TemplateValidationChecks
@@ -305,24 +330,72 @@ export const createDocumentTemplateVersion = async (
   return data as { version_id: string; version_number: number }
 }
 
+export const UNSUPPORTED_WORD_FILE_MESSAGE =
+  "Formato no compatible. Seleccione un documento Word (.doc o .docx)."
+
+/** Firma OLE/CFB de los documentos Word 97-2003 (`.doc`). */
+const OLE2_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
+const startsWithBytes = (bytes: Uint8Array, sequence: number[], offset = 0): boolean =>
+  sequence.every((byte, index) => bytes[offset + index] === byte)
+
+export interface TemplateFileInspection {
+  format: WordDocumentFormat
+  /** Extensión canónica del formato detectado (`doc` | `docx`). */
+  extension: string
+  mimeType: string
+  problem: string | null
+}
+
+/**
+ * Detección centralizada del formato real de un documento Word (§4): usa la
+ * extensión como pista, pero decide por firma/estructura, de modo que un PDF
+ * renombrado a `.doc`/`.docx` se rechaza (§22/§35).
+ */
+export const detectWordDocumentFormat = async (file: File): Promise<WordDocumentFormat> =>
+  (await inspectTemplateFile(file)).format
+
 /** Verificación previa en cliente: informe rápido, sin sustituir al backend (§23). */
-export const describeTemplateFileProblem = async (file: File): Promise<string | null> => {
+export const inspectTemplateFile = async (file: File): Promise<TemplateFileInspection> => {
   const name = file.name.toLowerCase()
-  if (!name.endsWith(".docx")) {
-    return "Las plantillas deben estar en formato .docx (no se admiten .doc, .pdf, .odt ni .rtf)."
-  }
+  const declaredExtension = name.includes(".") ? name.split(".").pop() ?? "" : ""
+  const extensionHint = declaredExtension === "doc" || declaredExtension === "docx" ? declaredExtension : ""
+
   if (file.size === 0) {
-    return "El archivo está vacío."
+    return { format: "UNSUPPORTED", extension: extensionHint, mimeType: "", problem: "El archivo está vacío." }
   }
   if (file.size > MAX_TEMPLATE_FILE_BYTES) {
-    return "El archivo supera el límite permitido de 10 MB."
+    return {
+      format: "UNSUPPORTED",
+      extension: extensionHint,
+      mimeType: "",
+      problem: "El archivo supera el límite permitido de 10 MB.",
+    }
   }
-  const header = new Uint8Array(await file.slice(0, 4).arrayBuffer())
-  if (header[0] !== 0x50 || header[1] !== 0x4b) {
-    return "El archivo no parece un DOCX válido (no es un paquete Word). Verifique que no sea un PDF u otro formato renombrado."
+
+  const bytes = new Uint8Array(await file.slice(0, 16384).arrayBuffer())
+
+  if (startsWithBytes(bytes, OLE2_SIGNATURE)) {
+    // Contenedor OLE/CFB: es la familia Word 97-2003 (.doc).
+    return { format: "DOC", extension: "doc", mimeType: DOC_MIME, problem: null }
   }
-  return null
+
+  if (startsWithBytes(bytes, [0x50, 0x4b])) {
+    return { format: "DOCX", extension: "docx", mimeType: DOCX_MIME, problem: null }
+  }
+
+  return {
+    format: "UNSUPPORTED",
+    extension: extensionHint,
+    mimeType: "",
+    problem: UNSUPPORTED_WORD_FILE_MESSAGE,
+  }
 }
+
+/** Inspección usada por la UI para validar antes de subir. */
+export const describeTemplateFileProblem = async (file: File): Promise<string | null> =>
+  // Un `.doc` se admite y se conserva: el aviso de «no analizable» lo emite el
+  // backend tras identificarlo de verdad (§10/§24).
+  (await inspectTemplateFile(file)).problem
 
 /** Datos mínimos de la versión necesarios para subir un archivo. */
 export type UploadableTemplateVersion = Pick<
@@ -338,31 +411,91 @@ export interface UploadTemplateFileInput {
   file: File
 }
 
+/** Resultado de la preparación del archivo en el analizador central. */
+export interface TemplateFileProbe {
+  detected_format: WordDocumentFormat
+  /** `true` sólo si el formato real es OOXML analizable (§8/§11). */
+  analysis_supported: boolean
+  /** Motivo cuando el documento no puede prepararse para análisis (§10/§24). */
+  issue: string | null
+  mime_type: string
+  file_sha256: string | null
+  /** Análisis OOXML (sólo presente cuando `analysis_supported` es `true`). */
+  analysis: unknown | null
+}
+
 /**
- * Sube el DOCX al bucket privado, registra la ruta en la versión (el backend
- * invalida el análisis previo) y elimina el archivo reemplazado.
+ * Invoca al analizador central: detecta el formato REAL por firma y sólo analiza
+ * paquetes OOXML. Un `.doc` binario nunca se abre como ZIP (§3/§8).
  */
-export const uploadTemplateFile = async ({
+export const probeTemplateFile = async (filePath: string): Promise<TemplateFileProbe> => {
+  const { data, error } = await supabase.functions.invoke("analyze-document-template", {
+    body: { file_path: filePath },
+  })
+
+  const failure = (data as { error?: string } | null)?.error
+  if (error || failure) {
+    throw new Error(failure || error?.message || "No se pudo preparar el documento para el análisis.")
+  }
+
+  return data as TemplateFileProbe
+}
+
+export interface RegisteredTemplateFile {
+  path: string
+  format: WordDocumentFormat
+  analysis: DocumentTemplateAnalysis | null
+  issue: string | null
+}
+
+/**
+ * Flujo completo de carga (§11/§16/§17):
+ *   inspección en cliente → subida al bucket privado conservando formato y
+ *   extensión reales → detección/análisis central → registro en la versión.
+ *
+ * El archivo ORIGINAL nunca se convierte ni se sobrescribe: si algún día existiera
+ * un derivado de análisis, sería un objeto aparte con la misma protección (§18/§30).
+ */
+export const registerTemplateFile = async ({
   entityId,
   templateId,
   version,
   kind,
   file,
-}: UploadTemplateFileInput): Promise<string> => {
+}: UploadTemplateFileInput): Promise<RegisteredTemplateFile> => {
+  const inspection = await inspectTemplateFile(file)
+  if (inspection.problem) {
+    throw new Error(inspection.problem)
+  }
+
   const now = new Date()
   const pad = (value: number) => String(value).padStart(2, "0")
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(
     now.getHours()
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  // Cada carga usa un nombre propio: nunca se sobrescribe un DOCX ya cargado (§22/§29).
-  const path = `entity/${entityId}/templates/${templateId}/v${version.version_number}/${kind.toLowerCase()}-${stamp}.docx`
+  // Cada carga usa un nombre propio: nunca se sobrescribe un documento ya cargado (§22/§29).
+  const path = `entity/${entityId}/templates/${templateId}/v${version.version_number}/${kind.toLowerCase()}-${stamp}.${inspection.extension}`
 
   const { error: uploadError } = await supabase.storage
     .from(DOCUMENT_TEMPLATES_BUCKET)
-    .upload(path, file, { contentType: DOCX_MIME, upsert: false })
+    .upload(path, file, { contentType: inspection.mimeType, upsert: false })
 
   if (uploadError) {
     throw new Error(`No se pudo subir el archivo: ${uploadError.message}`)
+  }
+
+  let probe: TemplateFileProbe
+  try {
+    probe = await probeTemplateFile(path)
+  } catch (err) {
+    await supabase.storage.from(DOCUMENT_TEMPLATES_BUCKET).remove([path])
+    throw err
+  }
+
+  // Formato ajeno a Word (PDF, RTF, ODT, binario desconocido): no entra en la versión (§22/§35).
+  if (probe.detected_format === "UNSUPPORTED") {
+    await supabase.storage.from(DOCUMENT_TEMPLATES_BUCKET).remove([path])
+    throw new Error(probe.issue || UNSUPPORTED_WORD_FILE_MESSAGE)
   }
 
   const { error: rpcError } = await supabase.rpc("set_document_template_version_file", {
@@ -371,6 +504,10 @@ export const uploadTemplateFile = async ({
     p_file_path: path,
     p_file_name: file.name,
     p_file_size: file.size,
+    p_file_format: probe.detected_format,
+    p_mime_type: probe.mime_type || inspection.mimeType,
+    // Un `.doc` se conserva tal cual y queda marcado como no analizable (§10/§24).
+    p_analysis_issue: probe.analysis_supported ? null : probe.issue,
   })
 
   if (rpcError) {
@@ -380,7 +517,64 @@ export const uploadTemplateFile = async ({
     throw new Error(rpcError.message)
   }
 
-  return path
+  let analysis: DocumentTemplateAnalysis | null = null
+  if (probe.analysis_supported && probe.analysis) {
+    analysis = await saveTemplateAnalysis(version.id, probe.analysis)
+  }
+
+  return {
+    path,
+    format: probe.detected_format,
+    analysis,
+    issue: probe.analysis_supported ? null : probe.issue,
+  }
+}
+
+export interface ReanalyzeTemplateFileInput {
+  version: DocumentTemplateVersion
+  kind: DocumentTemplateFileKind
+  filePath: string
+}
+
+/**
+ * Reejecuta el analizador central sobre un archivo ya registrado en la versión.
+ *
+ * Vuelve a registrar el formato/MIME detectados y el estado del documento, de modo
+ * que un archivo identificado antes con otra clasificación queda corregido y un
+ * `.doc` sin análisis conserva su mensaje accionable (§10/§24).
+ */
+export const reanalyzeTemplateFile = async ({
+  version,
+  kind,
+  filePath,
+}: ReanalyzeTemplateFileInput): Promise<{
+  analysis: DocumentTemplateAnalysis | null
+  issue: string | null
+  supported: boolean
+}> => {
+  const probe = await probeTemplateFile(filePath)
+  const fileName = kind === "ORIGINAL" ? version.original_file_name : version.configured_file_name
+  const fileSize = kind === "ORIGINAL" ? version.original_file_size : version.configured_file_size
+
+  const { error } = await supabase.rpc("set_document_template_version_file", {
+    p_version_id: version.id,
+    p_file_kind: kind,
+    p_file_path: filePath,
+    p_file_name: fileName || filePath.split("/").pop() || "documento",
+    p_file_size: fileSize,
+    p_file_format: probe.detected_format,
+    p_mime_type: probe.mime_type,
+    p_analysis_issue: probe.analysis_supported ? null : probe.issue,
+  })
+
+  if (error) throw new Error(error.message)
+
+  if (!probe.analysis_supported || !probe.analysis) {
+    return { analysis: null, issue: probe.issue, supported: false }
+  }
+
+  const analysis = await saveTemplateAnalysis(version.id, probe.analysis)
+  return { analysis, issue: null, supported: true }
 }
 
 export const saveTemplateAnalysis = async (
@@ -447,30 +641,6 @@ export const deactivateTemplateVersion = async (versionId: string): Promise<{
 /* Analizador central (§79)                                            */
 /* ------------------------------------------------------------------ */
 
-/** Analiza un DOCX mediante el analizador central y persiste el resultado validado. */
-export const analyzeAndStoreTemplateFile = async (
-  versionId: string,
-  filePath: string
-): Promise<DocumentTemplateAnalysis> => {
-  const { data, error } = await supabase.functions.invoke("analyze-document-template", {
-    body: { file_path: filePath },
-  })
-
-  if (error) {
-    throw new Error(
-      (data as { error?: string } | null)?.error ||
-        "No se pudo analizar la plantilla documental."
-    )
-  }
-
-  const failure = (data as { error?: string } | null)?.error
-  if (failure) {
-    throw new Error(failure)
-  }
-
-  return saveTemplateAnalysis(versionId, data)
-}
-
 /* ------------------------------------------------------------------ */
 /* Archivos                                                            */
 /* ------------------------------------------------------------------ */
@@ -482,6 +652,13 @@ export const getTemplateFileUrl = async (path: string): Promise<string | null> =
 
   if (error || !data?.signedUrl) return null
   return data.signedUrl
+}
+
+/** Etiqueta legible del formato real detectado del archivo (§6/§19). */
+export const templateFileFormatLabel = (format: string | null | undefined): string => {
+  if (format === "DOC") return "Word 97-2003 (.doc)"
+  if (format === "DOCX") return "Word (.docx)"
+  return "Formato no identificado"
 }
 
 export const formatTemplateFileSize = (bytes: number | null | undefined): string => {

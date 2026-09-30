@@ -11,13 +11,13 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { showSuccess, showError } from "@/utils/toast"
 import {
   activateTemplateVersion,
-  analyzeAndStoreTemplateFile,
   createDocumentTemplateVersion,
   deactivateTemplateVersion,
   describeTemplateFileProblem,
   fetchDocumentTemplate,
   fetchDocumentTemplateTypes,
-  uploadTemplateFile,
+  reanalyzeTemplateFile,
+  registerTemplateFile,
   validateTemplateVersion,
   type DocumentTemplate,
   type DocumentTemplateVersion,
@@ -175,7 +175,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
 
     try {
       setBusyLabel("Subiendo el documento…")
-      const path = await uploadTemplateFile({
+      const registered = await registerTemplateFile({
         entityId,
         templateId,
         version: selectedVersion,
@@ -183,17 +183,19 @@ const EntitySettingsDocumentTemplateDetail = () => {
         file,
       })
 
-      setBusyLabel("Analizando el contenido del DOCX…")
-      const analysis = await analyzeAndStoreTemplateFile(selectedVersion.id, path)
-
-      if (analysis.valid_docx) {
+      setBusyLabel(registered.format === "DOC" ? "Identificando el documento…" : "Analizando el contenido…")
+      if (registered.format === "DOC") {
+        showError(
+          "El documento .doc se cargó y se conservará intacto, pero no puede prepararse para el análisis de variables. Cárguelo en formato .docx para poder analizarlo y activar la plantilla."
+        )
+      } else if (registered.analysis?.valid_docx) {
         showSuccess(
           kind === "CONFIGURED"
             ? "Documento configurado cargado y analizado."
             : "Documento original cargado y analizado."
         )
       } else {
-        showError("El archivo se cargó, pero no es un DOCX válido.")
+        showError("El archivo se cargó, pero no es un paquete Word (.docx) válido.")
       }
 
       setBusyLabel(null)
@@ -206,15 +208,27 @@ const EntitySettingsDocumentTemplateDetail = () => {
 
   const handleReanalyze = async () => {
     if (!selectedVersion) return
+    const isConfigured = Boolean(selectedVersion.configured_file_path)
     const path = selectedVersion.configured_file_path || selectedVersion.original_file_path
     if (!path) {
       showError("La versión no tiene ningún documento para analizar.")
       return
     }
     try {
-      setBusyLabel("Analizando el contenido del DOCX…")
-      await analyzeAndStoreTemplateFile(selectedVersion.id, path)
-      showSuccess("Análisis actualizado.")
+      setBusyLabel("Analizando el contenido…")
+      const result = await reanalyzeTemplateFile({
+        version: selectedVersion,
+        kind: isConfigured ? "CONFIGURED" : "ORIGINAL",
+        filePath: path,
+      })
+      if (!result.supported) {
+        showError(
+          result.issue ||
+            "El documento no puede analizarse: sustitúyalo por un documento Word en formato .docx."
+        )
+      } else {
+        showSuccess("Análisis actualizado.")
+      }
       setBusyLabel(null)
       await reload(selectedVersion.id)
     } catch (err) {
@@ -365,6 +379,12 @@ const EntitySettingsDocumentTemplateDetail = () => {
           <li>Guarde el documento como DOCX conservando todo el formato legal y de firma.</li>
           <li>Súbalo como documento configurado y analícelo: la plantilla quedará lista para activar.</li>
         </ol>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Formatos admitidos: .doc y .docx. El archivo siempre se conserva en su formato original,
+          pero el análisis automático de variables requiere un documento .docx: si guarda el
+          configurado como .doc, SiteCorp lo almacenará, informará de su estado y no permitirá
+          activar la plantilla hasta disponer de una versión analizable.
+        </p>
         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <ListChecks className="h-3.5 w-3.5" />
           Sólo se exigen las variables que el documento configurado contiene realmente.

@@ -26,6 +26,10 @@ interface Props {
   onCreateVersion: (effectiveFrom: string | null) => void
 }
 
+/** Etiqueta corta del formato real del archivo de cada versión (§6/§27). */
+const formatShortLabel = (format: string | null): string =>
+  format === "DOC" ? ".doc (Word 97-2003)" : format === "DOCX" ? ".docx" : "formato desconocido"
+
 const statusBadge = (status: DocumentTemplateVersion["status"]) => {
   if (status === "ACTIVE") return <SiteCorpStatusBadge status="success">Activa</SiteCorpStatusBadge>
   if (status === "INACTIVE") return <SiteCorpStatusBadge status="neutral">Inactiva</SiteCorpStatusBadge>
@@ -85,8 +89,14 @@ const DocumentTemplateVersionsPanel = ({
                       {templateVersionPeriodLabel(version)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Original: {version.original_file_name || "sin archivo"} · Configurada:{" "}
-                      {version.configured_file_name || "sin archivo"}
+                      Original: {version.original_file_name || "sin archivo"}
+                      {version.original_file_name && version.original_file_format
+                        ? ` (${formatShortLabel(version.original_file_format)})`
+                        : ""}{" "}
+                      · Configurada: {version.configured_file_name || "sin archivo"}
+                      {version.configured_file_name && version.configured_file_format
+                        ? ` (${formatShortLabel(version.configured_file_format)})`
+                        : ""}
                     </p>
                   </div>
 

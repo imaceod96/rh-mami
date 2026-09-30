@@ -144,7 +144,7 @@ const EntitySettingsDocumentTemplates = () => {
   const header = (
     <SiteCorpPageHeader
       title="Plantillas documentales"
-      description={`Estructuras DOCX de los documentos contractuales de ${
+      description={`Plantillas Word (.doc y .docx) de los documentos contractuales de ${
         entityName || "la entidad"
       }`}
     />

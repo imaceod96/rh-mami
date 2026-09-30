@@ -1,13 +1,16 @@
 import * as React from "react"
 import { formatDocumentDate } from "@/lib/document-variables"
 import {
+  WORD_ACCEPT,
   formatTemplateFileSize,
   getTemplateFileUrl,
+  templateFileFormatLabel,
   templateVersionPeriodLabel,
   type DocumentTemplateVersion,
 } from "@/lib/document-templates"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
+import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { showError } from "@/utils/toast"
 import { Download, FileText, RefreshCw, Upload } from "lucide-react"
@@ -15,9 +18,13 @@ import { Download, FileText, RefreshCw, Upload } from "lucide-react"
 /**
  * Fase 11B.1 — Archivos de una versión (§35/§36/§84).
  *
- * El DOCX original es la plantilla base y es obligatorio para activar.
- * La versión configurada es opcional: si existe, es el archivo vigente de la
- * versión (el que se analiza y, en 11B.2, el que se usará para generar).
+ * El documento Word original es la plantilla base y es obligatorio para activar.
+ * La versión configurada es obligatoria para activar: es el archivo que se analiza
+ * y el que definirá las variables requeridas.
+ *
+ * Se admiten `.doc` y `.docx`. Un archivo `.doc` se conserva intacto (la descarga
+ * devuelve exactamente el original) pero no puede prepararse para análisis en esta
+ * instalación (§10/§17/§18).
  */
 
 interface Props {
@@ -56,6 +63,7 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
     name: string | null,
     size: number | null,
     uploadedAt: string | null,
+    format: string | null,
     hint: string
   ) => (
     <div className="rounded-xl border border-border bg-white p-4">
@@ -64,10 +72,15 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-sitecorp-primary" />
             <p className="text-sm font-semibold text-ink">{title}</p>
+            {path && (
+              <SiteCorpStatusBadge status={format === "DOCX" ? "success" : "neutral"}>
+                {templateFileFormatLabel(format)}
+              </SiteCorpStatusBadge>
+            )}
           </div>
           {path ? (
             <p className="mt-1 text-xs text-muted-foreground">
-              {name || "archivo.docx"} · {formatTemplateFileSize(size)} · cargado el{" "}
+              {name || "documento Word"} · {formatTemplateFileSize(size)} · cargado el{" "}
               {formatDocumentDate(uploadedAt) || "—"}
             </p>
           ) : (
@@ -94,7 +107,7 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
               {path ? "Reemplazar" : "Subir"}
               <input
                 type="file"
-                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                accept={WORD_ACCEPT}
                 className="hidden"
                 disabled={busy}
                 onChange={(event) => {
@@ -118,24 +131,36 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
       <div className="space-y-4">
         {fileRow(
           "ORIGINAL",
-          "Documento original (DOCX)",
+          "Documento original",
           version.original_file_path,
           version.original_file_name,
           version.original_file_size,
           version.original_uploaded_at,
-          "Modelo oficial de la entidad, conservado intacto: nunca se modifica ni se sobrescribe."
+          version.original_file_format,
+          "Modelo oficial de la entidad, conservado intacto en su formato original: nunca se modifica ni se sobrescribe. La descarga devuelve el archivo tal como se subió."
         )}
 
         {fileRow(
           "CONFIGURED",
-          "Documento configurado (DOCX)",
+          "Documento configurado",
           version.configured_file_path,
           version.configured_file_name,
           version.configured_file_size,
           version.configured_uploaded_at,
+          version.configured_file_format,
           effectivePath === version.configured_file_path && version.configured_file_path
             ? "Es el documento analizado: define las variables requeridas de esta versión."
             : "Cópielo del original y sustituya los datos que cambian por las variables del catálogo. Es obligatorio para activar."
+        )}
+
+        {version.analysis_issue && (
+          <SiteCorpAlert type="warning" title="Documento no preparado para análisis">
+            <p>{version.analysis_issue}</p>
+            <p className="mt-1 text-xs">
+              El original se conserva intacto. Mientras no exista un documento analizable, la
+              plantilla no puede activarse: puede reemplazar el archivo por su versión .docx.
+            </p>
+          </SiteCorpAlert>
         )}
 
         {!isDraft && (

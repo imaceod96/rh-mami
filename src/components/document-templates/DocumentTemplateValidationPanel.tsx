@@ -9,12 +9,16 @@ import { AlertTriangle, CheckCircle2, CircleSlash, Info } from "lucide-react"
 /**
  * Fase 11B.1 — Validación ESTRUCTURAL de la versión (§34/§42/§43).
  *
- * Comprueba el archivo, los placeholders realmente presentes en el DOCX y la
- * vigencia. NO comprueba si un trabajador concreto tiene valores para esas
- * variables: eso pertenece a la generación (11B.2).
+ * Comprueba el archivo, los placeholders realmente presentes en el documento
+ * configurado y la vigencia. NO comprueba si un trabajador concreto tiene
+ * valores para esas variables: eso pertenece a la generación (11B.2).
  *
  * No existe ninguna lista universal de variables obligatorias: las variables
- * requeridas son las que el propio DOCX configurado contiene.
+ * requeridas son las que el propio documento configurado contiene.
+ *
+ * Se admiten documentos Word `.doc` y `.docx`; sólo un paquete OOXML (`.docx`)
+ * puede analizarse, por lo que un configurado `.doc` bloquea la activación con
+ * un mensaje accionable (§10/§24/§25).
  */
 
 interface Props {
@@ -30,8 +34,13 @@ interface CheckDescriptor {
 }
 
 const CHECKS: CheckDescriptor[] = [
-  { key: "original_file_present", label: "Documento DOCX original cargado", blocking: true },
+  { key: "original_file_present", label: "Documento Word original cargado", blocking: true },
   { key: "configured_file_present", label: "Documento configurado (con variables) cargado", blocking: true },
+  {
+    key: "configured_format_analyzable",
+    label: "El documento configurado puede prepararse para análisis (.docx)",
+    blocking: true,
+  },
   { key: "analysis_present", label: "Análisis del documento registrado", blocking: true },
   {
     key: "analysis_matches_configured",
@@ -39,7 +48,12 @@ const CHECKS: CheckDescriptor[] = [
     blocking: true,
     requiresAnalysis: true,
   },
-  { key: "valid_docx", label: "El documento analizado es un DOCX válido", blocking: true, requiresAnalysis: true },
+  {
+    key: "valid_docx",
+    label: "El documento analizado es un paquete Word (.docx) válido",
+    blocking: true,
+    requiresAnalysis: true,
+  },
   { key: "no_unknown_variables", label: "Sin variables desconocidas", blocking: true, requiresAnalysis: true },
   {
     key: "no_incompatible_variables",
@@ -123,6 +137,16 @@ const DocumentTemplateValidationPanel = ({ validation, loading }: Props) => {
               </p>
             </div>
           </div>
+
+          {validation.analysis_issue && (
+            <SiteCorpAlert type="warning" title="Documento no preparado para análisis">
+              <p>{validation.analysis_issue}</p>
+              <p className="mt-1 text-xs">
+                El archivo original se conserva y puede descargarlo. Para activar la plantilla,
+                cargue el documento configurado en formato .docx.
+              </p>
+            </SiteCorpAlert>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-border bg-muted/30 p-3">
@@ -280,7 +304,7 @@ const DocumentTemplateValidationPanel = ({ validation, loading }: Props) => {
       {analysis && (
         <SiteCorpCard
           title="Análisis del documento"
-          description="Resultado del analizador central sobre el DOCX de la versión."
+          description="Resultado del analizador central sobre el documento Word analizable de la versión."
         >
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">

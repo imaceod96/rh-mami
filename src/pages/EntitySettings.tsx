@@ -44,7 +44,7 @@ const EntitySettings = () => {
     {
       title: "Plantillas documentales",
       description:
-        "Gestiona las plantillas DOCX de los contratos y anexos de esta entidad, sus versiones y las variables documentales que utilizan.",
+        "Gestiona las plantillas Word (.doc y .docx) de los contratos y anexos de esta entidad, sus versiones y las variables documentales que utilizan.",
       icon: FileType2,
       href: `/entity/${currentEntity?.id}/settings/document-templates`,
     },
