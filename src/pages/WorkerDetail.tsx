@@ -188,6 +188,7 @@ interface WorkerDetail {
     signature_date: string | null
     signature_place: string | null
     payment_method_id: string | null
+    payment_schedule_text: string | null
     total_compensation_snapshot: number | null
     conditions_captured_at: string | null
     salary_group: { id: string; sequence_number: number } | null
@@ -259,6 +260,7 @@ const WorkerDetail = () => {
     signatureDate: string
     signaturePlace: string
     paymentMethodId: string
+    paymentSchedule: string
     components: CompensationComponentDraft[]
   }>({
     contractTypeId: "",
@@ -268,6 +270,7 @@ const WorkerDetail = () => {
     signatureDate: "",
     signaturePlace: "",
     paymentMethodId: "",
+    paymentSchedule: "",
     components: [],
   })
   // Fase 11A.5: catálogo de formas de pago, checklist y conceptos por contrato
@@ -364,7 +367,7 @@ const WorkerDetail = () => {
                   entity_name_snapshot, entity_organism_snapshot, entity_branch_snapshot,
                   entity_labor_code_snapshot, entity_address_snapshot, entity_province_snapshot,
                   entity_municipality_snapshot,
-                  signature_date, signature_place, payment_method_id, total_compensation_snapshot,
+                  signature_date, signature_place, payment_method_id, payment_schedule_text, total_compensation_snapshot,
                   conditions_captured_at,
                   salary_group:salary_groups(id, sequence_number),
                   payment_method:payment_methods(name, code),
@@ -684,6 +687,7 @@ const WorkerDetail = () => {
         p_signature_place: contractForm.signaturePlace.trim(),
         p_payment_method_id: contractForm.paymentMethodId,
         p_compensation_components: buildComponentsPayload(contractForm.components),
+        p_payment_schedule_text: contractForm.paymentSchedule.trim() || null,
       })
       if (rpcError) throw rpcError
       setContractDialogOpen(false)
@@ -695,6 +699,7 @@ const WorkerDetail = () => {
         signatureDate: "",
         signaturePlace: "",
         paymentMethodId: "",
+        paymentSchedule: "",
         components: [],
       })
       loadWorker()
@@ -1180,6 +1185,7 @@ const WorkerDetail = () => {
                           signatureDate: "",
                           signaturePlace: "",
                           paymentMethodId: "",
+                          paymentSchedule: "",
                           components: [],
                         })
                         setActionError(null)
@@ -1259,6 +1265,16 @@ const WorkerDetail = () => {
                     <dt className="text-xs text-muted-foreground">Forma de pago</dt>
                     <dd className="text-sm text-ink">
                       {currentContract.payment_method?.name || (
+                        <span className="italic text-muted-foreground">
+                          Sin información histórica
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Día / momento de pago</dt>
+                    <dd className="text-sm text-ink">
+                      {currentContract.payment_schedule_text || (
                         <span className="italic text-muted-foreground">
                           Sin información histórica
                         </span>
@@ -1512,7 +1528,7 @@ const WorkerDetail = () => {
                         : "Representante: sin información histórica"}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {/* Fase 11A.5: firma, lugar y forma de pago formalizados (histórico) */}
+                      {/* Fase 11A.5/11A.7: firma, lugar, forma y momento de pago formalizados (histórico) */}
                       {c.signature_date || c.signature_place || c.payment_method?.name
                         ? [
                             c.signature_date
@@ -1521,6 +1537,9 @@ const WorkerDetail = () => {
                             c.signature_place ? `Lugar: ${c.signature_place}` : null,
                             c.payment_method?.name
                               ? `Forma de pago: ${c.payment_method.name}`
+                              : null,
+                            c.payment_schedule_text
+                              ? `Momento de pago: ${c.payment_schedule_text}`
                               : null,
                           ]
                             .filter(Boolean)
@@ -2018,7 +2037,7 @@ const WorkerDetail = () => {
               </div>
             </div>
 
-            {/* Fase 11A.5: condiciones formalizadas del contrato */}
+            {/* Fase 11A.5/11A.7: condiciones formalizadas del contrato */}
             <ContractSignatureFields
               signatureDate={contractForm.signatureDate}
               onSignatureDateChange={(value) =>
@@ -2033,6 +2052,10 @@ const WorkerDetail = () => {
                 setContractForm((f) => ({ ...f, paymentMethodId: value }))
               }
               paymentMethods={paymentMethods}
+              paymentSchedule={contractForm.paymentSchedule}
+              onPaymentScheduleChange={(value) =>
+                setContractForm((f) => ({ ...f, paymentSchedule: value }))
+              }
             />
 
             <ContractFormalizationAlerts

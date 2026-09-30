@@ -51,6 +51,7 @@ const emptyContractData: EntityContractDataInput = {
   address: null,
   province: null,
   municipality: null,
+  revolution_year: null,
 }
 
 /** Desplaza una fecha ISO (YYYY-MM-DD) en días sin desfases de zona horaria. */
@@ -73,6 +74,8 @@ const EntitySettingsContractData = () => {
   const [entityName, setEntityName] = React.useState<string>("")
 
   const [contractData, setContractData] = React.useState<EntityContractDataInput>(emptyContractData)
+  /** Fase 11A.7 — Año de la Revolución: se edita como texto y se guarda como entero. */
+  const [revolutionYearText, setRevolutionYearText] = React.useState("")
   const [savingData, setSavingData] = React.useState(false)
 
   const [positions, setPositions] = React.useState<PositionWithOccupant[]>([])
@@ -119,7 +122,11 @@ const EntitySettingsContractData = () => {
           address: data.address,
           province: data.province,
           municipality: data.municipality,
+          revolution_year: data.revolution_year,
         })
+        setRevolutionYearText(
+          data.revolution_year != null ? String(data.revolution_year) : ""
+        )
       }
 
       const [{ data: rawPositions, error: positionsError }, todayOccupants] = await Promise.all([

@@ -40,6 +40,12 @@ export interface ContractSignatureFieldsProps {
   paymentMethodId: string
   onPaymentMethodIdChange: (value: string) => void
   paymentMethods: PaymentMethodOption[]
+  /**
+   * Fase 11A.7 — Día / momento de pago (condición contractual distinta de la forma
+   * de pago). Opcional: si no se proporciona, el campo no se muestra.
+   */
+  paymentSchedule?: string
+  onPaymentScheduleChange?: (value: string) => void
   disabled?: boolean
   className?: string
 }
@@ -52,6 +58,8 @@ export const ContractSignatureFields: React.FC<ContractSignatureFieldsProps> = (
   paymentMethodId,
   onPaymentMethodIdChange,
   paymentMethods,
+  paymentSchedule,
+  onPaymentScheduleChange,
   disabled = false,
   className,
 }) => (
@@ -98,6 +106,24 @@ export const ContractSignatureFields: React.FC<ContractSignatureFieldsProps> = (
       </SiteCorpSelect>
       <p className="text-xs text-muted-foreground">Dato del contrato (catálogo global).</p>
     </div>
+
+    {paymentSchedule !== undefined && onPaymentScheduleChange && (
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="contract-payment-schedule">Día / momento de pago</Label>
+        <SiteCorpInput
+          id="contract-payment-schedule"
+          type="text"
+          value={paymentSchedule}
+          onChange={(e) => onPaymentScheduleChange(e.target.value)}
+          placeholder="Ej.: Día 10 de cada mes · Quincenal · Último día hábil del mes"
+          disabled={disabled}
+        />
+        <p className="text-xs text-muted-foreground">
+          Cuándo se realiza el pago. Es una condición distinta de la forma de pago y queda
+          preservada en el contrato (no cambia con pagos posteriores).
+        </p>
+      </div>
+    )}
   </div>
 )
 

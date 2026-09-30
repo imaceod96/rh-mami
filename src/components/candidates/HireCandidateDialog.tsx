@@ -162,6 +162,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [signatureDate, setSignatureDate] = React.useState("")
   const [signaturePlace, setSignaturePlace] = React.useState("")
   const [paymentMethodId, setPaymentMethodId] = React.useState("")
+  const [paymentSchedule, setPaymentSchedule] = React.useState("")
   const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
   const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
   const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
@@ -291,6 +292,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setSignatureDate("")
     setSignaturePlace("")
     setPaymentMethodId("")
+    setPaymentSchedule("")
     setComponents([])
     setRepresentatives([])
     setPending(null)
@@ -445,6 +447,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         p_signature_place: signaturePlace.trim(),
         p_payment_method_id: paymentMethodId,
         p_compensation_components: buildComponentsPayload(components),
+        p_payment_schedule_text: paymentSchedule.trim() || null,
       })
       if (rpcError) throw rpcError
 
@@ -807,7 +810,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           </div>
         </div>
 
-        {/* ---------- Contrato: firma, lugar y forma de pago ---------- */}
+        {/* ---------- Contrato: firma, lugar, forma y momento de pago ---------- */}
         <ContractSignatureFields
           signatureDate={signatureDate}
           onSignatureDateChange={setSignatureDate}
@@ -816,6 +819,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           paymentMethodId={paymentMethodId}
           onPaymentMethodIdChange={setPaymentMethodId}
           paymentMethods={paymentMethods}
+          paymentSchedule={paymentSchedule}
+          onPaymentScheduleChange={setPaymentSchedule}
         />
 
         <ContractFormalizationAlerts

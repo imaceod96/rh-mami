@@ -86,6 +86,7 @@ export interface ContractConditionsSnapshot {
   payment_method_id: string | null
   payment_method_name: string | null
   payment_method_code: string | null
+  payment_schedule_text: string | null
   salary_amount: number | null
   salary_currency_code: string | null
   salary_snapshot_status: string
@@ -196,7 +197,8 @@ export const fetchContractConditions = async (
   const { data, error } = await supabase
     .from("employment_contracts")
     .select(
-      `id, signature_date, signature_place, payment_method_id, salary_amount, salary_currency_code,
+      `id, signature_date, signature_place, payment_method_id, payment_schedule_text,
+       salary_amount, salary_currency_code,
        salary_snapshot_status, total_compensation_snapshot,
        payment_method:payment_methods(name, code)`
     )
@@ -216,6 +218,7 @@ export const fetchContractConditions = async (
     payment_method_id: row.payment_method_id ?? null,
     payment_method_name: payment?.name ?? null,
     payment_method_code: payment?.code ?? null,
+    payment_schedule_text: row.payment_schedule_text ?? null,
     salary_amount: row.salary_amount === null ? null : Number(row.salary_amount),
     salary_currency_code: row.salary_currency_code ?? null,
     salary_snapshot_status: row.salary_snapshot_status,

@@ -20,6 +20,8 @@ export interface EntityContractData {
   address: string | null
   province: string | null
   municipality: string | null
+  /** Fase 11A.7 — Año de la Revolución (dato institucional configurable, nunca calculado). */
+  revolution_year: number | null
 }
 
 export interface RepresentativePositionRow {
@@ -45,6 +47,7 @@ export interface EntityContractDataInput {
   address: string | null
   province: string | null
   municipality: string | null
+  revolution_year: number | null
 }
 
 /**
@@ -60,6 +63,7 @@ export function pendingEntityContractualData(data: EntityContractData | null): s
       "Dirección",
       "Provincia",
       "Municipio",
+      "Año de la Revolución",
     ]
   }
 
@@ -74,6 +78,7 @@ export function pendingEntityContractualData(data: EntityContractData | null): s
   if (missing(data.address)) pending.push("Dirección")
   if (missing(data.province)) pending.push("Provincia")
   if (missing(data.municipality)) pending.push("Municipio")
+  if (data.revolution_year == null) pending.push("Año de la Revolución")
 
   return pending
 }
@@ -85,7 +90,7 @@ export async function fetchEntityContractData(
   const { data, error } = await supabase
     .from("organization_entities")
     .select(
-      "id, name, code, organism, branch, labor_identification_code, address, province, municipality"
+      "id, name, code, organism, branch, labor_identification_code, address, province, municipality, revolution_year"
     )
     .eq("id", entityId)
     .single()
@@ -107,6 +112,7 @@ export async function saveEntityContractData(
       address: input.address,
       province: input.province,
       municipality: input.municipality,
+      revolution_year: input.revolution_year,
     })
     .eq("id", entityId)
 

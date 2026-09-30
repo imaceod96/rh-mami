@@ -121,6 +121,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   const [signatureDate, setSignatureDate] = React.useState("")
   const [signaturePlace, setSignaturePlace] = React.useState("")
   const [paymentMethodId, setPaymentMethodId] = React.useState("")
+  const [paymentSchedule, setPaymentSchedule] = React.useState("")
   const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
   const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
   const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
@@ -246,6 +247,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     setSignatureDate("")
     setSignaturePlace("")
     setPaymentMethodId("")
+    setPaymentSchedule("")
     setComponents([])
     setRepresentatives([])
     setPending(null)
@@ -358,6 +360,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         p_signature_place: signaturePlace.trim(),
         p_payment_method_id: paymentMethodId,
         p_compensation_components: buildComponentsPayload(components),
+        p_payment_schedule_text: paymentSchedule.trim() || null,
       })
       if (rpcError) throw rpcError
 
@@ -585,6 +588,8 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
             paymentMethodId={paymentMethodId}
             onPaymentMethodIdChange={setPaymentMethodId}
             paymentMethods={paymentMethods}
+            paymentSchedule={paymentSchedule}
+            onPaymentScheduleChange={setPaymentSchedule}
           />
 
           <ContractFormalizationAlerts

@@ -205,6 +205,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const [signatureDate, setSignatureDate] = React.useState<string>("")
   const [signaturePlace, setSignaturePlace] = React.useState<string>("")
   const [paymentMethodId, setPaymentMethodId] = React.useState<string>("")
+  const [paymentSchedule, setPaymentSchedule] = React.useState<string>("")
   const [components, setComponents] = React.useState<CompensationComponentDraft[]>([])
   const [representatives, setRepresentatives] = React.useState<RepresentativePositionRow[]>([])
   const [pending, setPending] = React.useState<ContractFormalizationPending | null>(null)
@@ -473,6 +474,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           p_signature_place: signaturePlace.trim(),
           p_payment_method_id: paymentMethodId,
           p_compensation_components: buildComponentsPayload(components),
+          p_payment_schedule_text: paymentSchedule.trim() || null,
         })
 
         if (rpcError) throw rpcError
@@ -844,6 +846,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
                 paymentMethodId={paymentMethodId}
                 onPaymentMethodIdChange={setPaymentMethodId}
                 paymentMethods={paymentMethods}
+                paymentSchedule={paymentSchedule}
+                onPaymentScheduleChange={setPaymentSchedule}
               />
 
               <ContractFormalizationAlerts
