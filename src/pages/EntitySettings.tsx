@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
-import { Users, Shield, Scale, FileText, Network, ClipboardList } from "lucide-react"
+import { Users, Shield, Scale, FileText, Network, ClipboardList, FileType2 } from "lucide-react"
 
 const EntitySettings = () => {
   const { currentEntity } = useCurrentEntity()
@@ -40,6 +40,13 @@ const EntitySettings = () => {
         "Datos contractuales de la entidad y representantes autorizados para la formalización de contratos.",
       icon: ClipboardList,
       href: `/entity/${currentEntity?.id}/settings/contract-data`,
+    },
+    {
+      title: "Plantillas documentales",
+      description:
+        "Gestiona las plantillas DOCX de los contratos y anexos de esta entidad, sus versiones y las variables documentales que utilizan.",
+      icon: FileType2,
+      href: `/entity/${currentEntity?.id}/settings/document-templates`,
     },
     {
       title: "Documentos rectores",
