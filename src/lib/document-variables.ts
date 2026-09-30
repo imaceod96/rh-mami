@@ -59,7 +59,7 @@ export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   { key: "entity.address", label: "Dirección de la entidad", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Dirección de la entidad (snapshot)." },
   { key: "entity.province", label: "Provincia de la entidad", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Provincia de la entidad (snapshot)." },
   { key: "entity.municipality", label: "Municipio de la entidad", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Municipio de la entidad (snapshot)." },
-  { key: "entity.revolution_year", label: "Año de la Revolución", category: "Entidad", documentTypes: BOTH, dataType: "integer", kind: "SOURCE", description: "Valor institucional configurado por entidad y preservado en el snapshot (nunca se calcula)." },
+  { key: "entity.revolution_year", label: "Año de la Revolución", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Valor institucional configurado por entidad (texto libre, p. ej. 68) y preservado en el snapshot (nunca se calcula)." },
 
   // ---------------- Representante ----------------
   { key: "representative.name", label: "Nombre del representante", category: "Representante", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Representante histórico que suscribió el documento (snapshot)." },

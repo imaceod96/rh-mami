@@ -124,9 +124,7 @@ const EntitySettingsContractData = () => {
           municipality: data.municipality,
           revolution_year: data.revolution_year,
         })
-        setRevolutionYearText(
-          data.revolution_year != null ? String(data.revolution_year) : ""
-        )
+        setRevolutionYearText(data.revolution_year || "")
       }
 
       const [{ data: rawPositions, error: positionsError }, todayOccupants] = await Promise.all([
@@ -176,11 +174,6 @@ const EntitySettingsContractData = () => {
     if (!entityId) return
     setSavingData(true)
     try {
-      const trimmedYear = revolutionYearText.trim()
-      if (trimmedYear !== "" && !/^\d{1,4}$/.test(trimmedYear)) {
-        showError("El Año de la Revolución debe ser un número (p. ej. 68).")
-        return
-      }
       await saveEntityContractData(entityId, {
         organism: contractData.organism?.trim() || null,
         branch: contractData.branch?.trim() || null,
@@ -188,7 +181,7 @@ const EntitySettingsContractData = () => {
         address: contractData.address?.trim() || null,
         province: contractData.province || null,
         municipality: contractData.municipality || null,
-        revolution_year: trimmedYear === "" ? null : Number(trimmedYear),
+        revolution_year: revolutionYearText.trim() || null,
       })
       showSuccess("Datos contractuales actualizados.")
     } catch (err) {
@@ -324,11 +317,11 @@ const EntitySettingsContractData = () => {
               onChange={(e) => setRevolutionYearText(e.target.value)}
               placeholder="Ej.: 68"
               disabled={!canManage}
-              inputMode="numeric"
             />
             <p className="text-xs text-muted-foreground">
-              Dato institucional interno. Se guarda sólo el número (p. ej. 68) y se preserva en el
-              snapshot de cada contrato formalizado: no se calcula ni se deriva de ninguna fecha.
+              Dato institucional interno (texto libre). Se guarda tal cual se escriba (p. ej. 68) y
+              se preserva en el snapshot de cada contrato formalizado: no se calcula ni se deriva de
+              ninguna fecha.
             </p>
           </div>
         </div>

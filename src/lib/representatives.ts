@@ -20,8 +20,8 @@ export interface EntityContractData {
   address: string | null
   province: string | null
   municipality: string | null
-  /** Fase 11A.7 — Año de la Revolución (dato institucional configurable, nunca calculado). */
-  revolution_year: number | null
+  /** Fase 11A.7 — Año de la Revolución (dato institucional configurable, nunca calculado). Texto libre. */
+  revolution_year: string | null
 }
 
 export interface RepresentativePositionRow {
@@ -47,7 +47,7 @@ export interface EntityContractDataInput {
   address: string | null
   province: string | null
   municipality: string | null
-  revolution_year: number | null
+  revolution_year: string | null
 }
 
 /**
@@ -78,7 +78,7 @@ export function pendingEntityContractualData(data: EntityContractData | null): s
   if (missing(data.address)) pending.push("Dirección")
   if (missing(data.province)) pending.push("Provincia")
   if (missing(data.municipality)) pending.push("Municipio")
-  if (data.revolution_year == null) pending.push("Año de la Revolución")
+  if (data.revolution_year == null || !data.revolution_year.trim()) pending.push("Año de la Revolución")
 
   return pending
 }

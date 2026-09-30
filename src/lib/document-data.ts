@@ -16,7 +16,7 @@ export interface DocumentPartyEntity {
   address: string | null
   province: string | null
   municipality: string | null
-  revolution_year: number | null
+  revolution_year: string | null
 }
 
 export interface DocumentRepresentative {
