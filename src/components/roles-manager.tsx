@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/dialog"
 import { SelectItem } from "@/components/ui/select"
 import {
+  fetchPlatformPermissions,
+  groupPlatformPermissions,
+  platformPermissionLabel,
+  type PlatformPermission,
+} from "@/lib/platform-permissions"
+import {
   BadgeCheck,
   Eye,
   Pencil,
@@ -33,6 +39,10 @@ interface PermissionOption {
   id: string
   code: string
   description: string | null
+  /** Sólo en el ámbito de plataforma: grupo del catálogo. */
+  category?: string | null
+  /** Sólo en el ámbito de plataforma: pertenece al catálogo global de SiteCorp. */
+  is_platform_scope?: boolean
 }
 
 interface RoleRecord {
@@ -65,28 +75,10 @@ const emptyForm: RoleForm = {
   is_active: true,
 }
 
-const platformLabels: Record<string, string> = {
-  "tenants.view": "Ver clientes / workspaces",
-  "tenants.create": "Crear clientes / workspaces",
-  "tenants.edit": "Editar clientes / workspaces",
-  "tenants.activate": "Activar clientes / workspaces",
-  "tenants.deactivate": "Desactivar clientes / workspaces",
-  "tenants.delete": "Eliminar clientes / workspaces",
-  "tenants.enter": "Abrir clientes / workspaces",
-  "organizations.view_all": "Ver todas las organizaciones",
-  "organizations.manage_all": "Gestionar todas las organizaciones",
-  "organizations.delete": "Eliminar organizaciones",
-  "users.view_all": "Ver usuarios globales",
-  "users.manage_all": "Crear, editar y gestionar usuarios globales",
-  "users.invite": "Invitar usuarios",
-  "platform_roles.view": "Ver roles de plataforma",
-  "platform_roles.manage": "Crear y editar roles de plataforma",
-  "tenant_roles.view": "Ver roles de organización",
-  "tenant_roles.manage": "Crear y editar roles de organización",
-  "reports.cross_tenant": "Ver informes globales",
-  "platform_settings.view": "Ver configuración de plataforma",
-  "platform_settings.manage": "Gestionar configuración de plataforma",
-}
+// Las etiquetas y los grupos del catálogo de PLATAFORMA viven en
+// `@/lib/platform-permissions` (agrupados por la categoría del catálogo en BD).
+// `tenant_roles.*` se retiró del gestor global: los roles internos de una
+// entidad se administran dentro de la entidad, no desde Administración global.
 
 const organizationLabels: Record<string, string> = {
   "organization.view": "Ver organización",
@@ -108,45 +100,6 @@ const organizationLabels: Record<string, string> = {
   "salary.manage": "Gestionar compensación",
   "reports.view": "Ver informes",
 }
-
-const platformGroups: PermissionGroup[] = [
-  {
-    title: "CLIENTES / ORGANIZACIONES",
-    codes: [
-      "tenants.view",
-      "tenants.create",
-      "tenants.edit",
-      "tenants.activate",
-      "tenants.deactivate",
-      "tenants.delete",
-      "tenants.enter",
-      "organizations.view_all",
-      "organizations.manage_all",
-      "organizations.delete",
-    ],
-  },
-  {
-    title: "USUARIOS",
-    codes: ["users.view_all", "users.manage_all", "users.invite"],
-  },
-  {
-    title: "ROLES Y PERMISOS",
-    codes: [
-      "platform_roles.view",
-      "platform_roles.manage",
-      "tenant_roles.view",
-      "tenant_roles.manage",
-    ],
-  },
-  {
-    title: "INFORMES",
-    codes: ["reports.cross_tenant"],
-  },
-  {
-    title: "CONFIGURACIÓN",
-    codes: ["platform_settings.view", "platform_settings.manage"],
-  },
-]
 
 const organizationGroups: PermissionGroup[] = [
   {
@@ -184,12 +137,9 @@ const organizationGroups: PermissionGroup[] = [
 ]
 
 const permissionLabel = (scope: RoleScope, permission: PermissionOption) =>
-  (scope === "platform" ? platformLabels : organizationLabels)[permission.code] ||
-  permission.description ||
-  permission.code
-
-const groupsForScope = (scope: RoleScope) =>
-  scope === "platform" ? platformGroups : organizationGroups
+  scope === "platform"
+    ? platformPermissionLabel(permission)
+    : organizationLabels[permission.code] || permission.description || permission.code
 
 const friendlySaveError = (scope: RoleScope, error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? "")
@@ -283,7 +233,7 @@ export const RolesManager = ({
       const [rolesResult, permissionsResult] = await Promise.all([
         rolesRequest,
         isPlatform
-          ? supabase.from("platform_permissions").select("*").order("code")
+          ? fetchPlatformPermissions().then((data) => ({ data, error: null }))
           : supabase.from("tenant_permissions").select("*").order("code"),
       ])
 
@@ -539,19 +489,35 @@ export const RolesManager = ({
     )
   }
 
-  const groupedPermissions = groupsForScope(scope)
-  const groupedCodes = new Set(groupedPermissions.flatMap((group) => group.codes))
-  const additionalPermissions = permissions.filter(
-    (permission) => !groupedCodes.has(permission.code)
+  // Nivel 1 (plataforma): sólo se ofrecen permisos del catálogo de plataforma.
+  // Los permisos internos de entidad (jobs.*, tenant_roles.*, …) nunca aparecen
+  // aquí: se administran dentro de cada entidad.
+  const selectablePermissions = React.useMemo(
+    () =>
+      isPlatform
+        ? permissions.filter((permission) => permission.is_platform_scope !== false)
+        : permissions,
+    [isPlatform, permissions]
   )
-  const allGroups: PermissionGroup[] = [...groupedPermissions]
 
-  if (additionalPermissions.length > 0) {
-    allGroups.push({
-      title: "OTROS PERMISOS DEL SISTEMA",
-      codes: additionalPermissions.map((permission) => permission.code),
-    })
-  }
+  const allGroups: PermissionGroup[] = React.useMemo(() => {
+    if (isPlatform) {
+      return groupPlatformPermissions(permissions as PlatformPermission[])
+    }
+
+    const groupedCodes = new Set(organizationGroups.flatMap((group) => group.codes))
+    const additionalPermissions = permissions.filter(
+      (permission) => !groupedCodes.has(permission.code)
+    )
+    const groups: PermissionGroup[] = [...organizationGroups]
+    if (additionalPermissions.length > 0) {
+      groups.push({
+        title: "OTROS PERMISOS DEL SISTEMA",
+        codes: additionalPermissions.map((permission) => permission.code),
+      })
+    }
+    return groups
+  }, [isPlatform, permissions])
 
   const renderPermissionCheckbox = (permission: PermissionOption) => {
     const checked = selectedPermissionIds.includes(permission.id)
@@ -613,8 +579,8 @@ export const RolesManager = ({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <BadgeCheck className="h-4 w-4 text-sitecorp-primary" />
-            {roles.length} {roles.length === 1 ? "rol" : "roles"} · {permissions.length} permisos del
-            sistema
+            {roles.length} {roles.length === 1 ? "rol" : "roles"} ·{" "}
+            {selectablePermissions.length} permisos {isPlatform ? "de plataforma" : "del sistema"}
           </div>
           <SiteCorpButton
             onClick={openCreate}
@@ -778,7 +744,7 @@ export const RolesManager = ({
                 </div>
 
                 {allGroups.map((group) => {
-                  const groupPermissions = permissions.filter((permission) =>
+                  const groupPermissions = selectablePermissions.filter((permission) =>
                     group.codes.includes(permission.code)
                   )
 
