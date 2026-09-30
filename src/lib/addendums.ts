@@ -198,6 +198,7 @@ export interface FormalizedConditions {
   daily_hours: number | null
   weekly_hours: number | null
   monthly_hours: number | null
+  break_minutes: number | null
   jornada: string | null
   salary_group_id: string | null
   salary_group_sequence: number | null
@@ -205,6 +206,7 @@ export interface FormalizedConditions {
   currency_code: string | null
   payment_method_id: string | null
   payment_method_name: string | null
+  payment_schedule: string | null
   additional_payment: number
   abnormal_conditions: number
   other_payment: number

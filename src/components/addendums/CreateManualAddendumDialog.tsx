@@ -92,6 +92,7 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
   const [notes, setNotes] = React.useState("")
 
   const [paymentMethodId, setPaymentMethodId] = React.useState("")
+  const [paymentSchedule, setPaymentSchedule] = React.useState("")
   const [workLocation, setWorkLocation] = React.useState("")
   const [dailyHours, setDailyHours] = React.useState("")
   const [weeklyHours, setWeeklyHours] = React.useState("")
@@ -126,6 +127,7 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
     setEffectiveDate(today())
     setNotes("")
     setPaymentMethodId(formalized?.payment_method_id || "")
+    setPaymentSchedule(formalized?.payment_schedule || "")
     setWorkLocation(formalized?.work_location || "")
     setDailyHours(formalized?.daily_hours != null ? String(formalized.daily_hours) : "")
     setWeeklyHours(formalized?.weekly_hours != null ? String(formalized.weekly_hours) : "")
@@ -168,6 +170,18 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
         new_display_value: newName,
         old_reference_id: formalized?.payment_method_id ?? null,
         new_reference_id: paymentMethodId,
+        display_order: 12,
+      })
+    }
+
+    const typedPaySchedule = paymentSchedule.trim()
+    if (typedPaySchedule !== (formalized?.payment_schedule || "").trim()) {
+      rows.push({
+        field_code: "PAYMENT_SCHEDULE",
+        old_value: formalized?.payment_schedule ?? null,
+        new_value: typedPaySchedule || null,
+        old_display_value: formalized?.payment_schedule ?? null,
+        new_display_value: typedPaySchedule || null,
         display_order: 12,
       })
     }
@@ -274,6 +288,7 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
     return rows.sort((a, b) => a.display_order - b.display_order)
   }, [
     paymentMethodId,
+    paymentSchedule,
     paymentMethods,
     workLocation,
     dailyHours,
@@ -479,6 +494,17 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
                     </option>
                   ))}
                 </SiteCorpSelect>
+              </div>
+              <div className="space-y-2">
+                <Label>Día / momento de pago</Label>
+                <SiteCorpInput
+                  value={paymentSchedule}
+                  onChange={(e) => setPaymentSchedule(e.target.value)}
+                  placeholder="Ej.: Día 10 de cada mes"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Condición distinta de la forma de pago.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Lugar de trabajo</Label>
