@@ -13,6 +13,7 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Label } from "@/components/ui/label"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { AddendumChangesList } from "@/components/addendums/AddendumChangesList"
+import { ContractualDocumentSection } from "@/components/documents/ContractualDocumentSection"
 import { formatContractMoney, formatConditionDate } from "@/lib/contract-conditions"
 import {
   ADDENDUM_STATUS_BADGE,
@@ -283,6 +284,16 @@ export const AddendumDetailDialog: React.FC<AddendumDetailDialogProps> = ({
             title="Condiciones anteriores y nuevas"
             description="Sólo se muestran los campos que cambian con este anexo."
           />
+
+          {/* Fase 11B.2: documento del anexo (§63) */}
+          {addendum.status === "FORMALIZED" && (
+            <ContractualDocumentSection
+              kind="ADDENDUM"
+              sourceId={addendum.id}
+              canManage={canManage}
+              className="mt-4"
+            />
+          )}
 
           {/* Formalización */}
           {isPending && canManage && (

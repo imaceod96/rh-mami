@@ -5,6 +5,7 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { AddendumDetailDialog } from "@/components/addendums/AddendumDetailDialog"
 import { CreateManualAddendumDialog } from "@/components/addendums/CreateManualAddendumDialog"
+import { ContractualDocumentSection } from "@/components/documents/ContractualDocumentSection"
 import { formatContractMoney, formatConditionDate, type PaymentMethodOption } from "@/lib/contract-conditions"
 import {
   ADDENDUM_STATUS_BADGE,
@@ -324,6 +325,14 @@ export const ContractAddendumsSection: React.FC<ContractAddendumsSectionProps> =
                         ))}
                       </ul>
                     )}
+
+                    {/* Fase 11B.2: documento contractual del contrato (§61/§62) */}
+                    <ContractualDocumentSection
+                      kind="CONTRACT"
+                      sourceId={contract.id}
+                      canManage={canManage}
+                      className="mx-3 mb-3"
+                    />
                   </li>
                 )
               })}
