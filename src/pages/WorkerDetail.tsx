@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { WorkerForm } from "@/components/workers/WorkerForm"
 import { WorkerDocumentsTab } from "@/components/workers/WorkerDocumentsTab"
 import {
@@ -579,6 +580,28 @@ const WorkerDetail = () => {
 
   const handleEditSave = async () => {
     if (!worker) return
+    // Integridad contractual: al editar un trabajador (incluidos los históricos)
+    // deben completarse los datos personales indispensables para el contrato.
+    if (!editForm.birth_date?.trim()) {
+      setError("La fecha de nacimiento es obligatoria")
+      return
+    }
+    if (!editForm.profession_or_trade?.trim()) {
+      setError("La profesión u oficio es obligatoria")
+      return
+    }
+    if (!editForm.address?.trim()) {
+      setError("La dirección particular es obligatoria")
+      return
+    }
+    if (!editForm.province?.trim()) {
+      setError("La provincia es obligatoria")
+      return
+    }
+    if (!editForm.municipality?.trim()) {
+      setError("El municipio es obligatorio")
+      return
+    }
     const { error } = await supabase
       .from("workers")
       .update({
@@ -1809,8 +1832,8 @@ const WorkerDetail = () => {
 
       {/* Diálogo de edición */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]">
+          <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
             <DialogTitle>Editar trabajador</DialogTitle>
             <DialogDescription>Modifica los datos personales y laborales del trabajador.</DialogDescription>
           </DialogHeader>
@@ -1819,8 +1842,9 @@ const WorkerDetail = () => {
               e.preventDefault()
               handleEditSave()
             }}
-            className="space-y-4"
+            className="flex min-h-0 flex-1 flex-col"
           >
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Nombre</Label>
@@ -1929,11 +1953,12 @@ const WorkerDetail = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Profesión u oficio</Label>
+              <Label>Profesión u oficio *</Label>
               <SiteCorpInput
                 value={editForm.profession_or_trade || ""}
                 onChange={(e) => setEditForm(f => ({ ...f, profession_or_trade: e.target.value }))}
                 placeholder="Ej.: Chofer profesional"
+                required
               />
             </div>
 
@@ -1944,11 +1969,40 @@ const WorkerDetail = () => {
             />
 
             <div className="space-y-2">
-              <Label>Dirección</Label>
+              <Label>Dirección particular *</Label>
               <SiteCorpInput
                 value={editForm.address || ""}
                 onChange={(e) => setEditForm(f => ({ ...f, address: e.target.value }))}
+                required
               />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Provincia *</Label>
+                <SiteCorpSelect
+                  value={editForm.province || ""}
+                  onValueChange={(v) => setEditForm(f => ({ ...f, province: v, municipality: "" }))}
+                >
+                  <option value="">Seleccionar provincia</option>
+                  {CUBA_PROVINCES_FULL.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </SiteCorpSelect>
+              </div>
+              <div className="space-y-2">
+                <Label>Municipio *</Label>
+                <SiteCorpSelect
+                  value={editForm.municipality || ""}
+                  onValueChange={(v) => setEditForm(f => ({ ...f, municipality: v }))}
+                  disabled={!editForm.province}
+                >
+                  <option value="">Seleccionar municipio</option>
+                  {(MUNICIPIOS_BY_PROVINCE_FULL[editForm.province || ""] || []).map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </SiteCorpSelect>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1968,7 +2022,9 @@ const WorkerDetail = () => {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
               <SiteCorpButton variant="outline" type="button" onClick={() => setEditDialogOpen(false)}>
                 Cancelar
               </SiteCorpButton>

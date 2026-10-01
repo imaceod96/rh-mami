@@ -26,6 +26,12 @@ import {
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
+import { ContractReadinessChecklist } from "@/components/contracts/ContractReadinessChecklist"
+import {
+  validateHiringReadiness,
+  formatReadinessMessage,
+  type ReadinessResult,
+} from "@/lib/contract-readiness"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
@@ -172,6 +178,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [readiness, setReadiness] = React.useState<ReadinessResult | null>(null)
+  const [readinessLoading, setReadinessLoading] = React.useState(false)
   const [segmentsByPosition, setSegmentsByPosition] = React.useState<
     Record<string, PositionScheduleSegment[]>
   >({})
@@ -372,6 +380,57 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     if (!isDetermined) setContractEndDate("")
   }, [isDetermined])
 
+  // Preparación contractual (§26/§39): se revisa la integridad completa antes de
+  // permitir la contratación, de modo que la generación documental nunca sea el
+  // primer punto donde se descubre un dato estructural faltante.
+  React.useEffect(() => {
+    if (!open) {
+      setReadiness(null)
+      return
+    }
+    let active = true
+    setReadinessLoading(true)
+    validateHiringReadiness({
+      candidateId: selectedCandidate?.id || null,
+      workerId: selectedCandidate?.worker?.id || null,
+      positionId: positionId || null,
+      signatureDate: signatureDate || null,
+      contractTypeId: contractTypeId || null,
+      signaturePlace: signaturePlace || null,
+      paymentMethodId: paymentMethodId || null,
+      representativeAssignmentId: representativeAssignmentId || null,
+      contractStartDate: contractStartDate || hireDate || null,
+      contractEndDate: isDetermined ? contractEndDate || null : null,
+    })
+      .then((result) => {
+        if (active) setReadiness(result)
+      })
+      .catch((err) => {
+        console.error("Error validating hiring readiness:", err)
+        if (active) setReadiness(null)
+      })
+      .finally(() => {
+        if (active) setReadinessLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [
+    open,
+    selectedCandidate?.id,
+    selectedCandidate?.worker?.id,
+    positionId,
+    signatureDate,
+    contractTypeId,
+    signaturePlace,
+    paymentMethodId,
+    representativeAssignmentId,
+    contractStartDate,
+    contractEndDate,
+    hireDate,
+    isDetermined,
+  ])
+
   const handleSubmit = async () => {
     setError(null)
 
@@ -421,6 +480,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setError(
         "No existe ningún representante autorizado configurado para la fecha del contrato. Configure los representantes de la entidad para continuar."
       )
+      return
+    }
+    if (readiness && !readiness.ready) {
+      setError(formatReadinessMessage(readiness))
       return
     }
 
@@ -883,6 +946,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           components={components}
         />
 
+        <ContractReadinessChecklist readiness={readiness} loading={readinessLoading} />
+
         <div className="space-y-2">
           <Label>Observaciones</Label>
           <textarea
@@ -915,7 +980,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
               !paymentMethodId ||
               hasInvalidComponent(components) ||
               formalizationBlocked ||
-              !representativeAssignmentId
+              !representativeAssignmentId ||
+              (!!readiness && !readiness.ready)
             }
           >
             <UserPlus className="mr-2 h-4 w-4" />

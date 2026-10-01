@@ -305,6 +305,28 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
       setFormError("La identificación es obligatoria")
       return
     }
+    // Integridad contractual: al editar un candidato (incluidos los históricos)
+    // deben completarse los datos personales indispensables para el contrato.
+    if (!formData.birth_date.trim()) {
+      setFormError("La fecha de nacimiento es obligatoria")
+      return
+    }
+    if (!formData.profession_or_trade.trim()) {
+      setFormError("La profesión u oficio es obligatoria")
+      return
+    }
+    if (!formData.address.trim()) {
+      setFormError("La dirección particular es obligatoria")
+      return
+    }
+    if (!formData.province.trim()) {
+      setFormError("La provincia es obligatoria")
+      return
+    }
+    if (!formData.municipality.trim()) {
+      setFormError("El municipio es obligatorio")
+      return
+    }
 
     if (formData.education_level_id) {
       const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
@@ -482,8 +504,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
                 <SiteCorpInput type="text" placeholder="Cédula / DNI / Pasaporte" value={formData.identification} onChange={(e) => handleIdentificationChange(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
-                <Label>Fecha de nacimiento (dd/mm/aaaa)</Label>
-                <SiteCorpInput type="text" placeholder="dd/mm/aaaa" value={formData.birth_date} onChange={(e) => {
+                <Label>Fecha de nacimiento (dd/mm/aaaa) *</Label>
+                <SiteCorpInput type="text" placeholder="dd/mm/aaaa" value={formData.birth_date} required onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").substring(0, 8)
                   let formatted = val
                   if (val.length > 4) formatted = `${val.substring(0, 2)}/${val.substring(2, 4)}/${val.substring(4, 8)}`
@@ -563,11 +585,11 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
                 <SiteCorpInput type="email" placeholder="correo@ejemplo.com" value={formData.email} onChange={(e) => handleFormChange("email", e.target.value)} />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Dirección</Label>
-                <Textarea placeholder="Dirección completa" value={formData.address} onChange={(e) => handleFormChange("address", e.target.value)} rows={2} />
+                <Label>Dirección particular *</Label>
+                <Textarea placeholder="Dirección completa" value={formData.address} onChange={(e) => handleFormChange("address", e.target.value)} rows={2} required />
               </div>
               <div className="space-y-1.5">
-                <Label>Provincia</Label>
+                <Label>Provincia *</Label>
                 <SiteCorpSelect value={formData.province || undefined} onValueChange={(value) => handleProvinceChange(value === "__placeholder__" ? "" : value)}>
                   <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
                   {provinces.map(province => (
@@ -576,7 +598,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
                 </SiteCorpSelect>
               </div>
               <div className="space-y-1.5">
-                <Label>Municipio</Label>
+                <Label>Municipio *</Label>
                 <SiteCorpSelect value={formData.municipality || undefined} onValueChange={(value) => handleFormChange("municipality", value === "__placeholder__" ? "" : value)} disabled={!formData.province}>
                   <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
                   {municipalities.map(muni => (
@@ -619,12 +641,13 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-ink border-b pb-2">Información profesional</h3>
             <div className="space-y-1.5">
-              <Label>Profesión u oficio</Label>
+              <Label>Profesión u oficio *</Label>
               <SiteCorpInput
                 type="text"
                 placeholder="Ej.: Chofer profesional, Albañil, Técnico en redes"
                 value={formData.profession_or_trade}
                 onChange={(e) => handleFormChange("profession_or_trade", e.target.value)}
+                required
               />
               <p className="text-xs text-muted-foreground">
                 Dato propio de la persona. No sustituye al cargo ni al puesto que ocupe.

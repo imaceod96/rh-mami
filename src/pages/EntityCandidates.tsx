@@ -422,6 +422,28 @@ const EntityCandidates = () => {
       setFormError("La identificación es obligatoria")
       return
     }
+    // Integridad contractual: datos personales indispensables para formalizar
+    // correctamente un contrato laboral.
+    if (!formData.birth_date.trim()) {
+      setFormError("La fecha de nacimiento es obligatoria")
+      return
+    }
+    if (!formData.profession_or_trade.trim()) {
+      setFormError("La profesión u oficio es obligatoria")
+      return
+    }
+    if (!formData.address.trim()) {
+      setFormError("La dirección particular es obligatoria")
+      return
+    }
+    if (!formData.province.trim()) {
+      setFormError("La provincia es obligatoria")
+      return
+    }
+    if (!formData.municipality.trim()) {
+      setFormError("El municipio es obligatorio")
+      return
+    }
 
     // Validar especialidad para niveles que la requieren
         if (formData.education_level_id) {
@@ -1054,7 +1076,7 @@ const EntityCandidates = () => {
                                   />
                                 </div>
                 <div className="space-y-1.5">
-                                  <Label>Fecha de nacimiento (dd/mm/aaaa)</Label>
+                                  <Label>Fecha de nacimiento (dd/mm/aaaa) *</Label>
                                   <SiteCorpInput
                                     type="text"
                                     placeholder="dd/mm/aaaa"
@@ -1066,6 +1088,7 @@ const EntityCandidates = () => {
                                       else if (val.length > 2) formatted = `${val.substring(0, 2)}/${val.substring(2)}`
                                       handleFormChange("birth_date", formatted)
                                     }}
+                                    required
                                   />
                                 </div>
                 <div className="space-y-1.5">
@@ -1152,13 +1175,17 @@ const EntityCandidates = () => {
                         <div className="space-y-4">
                           <h3 className="text-sm font-semibold text-ink border-b pb-2">Información profesional</h3>
                           <div className="space-y-1.5">
-                            <Label>Profesión u oficio</Label>
+                            <Label>Profesión u oficio *</Label>
                             <SiteCorpInput
                               type="text"
                               placeholder="Ej.: Chofer profesional, Albañil, Técnico en redes"
                               value={formData.profession_or_trade}
                               onChange={(e) => handleFormChange("profession_or_trade", e.target.value)}
+                              required
                             />
+                            <p className="text-xs text-muted-foreground">
+                              Dato indispensable para el contrato. Es propio de la persona.
+                            </p>
                           </div>
                           <DrivingLicenseSelector
                             categories={licenseCategories}
@@ -1191,16 +1218,17 @@ const EntityCandidates = () => {
                               />
                             </div>
                             <div className="space-y-1.5 sm:col-span-2">
-                              <Label>Dirección</Label>
+                              <Label>Dirección particular *</Label>
                               <Textarea
                                 placeholder="Dirección completa"
                                 value={formData.address}
                                 onChange={(e) => handleFormChange("address", e.target.value)}
                                 rows={2}
+                                required
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label>Provincia</Label>
+                              <Label>Provincia *</Label>
                               <SiteCorpSelect
                                 value={formData.province || undefined}
                                 onValueChange={(value) => handleProvinceChange(value === "__placeholder__" ? "" : value)}
@@ -1214,7 +1242,7 @@ const EntityCandidates = () => {
                               </SiteCorpSelect>
                             </div>
                             <div className="space-y-1.5">
-                              <Label>Municipio</Label>
+                              <Label>Municipio *</Label>
                               <SiteCorpSelect
                                 value={formData.municipality || undefined}
                                 onValueChange={(value) => handleFormChange("municipality", value === "__placeholder__" ? "" : value)}

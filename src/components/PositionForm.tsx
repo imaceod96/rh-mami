@@ -303,6 +303,31 @@ export const PositionForm: React.FC<PositionFormProps> = ({
     const monthly = parseNullableNumber(monthlyHours)
     const breakValue = parseNullableNumber(breakMinutes)
 
+    // Integridad contractual: el lugar de trabajo, la jornada y el horario viven
+    // en el PUESTO y son indispensables para formalizar el contrato.
+    if (!workLocation.trim()) {
+      setFormError("El lugar de trabajo es obligatorio")
+      return
+    }
+    if (
+      daily === null || daily <= 0 ||
+      weekly === null || weekly <= 0 ||
+      monthly === null || monthly <= 0
+    ) {
+      setFormError(
+        "La jornada es obligatoria: indica horas diarias, semanales y mensuales mayores que 0"
+      )
+      return
+    }
+    if (breakValue === null) {
+      setFormError("El descanso (minutos) es obligatorio")
+      return
+    }
+    if (sortedSegments.length === 0 && !scheduleNotes.trim()) {
+      setFormError("El horario es obligatorio: añade segmentos de horario o una descripción")
+      return
+    }
+
     // Los valores deben ser >= 0; no se imponen límites legales no definidos
     const hourFields: [string, number | null][] = [
       ["Horas diarias", daily],
@@ -459,12 +484,13 @@ export const PositionForm: React.FC<PositionFormProps> = ({
           Ubicación
         </p>
         <div className="space-y-2">
-          <Label htmlFor="position-work-location">Lugar de trabajo</Label>
+          <Label htmlFor="position-work-location">Lugar de trabajo *</Label>
           <SiteCorpInput
             id="position-work-location"
             value={workLocation}
             onChange={(e) => setWorkLocation(e.target.value)}
             placeholder="Ej.: Almacén Central"
+            required
           />
           <p className="text-xs text-muted-foreground">
             Ubicación habitual donde se ejecuta el trabajo. Es independiente del área
@@ -480,33 +506,36 @@ export const PositionForm: React.FC<PositionFormProps> = ({
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="position-daily-hours">Horas diarias</Label>
+            <Label htmlFor="position-daily-hours">Horas diarias *</Label>
             <SiteCorpInput
               id="position-daily-hours"
               inputMode="decimal"
               value={dailyHours}
               onChange={(e) => setDailyHours(e.target.value)}
               placeholder="Ej.: 8"
+              required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="position-weekly-hours">Horas semanales</Label>
+            <Label htmlFor="position-weekly-hours">Horas semanales *</Label>
             <SiteCorpInput
               id="position-weekly-hours"
               inputMode="decimal"
               value={weeklyHours}
               onChange={(e) => setWeeklyHours(e.target.value)}
               placeholder="Ej.: 44"
+              required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="position-monthly-hours">Horas mensuales</Label>
+            <Label htmlFor="position-monthly-hours">Horas mensuales *</Label>
             <SiteCorpInput
               id="position-monthly-hours"
               inputMode="decimal"
               value={monthlyHours}
               onChange={(e) => setMonthlyHours(e.target.value)}
               placeholder="Ej.: 190.6"
+              required
             />
           </div>
         </div>
@@ -515,13 +544,14 @@ export const PositionForm: React.FC<PositionFormProps> = ({
           semanales.
         </p>
         <div className="space-y-2 sm:max-w-[240px]">
-          <Label htmlFor="position-break">Descanso (minutos)</Label>
+          <Label htmlFor="position-break">Descanso (minutos) *</Label>
           <SiteCorpInput
             id="position-break"
             inputMode="numeric"
             value={breakMinutes}
             onChange={(e) => setBreakMinutes(e.target.value)}
             placeholder="Ej.: 30"
+            required
           />
           <p className="text-xs text-muted-foreground">Se guarda como número de minutos.</p>
         </div>

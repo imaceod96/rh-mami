@@ -270,9 +270,9 @@ export const JobForm: React.FC<JobFormProps> = ({
       setFormError("El área es obligatoria")
       return
     }
-    // Fase 11A.2: obligatoria para cargos nuevos. Los cargos históricos sin
-    // categoría pueden completarse después sin bloquear su edición.
-    if (!selectedCategory && !editingJob) {
+    // Integridad contractual: la categoría ocupacional alimenta el contrato, por
+    // lo que debe completarse también al editar cargos históricos incompletos.
+    if (!selectedCategory) {
       setFormError("La categoría ocupacional es obligatoria")
       return
     }

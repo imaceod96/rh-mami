@@ -345,6 +345,28 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       setFormError("El carné de identidad es obligatorio")
       return
     }
+    // Integridad contractual: datos personales indispensables para formalizar
+    // correctamente el contrato (también al editar trabajadores históricos).
+    if (!form.birth_date.trim()) {
+      setFormError("La fecha de nacimiento es obligatoria")
+      return
+    }
+    if (!form.profession_or_trade.trim()) {
+      setFormError("La profesión u oficio es obligatoria")
+      return
+    }
+    if (!form.address.trim()) {
+      setFormError("La dirección particular es obligatoria")
+      return
+    }
+    if (!form.province.trim()) {
+      setFormError("La provincia es obligatoria")
+      return
+    }
+    if (!form.municipality.trim()) {
+      setFormError("El municipio es obligatorio")
+      return
+    }
     if (!form.hire_date) {
       setFormError("La fecha de incorporación es obligatoria")
       return
@@ -551,12 +573,13 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="worker-birth">Fecha de nacimiento</Label>
+          <Label htmlFor="worker-birth">Fecha de nacimiento *</Label>
           <SiteCorpInput
             id="worker-birth"
             type="date"
             value={form.birth_date}
             onChange={(e) => setField("birth_date", e.target.value)}
+            required
           />
           <p className="text-xs text-muted-foreground">Se autocompleta desde el CI.</p>
         </div>
@@ -612,18 +635,19 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="worker-address">Dirección</Label>
+        <Label htmlFor="worker-address">Dirección particular *</Label>
         <SiteCorpInput
           id="worker-address"
           value={form.address}
           onChange={(e) => setField("address", e.target.value)}
           placeholder="Calle, número, etc."
+          required
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="worker-province">Provincia</Label>
+          <Label htmlFor="worker-province">Provincia *</Label>
           <SiteCorpSelect value={form.province} onValueChange={handleProvinceChange}>
             <option value="">Seleccionar provincia</option>
             {CUBA_PROVINCES_FULL.map((name) => (
@@ -632,7 +656,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           </SiteCorpSelect>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="worker-municipality">Municipio</Label>
+          <Label htmlFor="worker-municipality">Municipio *</Label>
           <SiteCorpSelect
             value={form.municipality}
             onValueChange={(v) => setField("municipality", v)}
@@ -672,12 +696,13 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
       <div className="border-t border-border pt-4">
         <p className="mb-3 text-sm font-medium text-ink">Información profesional</p>
         <div className="space-y-2">
-          <Label htmlFor="worker-profession">Profesión u oficio</Label>
+          <Label htmlFor="worker-profession">Profesión u oficio *</Label>
           <SiteCorpInput
             id="worker-profession"
             value={form.profession_or_trade}
             onChange={(e) => setField("profession_or_trade", e.target.value)}
             placeholder="Ej.: Chofer profesional"
+            required
           />
           <p className="text-xs text-muted-foreground">
             Profesión real de la persona. No sustituye la profesión requerida del cargo.
