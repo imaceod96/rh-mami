@@ -6,38 +6,63 @@ import { supabase } from "@/lib/supabase"
  * Cada certificado es un EVENTO registrado en el historial del trabajador.
  * NO hay saldo, devengo, acumulación mensual, máximo anual (§2/§82).
  * La cantidad de días se introduce explícitamente, NO se calcula de fechas (§7).
- * El total anual se deriva de SUM(days) WHERE year(start_date) = selectedYear (§46).
+ * El total anual se deriva de SUM(days) WHERE year(start_date) = year (§46).
  * El documento es obligatorio y se almacena en storage privado (§11/§14).
- * RLS: SELECT gobernado por can_access_entity(...,'medical_certificates.view'|'manage').
- * La ESCRITURA se realiza SIEMPRE por RPC SECURITY DEFINER con validación backend.
+ *
+ * Lectura: SIEMPRE por RPC SECURITY DEFINER (list_worker_medical_certificates /
+ * list_entity_medical_certificates), que valida can_access_entity con
+ * 'medical_certificates.view' | 'medical_certificates.manage'. Una única
+ * consulta devuelve histórico + totales; no hay SELECT directo paralelo.
  */
 
-export interface MedicalCertificate {
+export interface MedicalCertificateDocument {
+  id: string | null
+  file_name: string | null
+  mime_type: string | null
+  file_size: number | null
+  storage_path: string | null
+}
+
+export interface WorkerMedicalCertificateRow {
   id: string
   worker_id: string
   start_date: string
   return_date: string
   days: number
   document_id: string | null
-  created_by: string | null
+  document: MedicalCertificateDocument | null
   created_at: string
   updated_at: string
 }
 
-export interface MedicalCertificateWithDocument extends MedicalCertificate {
-  document: {
-    id: string | null
-    file_name: string | null
-    mime_type: string | null
-    file_size: number | null
-    storage_path: string | null
-  } | null
-}
-
-export interface MedicalCertificateYearSummary {
-  year: number
+export interface WorkerMedicalCertificatesResult {
+  worker_id: string
+  year: number | null
+  certificates: WorkerMedicalCertificateRow[]
   total_days: number
   count: number
+}
+
+export interface EntityMedicalCertificateRow {
+  id: string
+  worker_id: string
+  worker_full_name: string
+  worker_identification: string
+  area_name: string | null
+  start_date: string
+  return_date: string
+  days: number
+  document: MedicalCertificateDocument | null
+  created_at: string
+}
+
+export interface EntityMedicalCertificatesResult {
+  entity_id: string
+  year: number | null
+  certificates: EntityMedicalCertificateRow[]
+  total_days: number
+  count: number
+  worker_count: number
 }
 
 const rpcError = (error: { message?: string } | null): never => {
@@ -45,8 +70,103 @@ const rpcError = (error: { message?: string } | null): never => {
 }
 
 /**
- * Registra un certificado médico (crea el registro + adjunta el documento).
- * El documento debe ser obligatorio y se almacena en worker_documents + storage privado.
+ * Histórico + totales anuales de UN trabajador (una sola consulta RPC).
+ * `year` filtra por año de la fecha de salida; null = todos los años.
+ */
+export async function fetchWorkerMedicalCertificates(
+  workerId: string,
+  year?: number | null
+): Promise<WorkerMedicalCertificatesResult> {
+  const { data, error } = await supabase.rpc("list_worker_medical_certificates", {
+    p_worker_id: workerId,
+    p_year: year ?? null,
+  })
+
+  if (error) rpcError(error)
+  return data as WorkerMedicalCertificatesResult
+}
+
+/**
+ * Listado global + KPIs de la entidad (una sola consulta RPC).
+ * Devuelve los certificados de los trabajadores de la entidad con nombre,
+ * CI y área, además de total_days / count / worker_count del período.
+ */
+export async function fetchEntityMedicalCertificates(
+  entityId: string,
+  year?: number | null
+): Promise<EntityMedicalCertificatesResult> {
+  const { data, error } = await supabase.rpc("list_entity_medical_certificates", {
+    p_entity_id: entityId,
+    p_year: year ?? null,
+  })
+
+  if (error) rpcError(error)
+  return data as EntityMedicalCertificatesResult
+}
+
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  "image/png",
+]
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+
+function validateDocumentFile(file: File) {
+  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    throw new Error("Formato no permitido. Usa PDF, DOC, DOCX, JPG, JPEG o PNG.")
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error("El archivo no puede superar los 10 MB.")
+  }
+}
+
+/** Sube el documento a storage privado y lo registra en worker_documents. */
+async function uploadCertificateDocument(workerId: string, file: File): Promise<string> {
+  validateDocumentFile(file)
+
+  const fileExt = file.name.split(".").pop()?.toLowerCase() || "file"
+  const storagePath = `workers/${workerId}/medical-certificates/${crypto.randomUUID()}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from("worker_documents")
+    .upload(storagePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type,
+    })
+
+  if (uploadError) {
+    throw new Error(`Error al subir el documento: ${uploadError.message}`)
+  }
+
+  const { data: docData, error: docError } = await supabase
+    .from("worker_documents")
+    .insert({
+      worker_id: workerId,
+      document_type_id: "CERTIFICATE",
+      file_name: file.name,
+      mime_type: file.type,
+      file_size: file.size,
+      storage_path: storagePath,
+      source: "MANUAL",
+      uploaded_by: (await supabase.auth.getUser()).data.user?.id || null,
+    })
+    .select("id")
+    .single()
+
+  if (docError) {
+    await supabase.storage.from("worker_documents").remove([storagePath])
+    throw new Error(`Error al registrar el documento: ${docError.message}`)
+  }
+
+  return docData.id
+}
+
+/**
+ * Registra un certificado médico (documento obligatorio + RPC SECURITY DEFINER).
  */
 export async function createMedicalCertificate(params: {
   worker_id: string
@@ -55,9 +175,10 @@ export async function createMedicalCertificate(params: {
   days: number
   document: File | null
 }): Promise<{ certificate_id: string }> {
-  // 1. Validaciones básicas
   if (!params.start_date || !params.return_date || !params.days) {
-    throw new Error("La fecha de salida, la fecha de reincorporación y la cantidad de días son obligatorias.")
+    throw new Error(
+      "La fecha de salida, la fecha de reincorporación y la cantidad de días son obligatorias."
+    )
   }
   if (params.return_date <= params.start_date) {
     throw new Error("La fecha de reincorporación debe ser posterior a la fecha de salida.")
@@ -65,70 +186,12 @@ export async function createMedicalCertificate(params: {
   if (params.days < 1) {
     throw new Error("La cantidad de días debe ser un entero positivo (≥1).")
   }
-
-  // 2. Subir el documento a worker_documents (storage privado)
-  let documentId: string | null = null
-  if (params.document) {
-    // Validar formato y tamaño
-    const allowedMimeTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "image/jpeg",
-      "image/png",
-    ]
-    if (!allowedMimeTypes.includes(params.document.type)) {
-      throw new Error("Formato no permitido. Usa PDF, DOC, DOCX, JPG, JPEG o PNG.")
-    }
-    if (params.document.size > 10 * 1024 * 1024) {
-      throw new Error("El archivo no puede superar los 10 MB.")
-    }
-
-    // Generar un nombre seguro para el storage (usar worker_id + timestamp + uuid)
-    const fileExt = params.document.name.split(".").pop()?.toLowerCase() || "file"
-    const storagePath = `workers/${params.worker_id}/medical-certificates/${crypto.randomUUID()}.${fileExt}`
-
-    // Subir a Supabase Storage (bucket privado)
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("worker_documents")
-      .upload(storagePath, params.document, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: params.document.type,
-      })
-
-    if (uploadError) {
-      throw new Error(`Error al subir el documento: ${uploadError.message}`)
-    }
-
-    // Insertar en worker_documents
-    const { data: docData, error: docError } = await supabase
-      .from("worker_documents")
-      .insert({
-        worker_id: params.worker_id,
-        document_type_id: "CERTIFICATE",
-        file_name: params.document.name,
-        mime_type: params.document.type,
-        file_size: params.document.size,
-        storage_path: storagePath,
-        source: "MANUAL",
-        uploaded_by: (await supabase.auth.getUser()).data.user?.id || null,
-      })
-      .select("id")
-      .single()
-
-    if (docError) {
-      // Si falla la inserción, intentar limpiar el archivo subido
-      await supabase.storage.from("worker_documents").remove([storagePath])
-      throw new Error(`Error al registrar el documento: ${docError.message}`)
-    }
-
-    documentId = docData.id
-  } else {
+  if (!params.document) {
     throw new Error("Debes adjuntar el certificado médico.")
   }
 
-  // 3. Llamar al RPC para crear el certificado médico
+  const documentId = await uploadCertificateDocument(params.worker_id, params.document)
+
   const { data, error } = await supabase.rpc("create_worker_medical_certificate", {
     p_worker_id: params.worker_id,
     p_start_date: params.start_date,
@@ -141,31 +204,7 @@ export async function createMedicalCertificate(params: {
   return data as { certificate_id: string }
 }
 
-/** Obtiene un certificado médico por su ID. */
-export async function getMedicalCertificate(certificateId: string): Promise<MedicalCertificateWithDocument> {
-  const { data, error } = await supabase.rpc("get_worker_medical_certificate", {
-    p_certificate_id: certificateId,
-  })
-
-  if (error) rpcError(error)
-  return data as MedicalCertificateWithDocument
-}
-
-/** Lista certificados médicos de un trabajador (opcionalmente filtrados por año). */
-export async function listMedicalCertificatesForWorker(
-  workerId: string,
-  year?: number
-): Promise<MedicalCertificateYearSummary> {
-  const { data, error } = await supabase.rpc("list_worker_medical_certificates", {
-    p_worker_id: workerId,
-    p_year: year || null,
-  })
-
-  if (error) rpcError(error)
-  return data as MedicalCertificateYearSummary
-}
-
-/** Actualiza un certificado médico existente. */
+/** Actualiza un certificado médico existente (fecha/días o documento). */
 export async function updateMedicalCertificate(params: {
   certificate_id: string
   start_date?: string
@@ -173,78 +212,21 @@ export async function updateMedicalCertificate(params: {
   days?: number
   document?: File | null
 }): Promise<void> {
-  // Si se proporciona un nuevo documento, subirlo primero
   let documentId: string | null = null
   if (params.document) {
-    // Validar formato y tamaño
-    const allowedMimeTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "image/jpeg",
-      "image/png",
-    ]
-    if (!allowedMimeTypes.includes(params.document.type)) {
-      throw new Error("Formato no permitido. Usa PDF, DOC, DOCX, JPG, JPEG o PNG.")
-    }
-    if (params.document.size > 10 * 1024 * 1024) {
-      throw new Error("El archivo no puede superar los 10 MB.")
-    }
-
-    // Obtener el worker_id del certificado para el storage path
     const { data: certData } = await supabase
       .from("worker_medical_certificates")
       .select("worker_id")
       .eq("id", params.certificate_id)
       .single()
 
-    const workerId = certData?.worker_id
-    if (!workerId) {
+    if (!certData?.worker_id) {
       throw new Error("No se pudo determinar el trabajador del certificado.")
     }
 
-    // Generar un nombre seguro para el storage
-    const fileExt = params.document.name.split(".").pop()?.toLowerCase() || "file"
-    const storagePath = `workers/${workerId}/medical-certificates/${crypto.randomUUID()}.${fileExt}`
-
-    // Subir a Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("worker_documents")
-      .upload(storagePath, params.document, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: params.document.type,
-      })
-
-    if (uploadError) {
-      throw new Error(`Error al subir el documento: ${uploadError.message}`)
-    }
-
-    // Insertar en worker_documents
-    const { data: docData, error: docError } = await supabase
-      .from("worker_documents")
-      .insert({
-        worker_id: workerId,
-        document_type_id: "CERTIFICATE",
-        file_name: params.document.name,
-        mime_type: params.document.type,
-        file_size: params.document.size,
-        storage_path: storagePath,
-        source: "MANUAL",
-        uploaded_by: (await supabase.auth.getUser()).data.user?.id || null,
-      })
-      .select("id")
-      .single()
-
-    if (docError) {
-      await supabase.storage.from("worker_documents").remove([storagePath])
-      throw new Error(`Error al registrar el documento: ${docError.message}`)
-    }
-
-    documentId = docData.id
+    documentId = await uploadCertificateDocument(certData.worker_id, params.document)
   }
 
-  // Llamar al RPC para actualizar el certificado médico
   const { error } = await supabase.rpc("update_worker_medical_certificate", {
     p_certificate_id: params.certificate_id,
     p_start_date: params.start_date || null,
@@ -254,4 +236,17 @@ export async function updateMedicalCertificate(params: {
   })
 
   if (error) rpcError(error)
+}
+
+/** Genera una signed URL de acceso al documento (solo bajo demanda del usuario). */
+export async function getCertificateSignedUrl(storagePath: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from("worker_documents")
+    .createSignedUrl(storagePath, 3600)
+
+  if (error) {
+    console.error("Error generating signed URL:", error)
+    return null
+  }
+  return data?.signedUrl ?? null
 }

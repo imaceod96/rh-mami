@@ -1,127 +1,91 @@
-import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { useQuery, type QueryClient } from "@tanstack/react-query"
 import {
-  listMedicalCertificatesForWorker,
-  type MedicalCertificateWithDocument,
-} from "@/lib/rpc/medical-certificates";
+  fetchEntityMedicalCertificates,
+  fetchWorkerMedicalCertificates,
+  type EntityMedicalCertificatesResult,
+  type WorkerMedicalCertificatesResult,
+} from "@/lib/rpc/medical-certificates"
 
-/** Medical Certificates — React Query keys (Fase 19).
- *  Toda query está SCOPEADA por entidad o por trabajador, de modo que cambiar de
- *  entidad nunca reutiliza cache de otra (§60/§88). Abrir la ficha ejecuta el
- *  fetch idempotente del backend.
+/**
+ * Certificados Médicos — React Query (Fase 19).
+ *
+ * Toda query está SCOPEADA por entidad y por trabajador/año, de modo que cambiar
+ * de entidad o de trabajador nunca reutiliza cache de otro (§60/§88).
+ *
+ * retry: 1 — los errores de esta familia (400 de validación / permiso) son
+ * deterministas: reintentar en bucle solo genera spam de peticiones (§31).
  */
 
-/** Query key para el historial y totales de un trabajador. */
 export const workerMedicalCertificatesQueryKey = (
+  entityId: string | null | undefined,
   workerId: string | null | undefined,
   year: number | null | undefined
-) => ["medical-certificates", "worker", workerId ?? "none", year ?? "all"] as const;
+) => ["medical-certificates", "worker", entityId ?? "none", workerId ?? "none", year ?? "all"] as const
 
-/** Query key para un certificado específico. */
-export const medicalCertificateQueryKey = (
-  certificateId: string | null | undefined
-) => ["medical-certificates", "certificate", certificateId ?? "none"] as const;
+export const entityMedicalCertificatesQueryKey = (
+  entityId: string | null | undefined,
+  year: number | null | undefined
+) => ["medical-certificates", "entity", entityId ?? "none", year ?? "all"] as const
 
-/** Datos de un certificado médico. */
-export interface MedicalCertificate {
-  id: string;
-  worker_id: string;
-  start_date: string;
-  return_date: string;
-  days: number;
-  document: {
-    id: string | null;
-    file_name: string | null;
-    mime_type: string | null;
-    file_size: number | null;
-    storage_path: string | null;
-  } | null;
-  created_at: string;
-  updated_at: string;
+const EMPTY_WORKER: WorkerMedicalCertificatesResult = {
+  worker_id: "",
+  year: null,
+  certificates: [],
+  total_days: 0,
+  count: 0,
 }
 
-/** Datos para el resumen anual. */
-export interface MedicalCertificateYearSummary {
-  year: number;
-  total_days: number;
-  count: number;
+const EMPTY_ENTITY: EntityMedicalCertificatesResult = {
+  entity_id: "",
+  year: null,
+  certificates: [],
+  total_days: 0,
+  count: 0,
+  worker_count: 0,
 }
 
-/** Datos del hook useMedicalCertificates. */
-export interface UseMedicalCertificatesResult {
-  certificates: MedicalCertificate[];
-  totalDays: number;
-  count: number;
-  loading: boolean;
-  error: Error | null;
-  refetch: () => Promise<void>;
-}
-
-/** Hook para obtener certificados médicos de un trabajador. */
-export function useMedicalCertificates(
+/** Histórico + totales anuales de UN trabajador (pestaña del expediente). */
+export function useWorkerMedicalCertificates(
+  entityId: string | null | undefined,
   workerId: string | null | undefined,
-  year: number | null | undefined = new Date().getFullYear(),
+  year: number | null | undefined,
   enabled = true
 ) {
-  return useQuery({
-    queryKey: workerMedicalCertificatesQueryKey(workerId, year),
+  return useQuery<WorkerMedicalCertificatesResult>({
+    queryKey: workerMedicalCertificatesQueryKey(entityId, workerId, year),
     queryFn: async () => {
-      if (!workerId) {
-        return {
-          certificates: [] as MedicalCertificate[],
-          totalDays: 0,
-          count: 0,
-        };
-      }
-
-      // Get the summary (total days and count) from RPC
-      const summary = await listMedicalCertificatesForWorker(workerId, year);
-
-      // Get the detailed certificates with document info
-      const { data, error } = await supabase
-        .from("worker_medical_certificates")
-        .select(`
-          id, worker_id, start_date, return_date, days,
-          document_id, document:worker_documents(id, file_name, mime_type, file_size, storage_path),
-          created_at, updated_at
-        `)
-        .eq("worker_id", workerId)
-        .order("start_date", { ascending: false });
-
-      if (error) throw error;
-
-      const certificates = (data || []).map((c: any) => ({
-        id: c.id,
-        worker_id: c.worker_id,
-        start_date: c.start_date,
-        return_date: c.return_date,
-        days: c.days,
-        document: c.document
-          ? {
-              id: c.document.id,
-              file_name: c.document.file_name,
-              mime_type: c.document.mime_type,
-              file_size: c.document.file_size,
-              storage_path: c.document.storage_path,
-            }
-          : null,
-        created_at: c.created_at,
-        updated_at: c.updated_at,
-      }));
-
-      return {
-        certificates,
-        totalDays: summary.total_days ?? 0,
-        count: summary.count ?? 0,
-      };
+      if (!workerId) return EMPTY_WORKER
+      return fetchWorkerMedicalCertificates(workerId, year ?? null)
     },
-    enabled: enabled && !!workerId,
-  });
+    enabled: enabled && !!entityId && !!workerId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
+  })
 }
 
-/** Invalida los datos de certificados médicos tras registrar/editar un certificado. */
+/** Listado global + KPIs de la entidad (página del módulo). */
+export function useEntityMedicalCertificates(
+  entityId: string | null | undefined,
+  year: number | null | undefined,
+  enabled = true
+) {
+  return useQuery<EntityMedicalCertificatesResult>({
+    queryKey: entityMedicalCertificatesQueryKey(entityId, year),
+    queryFn: async () => {
+      if (!entityId) return EMPTY_ENTITY
+      return fetchEntityMedicalCertificates(entityId, year ?? null)
+    },
+    enabled: enabled && !!entityId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
+  })
+}
+
+/** Invalida todos los datos de certificados tras registrar/editar. */
 export function invalidateMedicalCertificateData(queryClient: QueryClient) {
   queryClient.invalidateQueries({
     queryKey: ["medical-certificates"],
-  });
+  })
 }
