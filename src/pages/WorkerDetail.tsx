@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import WorkerVacationsTab from "@/components/vacations/WorkerVacationsTab"
+import WorkerMedicalCertificatesTab from "@/components/worker/WorkerMedicalCertificatesTab"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
@@ -267,6 +268,9 @@ const WorkerDetail = () => {
   const { has: hasEntityPermission } = useEntityPermissions(entityId)
   const canViewVacations = hasEntityPermission(["vacations.view", "vacations.manage"])
   const canManageVacations = hasEntityPermission(["vacations.manage"])
+  // Certificados médicos (Fase 19)
+  const canViewMedicalCerts = hasEntityPermission(["medical_certificates.view", "medical_certificates.manage"])
+  const canManageMedicalCerts = hasEntityPermission(["medical_certificates.manage"])
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
   // Fase 11A.3: horario habitual del puesto vigente (no se copia al trabajador)
   const [positionSegments, setPositionSegments] = React.useState<PositionScheduleSegment[]>([])
@@ -903,7 +907,7 @@ const WorkerDetail = () => {
 
       <Tabs defaultValue="resumen" className="w-full">
         <TabsList
-          className={`mb-4 grid w-full ${canViewVacations ? "max-w-2xl grid-cols-2 sm:grid-cols-4" : "max-w-xl grid-cols-3"}`}
+          className={`mb-4 grid w-full ${canViewVacations || canViewMedicalCerts ? "max-w-2xl grid-cols-2 sm:grid-cols-4" : "max-w-xl grid-cols-3"}`}
         >
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="contratacion">
@@ -916,6 +920,7 @@ const WorkerDetail = () => {
           </TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           {canViewVacations && <TabsTrigger value="vacaciones">Vacaciones</TabsTrigger>}
+          {canViewMedicalCerts && <TabsTrigger value="medical-certificates">Certificados médicos</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="resumen" className="space-y-6">
@@ -1674,6 +1679,16 @@ const WorkerDetail = () => {
               entityId={entityId as string}
               workerName={fullName(worker)}
               canManage={canManageVacations}
+            />
+          </TabsContent>
+        )}
+
+        {canViewMedicalCerts && (
+          <TabsContent value="medical-certificates" className="space-y-6">
+            <WorkerMedicalCertificatesTab
+              workerId={worker.id}
+              entityId={entityId as string}
+              canManage={canManageMedicalCerts}
             />
           </TabsContent>
         )}

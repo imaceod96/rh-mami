@@ -59,6 +59,12 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
     path: (id) => `/entity/${id}/vacations`,
     permissions: ["vacations.view", "vacations.manage"],
   },
+  {
+    key: "medical-certificates",
+    label: "Licencias / Certificados Médicos",
+    path: (id) => `/entity/${id}/workers`,
+    permissions: ["medical_certificates.view", "medical_certificates.manage"],
+  },
   { key: "settings", label: "Ajustes", path: (id) => `/entity/${id}/settings` },
 ]
 
