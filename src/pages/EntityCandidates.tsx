@@ -12,7 +12,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from "@/components/ui/pagination"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
-import { Users, Search, Edit3, Trash2, Plus, Upload, Eye } from "lucide-react"
+import { Users, Search, Edit3, Plus, Upload, Eye } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import {
   Dialog,
@@ -899,20 +899,9 @@ const EntityCandidates = () => {
                         <SiteCorpButton
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            console.log("Edit candidate:", candidate.id)
-                          }}
+                          onClick={() => navigate(`/entity/${entityId}/candidates/${candidate.id}/edit`)}
                         >
                           <Edit3 className="mr-1 h-3 w-3" />
-                        </SiteCorpButton>
-                        <SiteCorpButton
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            console.log("Archive candidate:", candidate.id)
-                          }}
-                        >
-                          <Trash2 className="mr-1 h-3 w-3" />
                         </SiteCorpButton>
                       </TableCell>
                     </TableRow>

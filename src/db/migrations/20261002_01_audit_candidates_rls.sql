@@ -1,0 +1,30 @@
+-- ============================================================================
+-- FASE — AUDITORÍA INTEGRAL / QA / ESTABILIZACIÓN
+-- Registro de cambios aplicados durante la auditoría (NO es una migración
+-- histórica; documenta una corrección puntual aplicada en la fase de auditoría).
+-- ============================================================================
+--
+-- ID: AUD-P1-01
+-- SEVERIDAD: P1 (seguridad / aislamiento multi-tenant)
+-- MÓDULO: Candidatos
+-- PROBLEMA:
+--   La tabla public.candidates tenía Row Level Security DESHABILITADO
+--   (relrowsecurity = false) aunque ya existían tres políticas
+--   (candidates_select_access / candidates_insert_access /
+--   candidates_update_access). Con RLS apagado, las políticas NO se evalúan:
+--   cualquier usuario autenticado podía leer/escribir candidatos de CUALQUIER
+--   entidad/workspace saltándose el aislamiento multi-tenant.
+-- CAUSA:
+--   La migración que creó las políticas no activó RLS en la tabla.
+-- CORRECCIÓN:
+--   Activar RLS. Las políticas existentes (basadas en can_access_entity →
+--   candidates.view / candidates.manage) pasan a aplicarse. No se añaden ni
+--   modifican políticas: el resto de tablas candidate_* ya tenían RLS activo.
+-- VERIFICACIÓN:
+--   · relrowsecurity = true para public.candidates.
+--   · El flujo de contratación (hire_candidate) es SECURITY DEFINER y no se ve
+--     afectado; los listados/lecturas del frontend ya exigen candidates.view/
+--     candidates.manage.
+-- ============================================================================
+
+ALTER TABLE public.candidates ENABLE ROW LEVEL SECURITY;

@@ -576,7 +576,6 @@ const OrganizationDetail = () => {
                       variant="outline"
                       onClick={() => {
                         // TODO: Implement direct access removal
-                        console.log("Remove direct access:", user.access_id)
                       }}
                     >
                       <Power className="mr-1 h-3.5 w-3.5" />

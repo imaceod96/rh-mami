@@ -1,0 +1,42 @@
+-- ============================================================================
+-- FASE — AUDITORÍA INTEGRAL / QA / ESTABILIZACIÓN
+-- Registro de cambios aplicados durante la auditoría (correcciones puntuales).
+-- ============================================================================
+--
+-- ID: AUD-P1-02
+-- SEVERIDAD: P1 (seguridad / aislamiento multi-tenant)
+-- MÓDULO: Trabajadores (RPC)
+-- PROBLEMA:
+--   La función public.get_worker_profile(uuid) era SECURITY DEFINER, SIN
+--   comprobación de autorización (can_access_entity) y SIN search_path fijo.
+--   Al ejecutarse como owner, evitaba RLS: cualquier usuario autenticado podía
+--   invocarla por PostgREST con un UUID conocido y obtener la ficha completa de
+--   un trabajador de CUALQUIER entidad (nombre, identificación, nacimiento,
+--   dirección, provincia, municipio, etc.). Bypass de RLS vía RPC (§101/§102).
+-- CAUSA:
+--   Función heredada de una fase anterior, sustituida por el modelo actual
+--   (worker_formalized_conditions + consultas directas de WorkerDetail).
+-- CONSUMIDORES VERIFICADOS (0):
+--   · src/ (frontend): 0 referencias.
+--   · supabase/functions: 0 referencias.
+--   · SQL (pg_proc.prosrc): 0 referencias desde otras funciones/vistas.
+--   · Sin datos propios, sin FK dependientes.
+-- ACCIÓN:
+--   DROP FUNCTION public.get_worker_profile(uuid);
+-- VERIFICACIÓN:
+--   · Función ausente. Ningún consumidor afectado (0 referencias).
+--
+-- ID: AUD-P1-03
+-- SEVERIDAD: P1 (endurecimiento)
+-- MÓDULO: Escalas salariales (RPC)
+-- PROBLEMA:
+--   public.resolve_salary_scale_for_entity(uuid) era SECURITY DEFINER sin
+--   search_path fijo (riesgo de resolución de objetos por search_path).
+--   Ya validaba auth.uid() y no filtra datos sensibles, por lo que no se
+--   reescribe su lógica.
+-- ACCIÓN:
+--   ALTER FUNCTION ... SET search_path = 'public', 'auth';
+-- ============================================================================
+
+DROP FUNCTION public.get_worker_profile(uuid);
+ALTER FUNCTION public.resolve_salary_scale_for_entity(uuid) SET search_path = 'public', 'auth';
