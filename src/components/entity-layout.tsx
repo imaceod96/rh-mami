@@ -24,6 +24,7 @@ import {
   requiresAttention,
 } from "@/lib/contract-alerts"
 import { ENTITY_INTERNAL_MODULES, hasSiteCorpAccount } from "@/lib/sitecorp-account"
+import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 
 const entityTypeLabels: Record<string, string> = {
   business_group: "Grupo empresarial",
@@ -74,6 +75,19 @@ const EntityLayout = React.forwardRef<
 
   // Los módulos internos solo existen cuando la entidad es Cuenta SiteCorp
   const modulesEnabled = hasSiteCorpAccount(currentEntity)
+
+  // Cada módulo del menú aparece según el permiso interno REAL del usuario en la
+  // entidad actual (nunca según una lista fija): el mismo motor que usa RLS.
+  const { permissions: entityPermissions } = useEntityPermissions(modulesEnabled ? entityId : null)
+
+  const visibleModules = React.useMemo(
+    () =>
+      ENTITY_INTERNAL_MODULES.filter((module) => {
+        if (!module.permissions || module.permissions.length === 0) return true
+        return module.permissions.some((code) => entityPermissions.includes(code))
+      }),
+    [entityPermissions]
+  )
 
   // Contador de contratos por tiempo determinado que requieren atención (≤ 30 días
   // o ya vencidos). Cálculo derivado: no se persiste ninguna alerta.
@@ -131,7 +145,7 @@ const EntityLayout = React.forwardRef<
           <div className="space-y-1">
             {entityId && modulesEnabled && (
               <>
-                {ENTITY_INTERNAL_MODULES.map((module) => (
+                {visibleModules.map((module) => (
                   <Link
                     key={module.key}
                     to={module.path(entityId)}

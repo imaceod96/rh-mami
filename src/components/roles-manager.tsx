@@ -23,6 +23,14 @@ import {
   type PlatformPermission,
 } from "@/lib/platform-permissions"
 import {
+  entityPermissionLabel,
+  fetchEntityPermissions,
+  groupEntityPermissions,
+  isInternalPermissionCode,
+  type EntityPermission,
+  type EntityPermissionGroup,
+} from "@/lib/entity-permissions"
+import {
   BadgeCheck,
   Eye,
   Pencil,
@@ -30,6 +38,7 @@ import {
   Power,
   Save,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react"
 
@@ -75,76 +84,25 @@ const emptyForm: RoleForm = {
   is_active: true,
 }
 
-// Las etiquetas y los grupos del catálogo de PLATAFORMA viven en
-// `@/lib/platform-permissions` (agrupados por la categoría del catálogo en BD).
-// `tenant_roles.*` se retiró del gestor global: los roles internos de una
-// entidad se administran dentro de la entidad, no desde Administración global.
-
-const organizationLabels: Record<string, string> = {
-  "organization.view": "Ver organización",
-  "organization.manage": "Gestionar organización",
-  "users.view": "Ver usuarios",
-  "users.manage": "Crear, editar y gestionar usuarios",
-  "users.invite": "Invitar usuarios",
-  "roles.view": "Ver roles de organización",
-  "roles.manage": "Crear y editar roles de organización",
-  "candidates.view": "Ver candidatos",
-  "candidates.manage": "Gestionar candidatos",
-  "staffing.view": "Ver plantilla / puestos",
-  "staffing.manage": "Gestionar plantilla / puestos",
-  "areas.view": "Ver áreas de la plantilla",
-  "areas.manage": "Gestionar áreas de la plantilla",
-  "hiring.view": "Ver contratación",
-  "hiring.manage": "Gestionar contratación",
-  "salary.view": "Ver compensación",
-  "salary.manage": "Gestionar compensación",
-  "reports.view": "Ver informes",
-}
-
-const organizationGroups: PermissionGroup[] = [
-  {
-    title: "ORGANIZACIÓN",
-    codes: ["organization.view", "organization.manage"],
-  },
-  {
-    title: "USUARIOS",
-    codes: ["users.view", "users.manage", "users.invite"],
-  },
-  {
-    title: "ROLES DE ORGANIZACIÓN",
-    codes: ["roles.view", "roles.manage"],
-  },
-  {
-    title: "CANDIDATOS",
-    codes: ["candidates.view", "candidates.manage"],
-  },
-  {
-    title: "PLANTILLA / PUESTOS",
-    codes: ["staffing.view", "staffing.manage"],
-  },
-  {
-    title: "CONTRATACIÓN",
-    codes: ["hiring.view", "hiring.manage"],
-  },
-  {
-    title: "COMPENSACIÓN",
-    codes: ["salary.view", "salary.manage"],
-  },
-  {
-    title: "INFORMES",
-    codes: ["reports.view"],
-  },
-]
+/**
+ * ÁMBITO DE ENTIDAD (Nivel 2): los roles internos pertenecen a UNA entidad
+ * (`tenant_roles.organization_entity_id`). El catálogo de permisos que se ofrece
+ * es el GLOBAL de permisos internos (`@/lib/entity-permissions`).
+ *
+ * ÁMBITO DE PLATAFORMA (Nivel 1): roles globales de SiteCorp con el catálogo de
+ * plataforma. `tenant_roles.*` NO vuelve a aparecer aquí: la administración de los
+ * roles internos se realiza dentro de cada entidad (`save_entity_role`).
+ */
 
 const permissionLabel = (scope: RoleScope, permission: PermissionOption) =>
   scope === "platform"
     ? platformPermissionLabel(permission)
-    : organizationLabels[permission.code] || permission.description || permission.code
+    : entityPermissionLabel(permission)
 
 const friendlySaveError = (scope: RoleScope, error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? "")
   const normalized = message.toLowerCase()
-  const roleLabel = scope === "platform" ? "rol de plataforma" : "rol de organización"
+  const roleLabel = scope === "platform" ? "rol de plataforma" : "rol de la entidad"
 
   if (
     normalized.includes("already exists") ||
@@ -165,17 +123,37 @@ const friendlySaveError = (scope: RoleScope, error: unknown) => {
   if (normalized.includes("activation status cannot be changed")) {
     return "El estado de un rol del sistema no puede cambiarse."
   }
+  if (normalized.includes("system role administrador is protected")) {
+    return "El rol Administrador es un rol del sistema protegido: no puede modificarse, desactivarse ni eliminarse."
+  }
+  if (normalized.includes("system organization role permissions cannot be reduced")) {
+    return "Los permisos del rol Administrador no pueden reducirse ni cambiarse."
+  }
   if (normalized.includes("superadmin permissions cannot")) {
     return "Los permisos reservados de SuperAdmin no pueden reducirse ni cambiarse."
   }
   if (normalized.includes("permission denied") || normalized.includes("row-level security")) {
-    return "No tienes permiso para gestionar roles en este ámbito."
+    return scope === "platform"
+      ? "No tienes permiso para gestionar roles de plataforma."
+      : "Necesitas el permiso «Gestionar roles y permisos» dentro de esta entidad."
   }
   if (normalized.includes("permissions are invalid")) {
     return "Uno o más permisos seleccionados no son válidos."
   }
+  if (normalized.includes("not internal entity permissions")) {
+    return "Sólo puedes asignar permisos internos de entidad. Los permisos de plataforma no están disponibles aquí."
+  }
+  if (normalized.includes("only assign internal permissions")) {
+    return "Sólo puedes asignar permisos internos que tú mismo tengas actualmente en esta entidad."
+  }
   if (normalized.includes("only assign platform permissions")) {
     return "Solo puedes asignar permisos de plataforma que actualmente posees."
+  }
+  if (normalized.includes("role was not found in this entity") || normalized.includes("role was not found")) {
+    return "El rol indicado no pertenece a esta entidad."
+  }
+  if (normalized.includes("cannot be deleted")) {
+    return "El rol no puede eliminarse: tiene usuarios o invitaciones asignadas, o es un rol del sistema."
   }
   if (normalized.includes("workspace was not found")) {
     return "El workspace de organización no existe."
@@ -185,10 +163,10 @@ const friendlySaveError = (scope: RoleScope, error: unknown) => {
 
 export const RolesManager = ({
   scope,
-  tenantId,
   organizationEntityId,
 }: {
   scope: RoleScope
+  /** Compatibilidad: se conserva la firma; el ámbito de entidad se rige por entidad. */
   tenantId?: string
   organizationEntityId?: string
 }) => {
@@ -198,6 +176,9 @@ export const RolesManager = ({
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState<string | null>(null)
+  // Clave del último conjunto de datos cargado: evita mostrar roles de otra entidad
+  // mientras se resuelve la nueva consulta (nunca se comparte caché entre entidades).
+  const [loadedKey, setLoadedKey] = React.useState<string | null>(null)
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editingRole, setEditingRole] = React.useState<RoleRecord | null>(null)
@@ -207,13 +188,15 @@ export const RolesManager = ({
   const [formError, setFormError] = React.useState<string | null>(null)
   const [viewingRole, setViewingRole] = React.useState<RoleRecord | null>(null)
 
-  const organizationReady = scope === "organization" && Boolean(tenantId)
   const entityReady = scope === "organization" && Boolean(organizationEntityId)
+  const dataKey = isPlatform ? "platform" : organizationEntityId || ""
 
   const loadData = React.useCallback(async () => {
-    if (scope === "organization" && !tenantId) {
+    if (scope === "organization" && !organizationEntityId) {
       setRoles([])
+      setPermissions([])
       setLoading(false)
+      setLoadedKey(dataKey)
       return
     }
 
@@ -226,7 +209,6 @@ export const RolesManager = ({
         : supabase
             .from("tenant_roles")
             .select("*")
-            .eq("tenant_id", tenantId as string)
             .eq("organization_entity_id", organizationEntityId as string)
             .order("name")
 
@@ -234,7 +216,7 @@ export const RolesManager = ({
         rolesRequest,
         isPlatform
           ? fetchPlatformPermissions().then((data) => ({ data, error: null }))
-          : supabase.from("tenant_permissions").select("*").order("code"),
+          : fetchEntityPermissions().then((data) => ({ data, error: null })),
       ])
 
       if (rolesResult.error) throw rolesResult.error
@@ -259,7 +241,7 @@ export const RolesManager = ({
       const mappingsResult = await mappingsRequest
       if (mappingsResult.error) throw mappingsResult.error
 
-      let assignmentRows: Record<string, string>[] = []
+      let assignmentRows: { roleId: string; userId: string }[] = []
 
       if (roleIds.length > 0) {
         if (isPlatform) {
@@ -273,33 +255,33 @@ export const RolesManager = ({
             userId: row.user_id,
           }))
         } else {
-          const entityAssignments = await supabase
-            .from("entity_user_access")
-            .select("tenant_role_id,tenant_membership_id")
-            .in("tenant_role_id", roleIds)
+          const [entityAssignments, legacyAssignments] = await Promise.all([
+            supabase
+              .from("entity_user_access")
+              .select("tenant_role_id,tenant_membership_id")
+              .in("tenant_role_id", roleIds),
+            supabase
+              .from("tenant_user_roles")
+              .select("tenant_role_id,tenant_membership_id")
+              .in("tenant_role_id", roleIds),
+          ])
           if (entityAssignments.error) throw entityAssignments.error
-
-          const legacyAssignments = await supabase
-            .from("tenant_user_roles")
-            .select("tenant_role_id,tenant_membership_id")
-            .in("tenant_role_id", roleIds)
           if (legacyAssignments.error) throw legacyAssignments.error
 
-          assignmentRows = [...entityAssignments.data || [], ...legacyAssignments.data || []].map(
-            (row: any) => ({
-              roleId: row.tenant_role_id,
-              userId: row.tenant_membership_id,
-            })
-          )
+          assignmentRows = [
+            ...(entityAssignments.data || []),
+            ...(legacyAssignments.data || []),
+          ].map((row: any) => ({
+            roleId: row.tenant_role_id,
+            userId: row.tenant_membership_id,
+          }))
         }
       }
 
       const mappings = (mappingsResult.data || []) as any[]
       const roleRecords = roleRows.map((role: any) => {
         const roleMappings = mappings.filter((mapping) =>
-          isPlatform
-            ? mapping.platform_role_id === role.id
-            : mapping.tenant_role_id === role.id
+          isPlatform ? mapping.platform_role_id === role.id : mapping.tenant_role_id === role.id
         )
         const permissionIds = isPlatform
           ? roleMappings.map((mapping) => mapping.platform_permission_id)
@@ -317,9 +299,9 @@ export const RolesManager = ({
             )
             .filter(Boolean),
           assignedUserCount: new Set(
-            assignmentRows.filter((assignment) => assignment.roleId === role.id).map(
-              (assignment) => assignment.userId
-            )
+            assignmentRows
+              .filter((assignment) => assignment.roleId === role.id)
+              .map((assignment) => assignment.userId)
           ).size,
           organizationEntityId: role.organization_entity_id || null,
         } as RoleRecord
@@ -327,12 +309,13 @@ export const RolesManager = ({
 
       setRoles(roleRecords)
       setPermissions(permissionsResult.data || [])
+      setLoadedKey(dataKey)
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar la información de roles.")
     } finally {
       setLoading(false)
     }
-  }, [isPlatform, scope, tenantId, organizationEntityId])
+  }, [isPlatform, scope, organizationEntityId, dataKey])
 
   React.useEffect(() => {
     loadData()
@@ -366,10 +349,12 @@ export const RolesManager = ({
     setFormError(null)
   }
 
-  const permissionsLocked =
-    isPlatform &&
-    editingRole?.name === "SuperAdmin" &&
-    Boolean(editingRole?.is_system_role)
+  // El rol Administrador (y SuperAdmin en plataforma) es un rol del sistema:
+  // sus permisos y metadatos están completamente protegidos.
+  const isProtectedRole = (role: RoleRecord | null) =>
+    Boolean(role?.is_system_role) && (isPlatform ? role?.name === "SuperAdmin" : true)
+
+  const permissionsLocked = isProtectedRole(editingRole)
 
   const saveRole = async (
     nextForm: RoleForm,
@@ -384,10 +369,9 @@ export const RolesManager = ({
           p_is_active: nextForm.is_active,
           p_permission_ids: nextPermissionIds,
         })
-      : supabase.rpc("save_tenant_role", {
+      : supabase.rpc("save_entity_role", {
+          p_entity_id: organizationEntityId,
           p_role_id: role?.id || null,
-          p_tenant_id: tenantId,
-          p_organization_entity_id: organizationEntityId,
           p_name: nextForm.name,
           p_description: nextForm.description,
           p_is_active: nextForm.is_active,
@@ -414,7 +398,7 @@ export const RolesManager = ({
           ? "Rol actualizado correctamente."
           : isPlatform
             ? "Rol de plataforma creado correctamente."
-            : "Rol de organización creado correctamente."
+            : "Rol creado correctamente en esta entidad."
       )
       closeDialog()
       await loadData()
@@ -456,20 +440,18 @@ export const RolesManager = ({
       setSuccess(null)
       setSaving(true)
 
-      if (isPlatform && role.name === "SuperAdmin" && role.is_system_role) {
-        throw new Error("El rol SuperAdmin no puede eliminarse")
+      if (isProtectedRole(role)) {
+        throw new Error("The system role Administrador is protected")
       }
 
-      // Check if role has assigned users
       if (role.assignedUserCount > 0) {
-        throw new Error("No se puede eliminar un rol que tiene usuarios asignados")
+        throw new Error("A role assigned to users or invitations cannot be deleted")
       }
 
-      const request = isPlatform
-        ? supabase.from("platform_roles").delete().eq("id", role.id)
-        : supabase.from("tenant_roles").delete().eq("id", role.id)
+      const { error: deleteError } = isPlatform
+        ? await supabase.from("platform_roles").delete().eq("id", role.id)
+        : await supabase.rpc("delete_entity_role", { p_role_id: role.id })
 
-      const { error: deleteError } = await request
       if (deleteError) throw deleteError
 
       setSuccess("Rol eliminado correctamente.")
@@ -489,38 +471,29 @@ export const RolesManager = ({
     )
   }
 
-  // Nivel 1 (plataforma): sólo se ofrecen permisos del catálogo de plataforma.
-  // Los permisos internos de entidad (jobs.*, tenant_roles.*, …) nunca aparecen
-  // aquí: se administran dentro de cada entidad.
-  const selectablePermissions = React.useMemo(
-    () =>
-      isPlatform
-        ? permissions.filter((permission) => permission.is_platform_scope !== false)
-        : permissions,
-    [isPlatform, permissions]
-  )
+  // Nivel 1 (plataforma): sólo el catálogo de plataforma.
+  // Nivel 2 (entidad): sólo el catálogo global de permisos INTERNOS.
+  const selectablePermissions = React.useMemo(() => {
+    if (isPlatform) {
+      return permissions.filter((permission) => permission.is_platform_scope !== false)
+    }
+    return permissions.filter((permission) => isInternalPermissionCode(permission.code))
+  }, [isPlatform, permissions])
 
   const allGroups: PermissionGroup[] = React.useMemo(() => {
     if (isPlatform) {
       return groupPlatformPermissions(permissions as PlatformPermission[])
     }
-
-    const groupedCodes = new Set(organizationGroups.flatMap((group) => group.codes))
-    const additionalPermissions = permissions.filter(
-      (permission) => !groupedCodes.has(permission.code)
+    return groupEntityPermissions(permissions as EntityPermission[]).map(
+      (group: EntityPermissionGroup) => ({ title: group.title, codes: group.codes })
     )
-    const groups: PermissionGroup[] = [...organizationGroups]
-    if (additionalPermissions.length > 0) {
-      groups.push({
-        title: "OTROS PERMISOS DEL SISTEMA",
-        codes: additionalPermissions.map((permission) => permission.code),
-      })
-    }
-    return groups
   }, [isPlatform, permissions])
 
   const renderPermissionCheckbox = (permission: PermissionOption) => {
-    const checked = selectedPermissionIds.includes(permission.id)
+    const checked =
+      selectedPermissionIds.includes(permission.id) ||
+      // Un rol del sistema ya tiene TODOS los permisos internos: se muestran marcados.
+      (permissionsLocked && !isPlatform)
 
     return (
       <label
@@ -534,9 +507,7 @@ export const RolesManager = ({
           onCheckedChange={() => togglePermission(permission.id)}
         />
         <span className="min-w-0">
-          <span className="block font-medium text-ink">
-            {permissionLabel(scope, permission)}
-          </span>
+          <span className="block font-medium text-ink">{permissionLabel(scope, permission)}</span>
           <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
             {permission.code}
           </span>
@@ -545,13 +516,15 @@ export const RolesManager = ({
     )
   }
 
+  const showRoles = !loading && loadedKey === dataKey
+
   return (
     <SiteCorpCard
-      title={isPlatform ? "Roles de plataforma" : "Roles de organización"}
+      title={isPlatform ? "Roles de plataforma" : "Roles internos de la entidad"}
       description={
         isPlatform
           ? "Controlan qué pueden hacer los administradores y operadores de SiteCorp."
-          : "Definen QUÉ puede hacer un usuario; el acceso a entidades define DÓNDE puede hacerlo."
+          : "Cada entidad tiene sus PROPIOS roles. El rol define QUÉ puede hacer un usuario; el acceso a entidades define DÓNDE puede hacerlo."
       }
     >
       <div className="space-y-4">
@@ -565,14 +538,9 @@ export const RolesManager = ({
             {success}
           </SiteCorpAlert>
         )}
-        {!organizationReady && scope === "organization" && (
-          <SiteCorpAlert type="warning" title="Workspace requerido">
-            Selecciona un workspace de organización para gestionar sus roles.
-          </SiteCorpAlert>
-        )}
         {!entityReady && scope === "organization" && (
           <SiteCorpAlert type="warning" title="Entidad requerida">
-            Selecciona una entidad organizativa para gestionar sus roles.
+            Selecciona una entidad organizativa para gestionar sus roles internos.
           </SiteCorpAlert>
         )}
 
@@ -580,92 +548,110 @@ export const RolesManager = ({
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <BadgeCheck className="h-4 w-4 text-sitecorp-primary" />
             {roles.length} {roles.length === 1 ? "rol" : "roles"} ·{" "}
-            {selectablePermissions.length} permisos {isPlatform ? "de plataforma" : "del sistema"}
+            {selectablePermissions.length} permisos {isPlatform ? "de plataforma" : "internos"}
           </div>
-          <SiteCorpButton
-            onClick={openCreate}
-            disabled={scope === "organization" && !entityReady}
-          >
+          <SiteCorpButton onClick={openCreate} disabled={scope === "organization" && !entityReady}>
             <Plus className="mr-2 h-4 w-4" />
             {isPlatform ? "Nuevo rol de plataforma" : "Nuevo rol"}
           </SiteCorpButton>
         </div>
 
-        {loading ? (
+        {!showRoles ? (
           <SiteCorpLoading rows={5} />
         ) : roles.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             {isPlatform
               ? "No hay roles de plataforma disponibles."
-              : "Esta entidad aún no tiene roles de organización."}
+              : "Esta entidad aún no tiene roles internos."}
           </div>
         ) : (
           <div className="space-y-3">
-            {roles.map((role) => (
-              <article
-                key={role.id}
-                className="flex flex-col gap-4 rounded-2xl border border-border bg-white p-4 lg:flex-row lg:items-center lg:justify-between"
-              >
-                <div className="min-w-0 space-y-2">
+            {roles.map((role) => {
+              const protectedRole = isProtectedRole(role)
+              return (
+                <article
+                  key={role.id}
+                  className="flex flex-col gap-4 rounded-2xl border border-border bg-white p-4 lg:flex-row lg:items-center lg:justify-between"
+                >
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-ink">{role.name}</h3>
+                      {role.is_system_role ? (
+                        <SiteCorpStatusBadge status="info">Rol del sistema</SiteCorpStatusBadge>
+                      ) : (
+                        <SiteCorpStatusBadge status="neutral">Personalizado</SiteCorpStatusBadge>
+                      )}
+                      <SiteCorpStatusBadge status={role.is_active ? "success" : "warning"}>
+                        {role.is_active ? "Activo" : "Inactivo"}
+                      </SiteCorpStatusBadge>
+                      {protectedRole && (
+                        <SiteCorpStatusBadge status="success">Protegido</SiteCorpStatusBadge>
+                      )}
+                    </div>
+
+                    {role.description && (
+                      <p className="max-w-3xl text-sm text-muted-foreground">{role.description}</p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <ShieldCheck className="h-3.5 w-3.5 text-sitecorp-primary" />
+                        {isPlatform && role.name === "SuperAdmin"
+                          ? "Acceso completo por diseño"
+                          : `${role.permissionIds.length} permisos`}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5 text-sitecorp-primary" />
+                        {role.assignedUserCount} usuarios asignados
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold text-ink">{role.name}</h3>
-                    {role.is_system_role ? (
-                      <SiteCorpStatusBadge status="info">Rol del sistema</SiteCorpStatusBadge>
-                    ) : (
-                      <SiteCorpStatusBadge status="neutral">Personalizado</SiteCorpStatusBadge>
-                    )}
-                    <SiteCorpStatusBadge status={role.is_active ? "success" : "warning"}>
-                      {role.is_active ? "Activo" : "Inactivo"}
-                    </SiteCorpStatusBadge>
-                    {isPlatform && role.name === "SuperAdmin" && role.is_system_role && (
-                      <SiteCorpStatusBadge status="success">Acceso completo reservado</SiteCorpStatusBadge>
-                    )}
-                  </div>
-
-                  {role.description && (
-                    <p className="max-w-3xl text-sm text-muted-foreground">{role.description}</p>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <ShieldCheck className="h-3.5 w-3.5 text-sitecorp-primary" />
-                      {isPlatform && role.name === "SuperAdmin"
-                        ? "Acceso completo por diseño"
-                        : `${role.permissionIds.length} permisos`}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Users className="h-3.5 w-3.5 text-sitecorp-primary" />
-                      {role.assignedUserCount} usuarios asignados
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <SiteCorpButton size="sm" variant="outline" onClick={() => setViewingRole(role)}>
-                    <Eye className="mr-1 h-3.5 w-3.5" /> Ver permisos
-                  </SiteCorpButton>
-                  <SiteCorpButton
-                    size="sm"
-                    variant="outline"
-                    disabled={isPlatform && role.name === "SuperAdmin" && role.is_system_role}
-                    onClick={() => openEdit(role)}
-                  >
-                    <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
-                  </SiteCorpButton>
-                  {!role.is_system_role && (
+                    <SiteCorpButton size="sm" variant="outline" onClick={() => setViewingRole(role)}>
+                      <Eye className="mr-1 h-3.5 w-3.5" /> Ver permisos
+                    </SiteCorpButton>
                     <SiteCorpButton
                       size="sm"
                       variant="outline"
-                      disabled={saving}
-                      onClick={() => deleteRole(role)}
+                      disabled={protectedRole}
+                      onClick={() => openEdit(role)}
                     >
-                      <Power className="mr-1 h-3.5 w-3.5" />
-                      {role.is_active ? "Desactivar" : "Activar"}
+                      <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                     </SiteCorpButton>
-                  )}
-                </div>
-              </article>
-            ))}
+                    {!protectedRole && (
+                      <>
+                        <SiteCorpButton
+                          size="sm"
+                          variant="outline"
+                          disabled={saving}
+                          onClick={() => toggleActive(role)}
+                        >
+                          <Power className="mr-1 h-3.5 w-3.5" />
+                          {role.is_active ? "Desactivar" : "Activar"}
+                        </SiteCorpButton>
+                        <SiteCorpButton
+                          size="sm"
+                          variant="outline"
+                          disabled={saving}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `¿Eliminar el rol «${role.name}»? Esta acción no puede deshacerse.`
+                              )
+                            ) {
+                              void deleteRole(role)
+                            }
+                          }}
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
+                        </SiteCorpButton>
+                      </>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
           </div>
         )}
 
@@ -678,12 +664,12 @@ export const RolesManager = ({
                   ? `Editar ${editingRole.name}`
                   : isPlatform
                     ? "Nuevo rol de plataforma"
-                    : "Nuevo rol de organización"}
+                    : "Nuevo rol interno de la entidad"}
               </DialogTitle>
               <DialogDescription>
                 {isPlatform
                   ? "Los permisos seleccionados controlan la administración de la plataforma SiteCorp."
-                  : "El rol define las capacidades. El acceso a entidades organizativas se gestiona por separado."}
+                  : "El rol define las capacidades dentro de ESTA entidad. Los permisos de plataforma no están disponibles aquí."}
               </DialogDescription>
             </DialogHeader>
 
@@ -694,9 +680,10 @@ export const RolesManager = ({
             )}
 
             {permissionsLocked && (
-              <SiteCorpAlert type="info" title="Rol reservado">
-                SuperAdmin tiene acceso completo mediante la función reservada del sistema. Sus
-                permisos normales no pueden reducirse ni cambiarse.
+              <SiteCorpAlert type="info" title="Rol del sistema protegido">
+                {isPlatform
+                  ? "SuperAdmin tiene acceso completo mediante la función reservada del sistema. Sus permisos normales no pueden reducirse ni cambiarse."
+                  : "Administrador es el rol del sistema de esta entidad: conserva todos los permisos internos y no puede modificarse, desactivarse ni eliminarse."}
               </SiteCorpAlert>
             )}
 
@@ -707,7 +694,7 @@ export const RolesManager = ({
                   <SiteCorpInput
                     value={form.name}
                     onChange={(event) => setForm({ ...form, name: event.target.value })}
-                    disabled={Boolean(editingRole?.is_system_role)}
+                    disabled={permissionsLocked}
                     required
                   />
                 </div>
@@ -718,6 +705,7 @@ export const RolesManager = ({
                     value={form.description}
                     onChange={(event) => setForm({ ...form, description: event.target.value })}
                     placeholder="Descripción opcional"
+                    disabled={permissionsLocked}
                   />
                 </div>
               </div>
@@ -726,7 +714,7 @@ export const RolesManager = ({
                 label="Estado"
                 value={form.is_active ? "active" : "inactive"}
                 onValueChange={(value) => setForm({ ...form, is_active: value === "active" })}
-                disabled={Boolean(editingRole?.is_system_role)}
+                disabled={permissionsLocked}
               >
                 <SelectItem value="active">Activo</SelectItem>
                 <SelectItem value="inactive">Inactivo</SelectItem>
@@ -735,7 +723,9 @@ export const RolesManager = ({
               <div className="space-y-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-medium text-ink">Permisos del sistema</p>
+                    <p className="text-sm font-medium text-ink">
+                      {isPlatform ? "Permisos del sistema" : "Permisos internos de la entidad"}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {selectedPermissionIds.length} seleccionados · catálogo controlado por base de
                       datos
@@ -767,7 +757,7 @@ export const RolesManager = ({
                 <SiteCorpButton type="button" variant="outline" onClick={closeDialog} disabled={saving}>
                   Cancelar
                 </SiteCorpButton>
-                <SiteCorpButton type="submit" disabled={saving}>
+                <SiteCorpButton type="submit" disabled={saving || permissionsLocked}>
                   <Save className="mr-2 h-4 w-4" />
                   {saving ? "Guardando..." : editingRole ? "Guardar cambios" : "Crear rol"}
                 </SiteCorpButton>
@@ -791,16 +781,14 @@ export const RolesManager = ({
               <DialogDescription>
                 {viewingRole?.is_system_role
                   ? "Rol del sistema con controles protegidos."
-                  : "Rol personalizado construido a partir del catálogo de permisos."}
+                  : "Rol personalizado construido a partir del catálogo de permisos internos."}
               </DialogDescription>
             </DialogHeader>
 
             {viewingRole && (
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  <SiteCorpStatusBadge
-                    status={viewingRole.is_active ? "success" : "warning"}
-                  >
+                  <SiteCorpStatusBadge status={viewingRole.is_active ? "success" : "warning"}>
                     {viewingRole.is_active ? "Activo" : "Inactivo"}
                   </SiteCorpStatusBadge>
                   <SiteCorpStatusBadge status="neutral">
@@ -840,8 +828,8 @@ export const RolesManager = ({
           </DialogContent>
         </Dialog>
       </div>
-          </SiteCorpCard>
-        )
-      }
-      
-      export default RolesManager
+    </SiteCorpCard>
+  )
+}
+
+export default RolesManager

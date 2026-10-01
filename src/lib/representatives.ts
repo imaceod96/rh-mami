@@ -99,22 +99,25 @@ export async function fetchEntityContractData(
   return (data as EntityContractData) || null
 }
 
+/**
+ * Guardado de los datos contractuales de la entidad mediante la función SQL
+ * `save_entity_contract_data`, que exige el permiso interno `contract_data.manage`
+ * en esa entidad (el permiso no se comprueba sólo en el frontend).
+ */
 export async function saveEntityContractData(
   entityId: string,
   input: EntityContractDataInput
 ): Promise<void> {
-  const { error } = await supabase
-    .from("organization_entities")
-    .update({
-      organism: input.organism,
-      branch: input.branch,
-      labor_identification_code: input.labor_identification_code,
-      address: input.address,
-      province: input.province,
-      municipality: input.municipality,
-      revolution_year: input.revolution_year,
-    })
-    .eq("id", entityId)
+  const { error } = await supabase.rpc("save_entity_contract_data", {
+    p_entity_id: entityId,
+    p_organism: input.organism,
+    p_branch: input.branch,
+    p_labor_identification_code: input.labor_identification_code,
+    p_address: input.address,
+    p_province: input.province,
+    p_municipality: input.municipality,
+    p_revolution_year: input.revolution_year,
+  })
 
   if (error) throw error
 }

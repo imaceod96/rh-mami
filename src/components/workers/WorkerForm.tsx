@@ -260,10 +260,10 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     if (!entityId) return
     supabase
       .rpc("can_access_entity", {
-        target_entity_id: entityId,
-        permission_code: "organization.manage",
-      })
-      .then(({ data }) => setCanManageOrganization(!!data))
+              target_entity_id: entityId,
+              permission_code: "contract_data.manage",
+            })
+            .then(({ data }) => setCanManageOrganization(!!data))
   }, [entityId])
 
   const municipalities = React.useMemo(

@@ -97,19 +97,19 @@ const EntitySettingsContractData = () => {
     try {
       const { data: canView } = await supabase.rpc("can_access_entity", {
         target_entity_id: entityId,
-        permission_code: "organization.view",
+        permission_code: "contract_data.view",
       })
-      const { data: canManageOrganization } = await supabase.rpc("can_access_entity", {
+      const { data: canManageContractData } = await supabase.rpc("can_access_entity", {
         target_entity_id: entityId,
-        permission_code: "organization.manage",
+        permission_code: "contract_data.manage",
       })
 
-      if (!canView && !canManageOrganization) {
+      if (!canView && !canManageContractData) {
         setNotAllowed("No tiene permiso para ver los datos contractuales de esta entidad.")
         return
       }
 
-      setCanManage(!!canManageOrganization)
+      setCanManage(!!canManageContractData)
 
       const data = await fetchEntityContractData(entityId)
       if (data) {
@@ -334,7 +334,8 @@ const EntitySettingsContractData = () => {
           </div>
         ) : (
           <p className="pt-4 text-xs text-muted-foreground">
-            Solo los usuarios autorizados para configurar la organización pueden modificar estos datos.
+            Solo los usuarios con el permiso «Gestionar datos contractuales» en esta entidad pueden
+            modificar estos datos.
           </p>
         )}
       </SiteCorpCard>

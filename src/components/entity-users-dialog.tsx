@@ -93,6 +93,15 @@ const friendlyError = (error: unknown, fallback: string) => {
   if (normalized.includes("row-level security")) {
     return "No tienes permiso para realizar esta acción en esta entidad."
   }
+  if (normalized.includes("must belong to the same organization entity")) {
+    return "El rol seleccionado no pertenece a esta entidad. Selecciona un rol interno de esta entidad."
+  }
+  if (normalized.includes("invitation role must belong to the invited")) {
+    return "El rol de la invitación debe pertenecer a esta entidad."
+  }
+  if (normalized.includes("entity invitations require an organization role")) {
+    return "Las invitaciones desde una entidad requieren un rol interno de esa entidad."
+  }
   if (normalized.includes("users.manage") || normalized.includes("users.invite")) {
     const permission = normalized.includes("users.invite") ? "users.invite" : "users.manage"
     return errorMessages[permission]
@@ -144,10 +153,12 @@ export const EntityUsersDialog = ({
             .select("id,user_id,tenant_id,is_active")
             .eq("tenant_id", entity.tenant_id)
             .eq("is_active", true),
+          // Sólo los roles PROPIOS de esta entidad: un rol de otra entidad del
+          // mismo workspace no puede asignarse aquí (el backend lo rechaza además).
           supabase
             .from("tenant_roles")
             .select("id,name,is_active")
-            .eq("tenant_id", entity.tenant_id)
+            .eq("organization_entity_id", entity.id)
             .eq("is_active", true)
             .order("name"),
           supabase.rpc("can_access_entity", {

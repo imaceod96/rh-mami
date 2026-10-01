@@ -225,10 +225,10 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       setSalaryValuesByGroup(await fetchSalaryValuesForGroups(groupIds))
 
       const { data: canManageOrg } = await supabase.rpc("can_access_entity", {
-        target_entity_id: entityId,
-        permission_code: "organization.manage",
-      })
-      setCanManageOrganization(!!canManageOrg)
+              target_entity_id: entityId,
+              permission_code: "contract_data.manage",
+            })
+            setCanManageOrganization(!!canManageOrg)
     } catch (err) {
       console.error("Error loading reincorporation data:", err)
       setLoadError("No se pudieron cargar los puestos disponibles.")

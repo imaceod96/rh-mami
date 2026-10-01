@@ -85,22 +85,29 @@ const EntityContractAlerts = () => {
     setError(null)
 
     try {
-      const [canView, canViewManage] = await Promise.all([
+      // Módulo esencialmente de lectura: se accede con «Ver alertas de contratos».
+      // Las operaciones contractuales (cambio de contrato, bajas) siguen requiriendo
+      // los permisos de contrato/trabajadores correspondientes.
+      const [canViewAlerts, canViewWorkers, canManageContracts] = await Promise.all([
+        supabase.rpc("can_access_entity", {
+          target_entity_id: entityId,
+          permission_code: "contract_alerts.view",
+        }),
         supabase.rpc("can_access_entity", {
           target_entity_id: entityId,
           permission_code: "workers.view",
         }),
         supabase.rpc("can_access_entity", {
           target_entity_id: entityId,
-          permission_code: "workers.manage",
+          permission_code: "contracts.manage",
         }),
       ])
 
-      if (!canView.data && !canViewManage.data) {
+      if (!canViewAlerts.data && !canViewWorkers.data) {
         setError("No tiene permiso para ver los vencimientos contractuales de esta entidad")
         return
       }
-      setCanManage(!!canViewManage.data)
+      setCanManage(!!canManageContracts.data)
 
       // Una única consulta resuelve contratos vigentes determinados, estructura
       // laboral actual (Área/Cargo/Puesto) y días restantes por fecha calendario.

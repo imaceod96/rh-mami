@@ -154,11 +154,11 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
       })
 
     supabase
-      .rpc("can_access_entity", {
-        target_entity_id: entityId,
-        permission_code: "organization.manage",
-      })
-      .then(({ data }) => setCanManageOrganization(!!data))
+          .rpc("can_access_entity", {
+            target_entity_id: entityId,
+            permission_code: "contract_data.manage",
+          })
+          .then(({ data }) => setCanManageOrganization(!!data))
 
     // Fase 11A.5: catálogo de formas de pago + condiciones del contrato vigente
     // precargadas como borrador revisable (no se heredan sin mostrar).

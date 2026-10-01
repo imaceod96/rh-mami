@@ -19,19 +19,40 @@ export interface EntityInternalModule {
   label: string
   /** Ruta interna de la entidad correspondiente al módulo */
   path: (entityId: string) => string
+  /**
+   * Permisos internos que habilitan el módulo (basta con uno). Ausente = el módulo
+   * está disponible para cualquier usuario con acceso a la entidad (p. ej. Resumen).
+   */
+  permissions?: string[]
 }
 
 /** Módulos internos disponibles cuando la entidad es Cuenta SiteCorp. */
 export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
   { key: "summary", label: "Resumen", path: (id) => `/entity/${id}/summary` },
-  { key: "candidates", label: "Candidatos", path: (id) => `/entity/${id}/candidates` },
-  { key: "staffing", label: "Plantilla", path: (id) => `/entity/${id}/staffing` },
+  {
+    key: "candidates",
+    label: "Candidatos",
+    path: (id) => `/entity/${id}/candidates`,
+    permissions: ["candidates.view", "candidates.manage"],
+  },
+  {
+    key: "staffing",
+    label: "Plantilla",
+    path: (id) => `/entity/${id}/staffing`,
+    permissions: ["workers.view", "workers.manage"],
+  },
   {
     key: "contract-alerts",
     label: "Vencimientos",
     path: (id) => `/entity/${id}/contracts/alerts`,
+    permissions: ["contract_alerts.view", "workers.view", "workers.manage"],
   },
-  { key: "hiring", label: "Contratación", path: (id) => `/entity/${id}/hiring` },
+  {
+    key: "hiring",
+    label: "Contratación",
+    path: (id) => `/entity/${id}/hiring`,
+    permissions: ["hiring.view", "hiring.manage", "workers.view", "workers.manage"],
+  },
   { key: "settings", label: "Ajustes", path: (id) => `/entity/${id}/settings` },
 ]
 

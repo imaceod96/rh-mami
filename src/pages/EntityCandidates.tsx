@@ -220,8 +220,7 @@ const EntityCandidates = () => {
     const [disciplinaryDialogOpen, setDisciplinaryDialogOpen] = React.useState(false)
     const [disciplinaryDocument, setDisciplinaryDocument] = React.useState<File | null>(null)
     const [disciplinaryUploading, setDisciplinaryUploading] = React.useState(false)
-    const [disciplinaryDocumentPath, setDisciplinaryDocumentPath] = React.useState<string | null>(null)
-    const [disciplinaryDocumentName, setDisciplinaryDocumentName] = React.useState<string | null>(null)
+        const [disciplinaryDocumentName, setDisciplinaryDocumentName] = React.useState<string | null>(null)
 
   // Fetch reference data
   React.useEffect(() => {
@@ -389,33 +388,23 @@ const EntityCandidates = () => {
     }
   }
 
-  // Disciplinary measures upload
-  const handleDisciplinaryUpload = async () => {
-    if (!disciplinaryDocument) return
-
-    setDisciplinaryUploading(true)
-    try {
-      const file = disciplinaryDocument
-      const fileName = `disciplinary_${Date.now()}_${file.name}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("documents")
-        .upload(fileName, file)
-
-      if (uploadError) throw uploadError
-
-      setDisciplinaryDocumentPath(fileName)
-      setDisciplinaryDocumentName(file.name)
-      setDisciplinaryDialogOpen(false)
-      setFormSuccess(true)
-      setTimeout(() => setFormSuccess(false), 3000)
-    } catch (err) {
-      console.error("Error uploading document:", err)
-      setFormError("Error al subir el documento disciplinario")
-    } finally {
-      setDisciplinaryUploading(false)
+  // Disciplinary measures: el archivo se conserva en memoria y se sube DESPUÉS de
+    // crear el candidato, bajo la ruta `candidates/{candidateId}/…`. Así el objeto de
+    // Storage queda inequívocamente ligado a la entidad del candidato y la política de
+    // Storage puede autorizarlo por permiso (candidates.view / candidates.manage).
+    const handleDisciplinaryUpload = async () => {
+      if (!disciplinaryDocument) return
+  
+      setDisciplinaryUploading(true)
+      try {
+        setDisciplinaryDocumentName(disciplinaryDocument.name)
+        setDisciplinaryDialogOpen(false)
+        setFormSuccess(true)
+        setTimeout(() => setFormSuccess(false), 3000)
+      } finally {
+        setDisciplinaryUploading(false)
+      }
     }
-  }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -520,32 +509,43 @@ const EntityCandidates = () => {
               await saveCandidateDrivingLicenseIds(candidateData.id, formData.driving_license_ids)
             }
       
-            // If there's a disciplinary document uploaded, save it to candidate_documents
-            if (disciplinaryDocumentPath && candidateData?.id) {
-              const { error: docError } = await supabase
-                .from("candidate_documents")
-                .insert({
-                  candidate_id: candidateData.id,
-                  document_type_id: "DISCIPLINARY_DOCUMENT",
-                  original_file_name: disciplinaryDocumentName,
-                  storage_path: disciplinaryDocumentPath,
-                  mime_type: disciplinaryDocument?.type,
-                  file_size: disciplinaryDocument?.size,
-                  description: "Documento disciplinario subido durante la creación del candidato",
-                  uploaded_by: (await supabase.auth.getUser()).data.user?.id,
-                })
-      
-              if (docError) {
-                console.error("Error saving disciplinary document reference:", docError)
-                // Don't throw, the candidate was created successfully
-              }
-            }
+            // If there's a disciplinary document selected, upload it under the
+                        // candidate's own folder and register it in candidate_documents
+                        if (disciplinaryDocument && candidateData?.id) {
+                          try {
+                            const fileExt = disciplinaryDocument.name.split(".").pop() || "pdf"
+                            const storagePath = `candidates/${candidateData.id}/disciplinary_${Date.now()}.${fileExt}`
+            
+                            const { error: uploadError } = await supabase.storage
+                              .from("documents")
+                              .upload(storagePath, disciplinaryDocument)
+            
+                            if (uploadError) throw uploadError
+            
+                            const { error: docError } = await supabase
+                              .from("candidate_documents")
+                              .insert({
+                                candidate_id: candidateData.id,
+                                document_type_id: "DISCIPLINARY_DOCUMENT",
+                                original_file_name: disciplinaryDocument.name,
+                                storage_path: storagePath,
+                                mime_type: disciplinaryDocument.type,
+                                file_size: disciplinaryDocument.size,
+                                description: "Documento disciplinario subido durante la creación del candidato",
+                                uploaded_by: (await supabase.auth.getUser()).data.user?.id,
+                              })
+            
+                            if (docError) throw docError
+                          } catch (docError) {
+                            console.error("Error saving disciplinary document reference:", docError)
+                            // Don't throw, the candidate was created successfully
+                          }
+                        }
       
             // Reset form and close
             setFormData(emptyFormData)
             setDisciplinaryDocument(null)
-            setDisciplinaryDocumentPath(null)
-            setDisciplinaryDocumentName(null)
+                        setDisciplinaryDocumentName(null)
             setFormSuccess(true)
             setFormOpen(false)
       

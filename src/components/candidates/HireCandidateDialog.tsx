@@ -257,11 +257,13 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       if (ctError) throw ctError
       setContractTypes((ctData as ContractType[]) || [])
 
-      const { data: canManageOrg } = await supabase.rpc("can_access_entity", {
-        target_entity_id: entityId,
-        permission_code: "organization.manage",
-      })
-      setCanManageOrganization(!!canManageOrg)
+      // El enlace «Configurar representantes» lleva a los datos contractuales de la
+            // entidad: se habilita con el permiso interno de esos datos, no con organization.*
+            const { data: canManageOrg } = await supabase.rpc("can_access_entity", {
+              target_entity_id: entityId,
+              permission_code: "contract_data.manage",
+            })
+            setCanManageOrganization(!!canManageOrg)
 
       // Fase 11A.5: catálogo global de formas de pago (A tiempo / A rendimiento)
       setPaymentMethods(await fetchPaymentMethods())

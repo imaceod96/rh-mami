@@ -109,23 +109,23 @@ const EntitySettingsDocumentTemplateDetail = () => {
     setNotAllowed(null)
 
     try {
-      const [{ data: canView }, { data: canManageOrganization }] = await Promise.all([
+      const [{ data: canView }, { data: canManageTemplates }] = await Promise.all([
         supabase.rpc("can_access_entity", {
           target_entity_id: entityId,
-          permission_code: "organization.view",
+          permission_code: "document_templates.view",
         }),
         supabase.rpc("can_access_entity", {
           target_entity_id: entityId,
-          permission_code: "organization.manage",
+          permission_code: "document_templates.manage",
         }),
       ])
 
-      if (!canView && !canManageOrganization) {
+      if (!canView && !canManageTemplates) {
         setNotAllowed("No tiene permiso para consultar esta plantilla documental.")
         return
       }
 
-      setCanManage(!!canManageOrganization)
+      setCanManage(!!canManageTemplates)
 
       const fresh = await fetchDocumentTemplate(templateId)
       if (!fresh || fresh.organization_entity_id !== entityId) {
