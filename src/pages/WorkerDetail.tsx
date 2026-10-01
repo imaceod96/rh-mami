@@ -1,6 +1,8 @@
 import * as React from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
@@ -249,6 +251,7 @@ const WorkerDetail = () => {
   const [addendums, setAddendums] = React.useState<ContractAddendum[]>([])
   const [contractualConditions, setContractualConditions] =
     React.useState<WorkerContractualConditions | null>(null)
+  const queryClient = useQueryClient()
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
   // Fase 11A.3: horario habitual del puesto vigente (no se copia al trabajador)
   const [positionSegments, setPositionSegments] = React.useState<PositionScheduleSegment[]>([])
@@ -713,6 +716,8 @@ const WorkerDetail = () => {
         p_payment_schedule_text: contractForm.paymentSchedule.trim() || null,
       })
       if (rpcError) throw rpcError
+      // El contrato vigente cambió: recalcular alertas de vencimiento.
+      invalidateContractAlertData(queryClient)
       setContractDialogOpen(false)
       setContractForm({
         contractTypeId: "",

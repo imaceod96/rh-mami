@@ -1,0 +1,31 @@
+-- Fase — Auditoría, cierre y validación de alertas contractuales
+-- Registro de auditoría (la migración real se aplicó en vivo con execute_sql).
+--
+-- Cambios en base de datos:
+--
+-- 1) public.contract_expiry_alerts(...)
+--    - Se marcó como SECURITY DEFINER (antes SECURITY INVOKER). Con SECURITY
+--      INVOKER, el LEFT JOIN a organization_positions/jobs/areas quedaba filtrado por
+--      RLS (permiso staffing.*), por lo que Cargo/Puesto/Área desaparecían para
+--      usuarios sin ese permiso. Ahora el RPC resuelve la estructura laboral con una
+--      autorización explícita por entidad.
+--    - Autorización alineada con el módulo: basta con contract_alerts.view,
+--      workers.view/manage o contracts.view/manage (antes exigía workers.view, lo que
+--      hacía fallar a los usuarios con solo contract_alerts.view).
+--    - Filtro reforzado del contrato vigente: is_current = true AND actual_end_date IS
+--      NULL (un contrato finalizado no genera alerta).
+--    - Clasificación ampliada con el bucket «Más de 30 días» (DUE_AFTER_30) para
+--      horizonte completo; el horizonte de atención sigue siendo 30 días.
+--
+-- Fuente de verdad: EmploymentContract (is_current, contract_type, start_date,
+-- end_date). No se persisten days_until_expiration ni alert_status: se derivan.
+--
+-- Anexos: en el modelo real los anexos (CONTRACT_VARIATION_ADDENDUM /
+-- SALARY_CHANGE_ADDENDUM) NO modifican end_date ni el tipo de contrato. La
+-- renovación/extensión se formaliza creando un nuevo contrato vigente
+-- (change_worker_contract / complete_worker_contract), que cierra el anterior
+-- (is_current = false). Por tanto la alerta ya refleja la condición contractual
+-- formalizada vigente al leer el contrato vigente (is_current = true).
+--
+-- Migración previa en la que se apoyó la validación central de integridad:
+-- 20261001_01_contract_integrity.sql

@@ -18,13 +18,9 @@ import {
   CalendarClock,
 } from "lucide-react"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
-import {
-  CONTRACT_ALERT_HORIZON_DAYS,
-  fetchContractAlerts,
-  requiresAttention,
-} from "@/lib/contract-alerts"
 import { ENTITY_INTERNAL_MODULES, hasSiteCorpAccount } from "@/lib/sitecorp-account"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
+import { useContractAlertAttentionCount } from "@/hooks/use-contract-alerts"
 
 const entityTypeLabels: Record<string, string> = {
   business_group: "Grupo empresarial",
@@ -89,35 +85,21 @@ const EntityLayout = React.forwardRef<
     [entityPermissions]
   )
 
-  // Contador de contratos por tiempo determinado que requieren atención (≤ 30 días
-  // o ya vencidos). Cálculo derivado: no se persiste ninguna alerta.
-  const [attentionCount, setAttentionCount] = React.useState<number | null>(null)
+  // Badge de alertas contractuales: contratos determinados vigentes que requieren
+  // atención (vencidos + hoy + 1–7 + 8–15 + 16–30). Regla ÚNICA compartida con el
+  // módulo de Vencimientos y el Dashboard (`requiresAttention`). No se persiste ni se
+  // cuentan todos los determinados. Solo se consulta con el permiso real del módulo.
+  const canViewAlerts = React.useMemo(
+    () =>
+      entityPermissions.some((code) =>
+        ["contract_alerts.view", "workers.view", "workers.manage"].includes(code)
+      ),
+    [entityPermissions]
+  )
 
-  React.useEffect(() => {
-    let cancelled = false
-
-    const loadAttentionCount = async () => {
-      if (!entityId || !modulesEnabled) {
-        setAttentionCount(null)
-        return
-      }
-      try {
-        const rows = await fetchContractAlerts(entityId, {
-          horizonDays: CONTRACT_ALERT_HORIZON_DAYS,
-        })
-        if (!cancelled) setAttentionCount(rows.filter(requiresAttention).length)
-      } catch {
-        // Sin permiso o error de red: simplemente no se muestra el contador.
-        if (!cancelled) setAttentionCount(null)
-      }
-    }
-
-    loadAttentionCount()
-
-    return () => {
-      cancelled = true
-    }
-  }, [entityId, location.pathname, modulesEnabled])
+  const attentionCount = useContractAlertAttentionCount(entityId, {
+    enabled: !!entityId && modulesEnabled && canViewAlerts,
+  })
 
   return (
     <div

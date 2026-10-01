@@ -1,6 +1,8 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import {
   Dialog,
   DialogContent,
@@ -178,6 +180,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
   const [readiness, setReadiness] = React.useState<ReadinessResult | null>(null)
   const [readinessLoading, setReadinessLoading] = React.useState(false)
   const [segmentsByPosition, setSegmentsByPosition] = React.useState<
@@ -515,6 +518,9 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         p_payment_schedule_text: paymentSchedule.trim() || null,
       })
       if (rpcError) throw rpcError
+
+      // Contratación/reincorporación crea el contrato vigente: recalcular alertas.
+      invalidateContractAlertData(queryClient)
 
       const workerId = (data as any)?.worker_id as string | undefined
       showSuccess(

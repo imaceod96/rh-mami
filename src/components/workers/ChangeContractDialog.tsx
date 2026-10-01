@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import {
   Dialog,
@@ -13,6 +14,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
 import { showSuccess, showError } from "@/utils/toast"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import {
@@ -119,6 +121,7 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
   const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   React.useEffect(() => {
     if (!open) return
@@ -270,6 +273,8 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
+      // El contrato vigente cambió: recalcular alertas de vencimiento y resumen.
+      invalidateContractAlertData(queryClient)
       showSuccess("Cambio de contrato realizado correctamente.")
       onOpenChange(false)
       onSuccess()

@@ -15,13 +15,19 @@ export type ContractAlertState =
   | "DUE_IN_7"
   | "DUE_IN_15"
   | "DUE_IN_30"
+  | "DUE_AFTER_30"
   | "NO_END_DATE"
 
+/** Horizonte de ATENCIÓN: los contratos que requieren seguimiento (≤ 30 días). */
 export const CONTRACT_ALERT_HORIZON_DAYS = 30
 
 /** Horizonte amplio usado en WorkerDetail: permite conocer el vencimiento aunque
  *  quede lejos, y la UI decide si corresponde mostrar alerta (≤ 30 días). */
 export const CONTRACT_ALERT_LOOKAHEAD_DAYS = 3650
+
+/** Horizonte completo usado por el módulo de Vencimientos: incluye «Más de 30 días»
+ *  (que no genera alerta ni cuenta en el badge). */
+export const CONTRACT_ALERT_FULL_HORIZON_DAYS = CONTRACT_ALERT_LOOKAHEAD_DAYS
 
 export interface ContractAlertRow {
   worker_id: string
@@ -55,6 +61,7 @@ export const CONTRACT_ALERT_META: Record<ContractAlertState, ContractAlertMeta> 
   DUE_IN_7: { label: "Vence en 7 días", badge: "warning" },
   DUE_IN_15: { label: "Vence en 15 días", badge: "warning" },
   DUE_IN_30: { label: "Vence en 30 días", badge: "info" },
+  DUE_AFTER_30: { label: "Más de 30 días", badge: "neutral" },
   NO_END_DATE: { label: "Sin fecha de finalización", badge: "neutral" },
 }
 
@@ -66,12 +73,28 @@ export const CONTRACT_ALERT_FILTER_OPTIONS: { value: string; label: string }[] =
   { value: "DUE_IN_7", label: "Próximos 7 días" },
   { value: "DUE_IN_15", label: "8–15 días" },
   { value: "DUE_IN_30", label: "16–30 días" },
+  { value: "DUE_AFTER_30", label: "Más de 30 días" },
   { value: "NO_END_DATE", label: "Sin fecha de finalización" },
 ]
 
 /** Un contrato determinado vigente sin fecha de fin es una inconsistencia administrativa. */
 export const needsCorrection = (row: ContractAlertRow) => row.alert_state === "NO_END_DATE"
-export const requiresAttention = (row: ContractAlertRow) => row.alert_state !== "NO_END_DATE"
+
+/**
+ * Regla ÚNICA de «requiere atención» (usada por el badge del sidebar, el KPI del
+ * módulo y el bloque del Dashboard): vencido + hoy + 1–7 + 8–15 + 16–30.
+ * Excluye «Más de 30 días» (no genera alerta) y «Sin fecha de finalización»
+ * (inconsistencia administrativa, no un vencimiento).
+ */
+export const ATTENTION_STATES: ContractAlertState[] = [
+  "OVERDUE",
+  "DUE_TODAY",
+  "DUE_IN_7",
+  "DUE_IN_15",
+  "DUE_IN_30",
+]
+export const requiresAttention = (row: ContractAlertRow) =>
+  ATTENTION_STATES.includes(row.alert_state)
 
 export interface ContractAlertSummary {
   overdue: number
@@ -79,6 +102,7 @@ export interface ContractAlertSummary {
   dueIn7: number
   dueIn15: number
   dueIn30: number
+  after30: number
   attention: number
   correction: number
 }
@@ -90,6 +114,7 @@ export function summarizeContractAlerts(rows: ContractAlertRow[]): ContractAlert
     dueIn7: 0,
     dueIn15: 0,
     dueIn30: 0,
+    after30: 0,
     attention: 0,
     correction: 0,
   }
@@ -111,7 +136,11 @@ export function summarizeContractAlerts(rows: ContractAlertRow[]): ContractAlert
       case "DUE_IN_30":
         summary.dueIn30 += 1
         break
+      case "DUE_AFTER_30":
+        summary.after30 += 1
+        break
       default:
+        // NO_END_DATE: contrato determinado sin fecha de finalización (inconsistencia).
         summary.correction += 1
     }
   })

@@ -1,5 +1,7 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
@@ -212,6 +214,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   React.useEffect(() => {
     const load = async () => {
@@ -500,6 +503,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
         })
 
         if (rpcError) throw rpcError
+        invalidateContractAlertData(queryClient)
         onSuccess()
       }
     } catch (err) {

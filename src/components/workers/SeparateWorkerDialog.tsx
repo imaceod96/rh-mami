@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import {
   Dialog,
@@ -14,6 +15,7 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { showSuccess, showError } from "@/utils/toast"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { formatSalary } from "@/lib/salary"
 import type { WorkerCurrentSituation } from "@/components/workers/ChangePositionDialog"
 import { AlertTriangle, UserMinus } from "lucide-react"
@@ -48,6 +50,7 @@ const SeparateWorkerDialog: React.FC<SeparateWorkerDialogProps> = ({
   const [notes, setNotes] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   React.useEffect(() => {
     if (!open) return
@@ -98,6 +101,8 @@ const SeparateWorkerDialog: React.FC<SeparateWorkerDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
+      // La baja cierra el contrato vigente: recalcular alertas de vencimiento.
+      invalidateContractAlertData(queryClient)
       showSuccess("Baja registrada correctamente.")
       onOpenChange(false)
       onSuccess()

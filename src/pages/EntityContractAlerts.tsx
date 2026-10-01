@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { supabase } from "@/lib/supabase"
+import { useQueryClient } from "@tanstack/react-query"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
@@ -16,14 +16,18 @@ import SeparateWorkerDialog from "@/components/workers/SeparateWorkerDialog"
 import type { WorkerCurrentSituation } from "@/components/workers/ChangePositionDialog"
 import {
   CONTRACT_ALERT_FILTER_OPTIONS,
-  CONTRACT_ALERT_HORIZON_DAYS,
+  CONTRACT_ALERT_FULL_HORIZON_DAYS,
   CONTRACT_ALERT_META,
   deadlineLabel,
-  fetchContractAlerts,
   formatContractDate,
   summarizeContractAlerts,
   type ContractAlertRow,
 } from "@/lib/contract-alerts"
+import { useEntityPermissions } from "@/hooks/use-entity-permissions"
+import {
+  invalidateContractAlertData,
+  useEntityContractAlerts,
+} from "@/hooks/use-contract-alerts"
 import {
   formatSalary,
   fetchSalaryValuesForGroups,
@@ -54,11 +58,25 @@ interface AlertTarget {
 const EntityContractAlerts = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { has, loading: permissionsLoading } = useEntityPermissions(entityId)
 
-  const [rows, setRows] = React.useState<ContractAlertRow[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [canManage, setCanManage] = React.useState(false)
+  // Módulo esencialmente de lectura: se accede con «Ver alertas de contratos» (o los
+  // permisos de trabajadores que ya gobiernan los módulos de origen). Las operaciones
+  // contractuales (cambio de contrato, bajas) siguen requiriendo `contracts.manage`.
+  const canViewAlerts = has(["contract_alerts.view", "workers.view", "workers.manage"])
+  const canManage = has(["contracts.manage"])
+
+  const alertsQuery = useEntityContractAlerts(entityId, {
+    horizonDays: CONTRACT_ALERT_FULL_HORIZON_DAYS,
+    enabled: !permissionsLoading && canViewAlerts,
+  })
+  const rows = React.useMemo<ContractAlertRow[]>(() => alertsQuery.data ?? [], [alertsQuery.data])
+  const loading = permissionsLoading || (canViewAlerts && alertsQuery.isLoading)
+
+  const refetch = React.useCallback(() => {
+    alertsQuery.refetch()
+  }, [alertsQuery])
 
   const [search, setSearch] = React.useState("")
   const [stateFilter, setStateFilter] = React.useState<string>("ATTENTION")
@@ -74,70 +92,53 @@ const EntityContractAlerts = () => {
   const [changeTarget, setChangeTarget] = React.useState<AlertTarget | null>(null)
   const [separationTarget, setSeparationTarget] = React.useState<AlertTarget | null>(null)
 
-  const load = React.useCallback(async () => {
-    if (!entityId) {
-      setError("Parámetros inválidos")
-      setLoading(false)
-      return
-    }
+  const error = !permissionsLoading && !canViewAlerts
+    ? "No tiene permiso para ver los vencimientos contractuales de esta entidad"
+    : !entityId
+      ? "Parámetros inválidos"
+      : alertsQuery.isError
+        ? (alertsQuery.error as Error)?.message || "Error al cargar los vencimientos contractuales"
+        : null
 
-    setLoading(true)
-    setError(null)
+  // Salario actual (informativo): se resuelve desde la escala aplicable vigente.
+  React.useEffect(() => {
+    let cancelled = false
 
-    try {
-      // Módulo esencialmente de lectura: se accede con «Ver alertas de contratos».
-      // Las operaciones contractuales (cambio de contrato, bajas) siguen requiriendo
-      // los permisos de contrato/trabajadores correspondientes.
-      const [canViewAlerts, canViewWorkers, canManageContracts] = await Promise.all([
-        supabase.rpc("can_access_entity", {
-          target_entity_id: entityId,
-          permission_code: "contract_alerts.view",
-        }),
-        supabase.rpc("can_access_entity", {
-          target_entity_id: entityId,
-          permission_code: "workers.view",
-        }),
-        supabase.rpc("can_access_entity", {
-          target_entity_id: entityId,
-          permission_code: "contracts.manage",
-        }),
-      ])
-
-      if (!canViewAlerts.data && !canViewWorkers.data) {
-        setError("No tiene permiso para ver los vencimientos contractuales de esta entidad")
+    const loadSalary = async () => {
+      if (!entityId || rows.length === 0) {
+        setSalaryValuesByGroup({})
+        setApplicableScaleId(null)
         return
       }
-      setCanManage(!!canManageContracts.data)
 
-      // Una única consulta resuelve contratos vigentes determinados, estructura
-      // laboral actual (Área/Cargo/Puesto) y días restantes por fecha calendario.
-      const alertRows = await fetchContractAlerts(entityId, {
-        horizonDays: CONTRACT_ALERT_HORIZON_DAYS,
-      })
-      setRows(alertRows)
+      try {
+        const groupIds = rows
+          .map((row) => row.salary_group_id)
+          .filter((id): id is string => !!id)
 
-      // Salario actual (informativo): se resuelve desde la escala aplicable vigente.
-      const groupIds = alertRows
-        .map((row) => row.salary_group_id)
-        .filter((id): id is string => !!id)
+        const [values, scaleId] = await Promise.all([
+          fetchSalaryValuesForGroups(groupIds),
+          resolveApplicableScaleId(entityId),
+        ])
 
-      const [values, scaleId] = await Promise.all([
-        fetchSalaryValuesForGroups(groupIds),
-        resolveApplicableScaleId(entityId),
-      ])
-      setSalaryValuesByGroup(values)
-      setApplicableScaleId(scaleId)
-    } catch (err) {
-      console.error("Error loading contract alerts:", err)
-      setError(err instanceof Error ? err.message : "Error al cargar los vencimientos contractuales")
-    } finally {
-      setLoading(false)
+        if (!cancelled) {
+          setSalaryValuesByGroup(values)
+          setApplicableScaleId(scaleId)
+        }
+      } catch {
+        if (!cancelled) {
+          setSalaryValuesByGroup({})
+          setApplicableScaleId(null)
+        }
+      }
     }
-  }, [entityId])
 
-  React.useEffect(() => {
-    load()
-  }, [load])
+    loadSalary()
+
+    return () => {
+      cancelled = true
+    }
+  }, [entityId, rows])
 
   const summary = React.useMemo(() => summarizeContractAlerts(rows), [rows])
 
@@ -247,6 +248,17 @@ const EntityContractAlerts = () => {
     { key: "d30", label: "16–30 días", value: summary.dueIn30, filter: "DUE_IN_30", tone: "info" },
   ]
 
+  if (summary.after30 > 0) {
+    kpiCards.push({
+      key: "after30",
+      label: "Más de 30 días",
+      value: summary.after30,
+      filter: "DUE_AFTER_30",
+      tone: "neutral",
+      hint: "Vencimiento posterior al horizonte de atención",
+    })
+  }
+
   if (summary.correction > 0) {
     kpiCards.push({
       key: "correction",
@@ -278,9 +290,9 @@ const EntityContractAlerts = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Vencimientos de contratos"
-        description="Contratos por tiempo determinado que requieren seguimiento."
+        description="Contratos por tiempo determinado de esta entidad que requieren seguimiento."
         actions={
-          <SiteCorpButton variant="outline" onClick={load} disabled={loading}>
+          <SiteCorpButton variant="outline" onClick={refetch} disabled={loading}>
             <RefreshCw className="mr-2 h-4 w-4" /> Actualizar
           </SiteCorpButton>
         }
@@ -299,7 +311,7 @@ const EntityContractAlerts = () => {
       ) : error ? null : (
         <>
           {/* KPIs: rangos excluyentes, sin doble conteo */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8">
             {kpiCards.map((kpi) => {
               const active = stateFilter === kpi.filter
               return (
@@ -406,23 +418,21 @@ const EntityContractAlerts = () => {
             </div>
           </SiteCorpCard>
 
-          {rows.length === 0 ? (
+          {visibleRows.length === 0 ? (
             <SiteCorpCard>
               <div className="flex flex-col items-center gap-2 py-10 text-center">
                 <CalendarClock className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm font-medium text-ink">
-                  No hay contratos por tiempo determinado que requieran atención.
+                  {rows.length === 0
+                    ? "No hay contratos por tiempo determinado registrados."
+                    : stateFilter === "ATTENTION"
+                      ? "No hay contratos próximos a vencer."
+                      : "Ningún contrato coincide con los filtros seleccionados."}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Los contratos por tiempo indeterminado no generan alertas de vencimiento.
                 </p>
               </div>
-            </SiteCorpCard>
-          ) : visibleRows.length === 0 ? (
-            <SiteCorpCard>
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Ningún contrato coincide con los filtros seleccionados.
-              </p>
             </SiteCorpCard>
           ) : (
             <>
@@ -660,7 +670,7 @@ const EntityContractAlerts = () => {
           baseSalaryCurrency={changeTarget.situation.salary?.currency_code ?? null}
           onSuccess={() => {
             setChangeTarget(null)
-            load()
+            invalidateContractAlertData(queryClient)
           }}
         />
       )}
@@ -676,7 +686,7 @@ const EntityContractAlerts = () => {
           current={separationTarget.situation}
           onSuccess={() => {
             setSeparationTarget(null)
-            load()
+            invalidateContractAlertData(queryClient)
           }}
         />
       )}
