@@ -59,12 +59,10 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
     path: (id) => `/entity/${id}/vacations`,
     permissions: ["vacations.view", "vacations.manage"],
   },
-  {
-    key: "medical-certificates",
-    label: "Licencias / Certificados Médicos",
-    path: (id) => `/entity/${id}/workers`,
-    permissions: ["medical_certificates.view", "medical_certificates.manage"],
-  },
+  // Certificados médicos (Fase 19): NO es un módulo con página propia.
+  // Vive como pestaña dentro del detalle del trabajador:
+  //   Plantilla (/entity/:id/staffing) → Trabajador (/staffing/workers/:workerId)
+  //   → tab "Certificados médicos" (gobernada por medical_certificates.view/manage).
   { key: "settings", label: "Ajustes", path: (id) => `/entity/${id}/settings` },
 ]
 
