@@ -1,7 +1,10 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
+import { useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -23,7 +26,13 @@ import { SelectItem } from "@/components/ui/select"
 import EntityUsersDialog, {
   type OrganizationEntity,
 } from "@/components/entity-users-dialog"
-import { createWorkspace, updateWorkspace } from "@/lib/workspaces"
+import {
+  createWorkspace,
+  deleteWorkspace,
+  getWorkspaceDeletionSummary,
+  updateWorkspace,
+  type WorkspaceDeletionSummary,
+} from "@/lib/workspaces"
 import {
   OrganizationEntityDialog,
 } from "@/components/organization-entity-dialog"
@@ -89,7 +98,9 @@ const friendlyTenantError = (error: unknown) => {
 
 const Organizations = () => {
   const { isPlatformSuperAdmin, hasPlatformPermission } = useAuth()
-  const { setCurrentTenant } = useCurrentTenant()
+  const { currentTenant, setCurrentTenant, clearCurrentTenant } = useCurrentTenant()
+  const { clearCurrentEntity } = useCurrentEntity()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [tenants, setTenants] = React.useState<Tenant[]>([])
   const [entities, setEntities] = React.useState<OrganizationEntity[]>([])
@@ -115,6 +126,10 @@ const Organizations = () => {
   const [usersEntity, setUsersEntity] = React.useState<OrganizationEntity | null>(null)
   const [deleteEntity, setDeleteEntity] = React.useState<OrganizationEntity | null>(null)
   const [deleteTenant, setDeleteTenant] = React.useState<Tenant | null>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState("")
+  const [deleteSummary, setDeleteSummary] = React.useState<WorkspaceDeletionSummary | null>(null)
+  const [deleteSummaryLoading, setDeleteSummaryLoading] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [canDeleteEntities, setCanDeleteEntities] = React.useState(false)
   const [canDeleteTenants, setCanDeleteTenants] = React.useState(false)
@@ -301,15 +316,87 @@ const Organizations = () => {
     }
   }
 
+  const openDeleteTenant = async (tenant: Tenant) => {
+    setDeleteTenant(tenant)
+    setDeleteConfirmation("")
+    setDeleteError(null)
+    setDeleteSummary(null)
+    setDeleteSummaryLoading(true)
+
+    try {
+      const summary = await getWorkspaceDeletionSummary(tenant.id)
+      setDeleteSummary(summary)
+    } catch (err) {
+      console.error("No se pudo preparar la eliminación del workspace.", {
+        tenantId: tenant.id,
+        error: err,
+      })
+      setDeleteError(
+        err instanceof Error ? err.message : "No se pudo preparar la eliminación del workspace.",
+      )
+    } finally {
+      setDeleteSummaryLoading(false)
+    }
+  }
+
+  const closeDeleteTenant = () => {
+    if (deleting) return
+    setDeleteTenant(null)
+    setDeleteConfirmation("")
+    setDeleteSummary(null)
+    setDeleteError(null)
+  }
+
   const deleteWorkspaceTenant = async (tenant: Tenant) => {
+    if (deleting) return
+
+    if (deleteConfirmation.trim() !== tenant.name) {
+      setDeleteError("Escribe el nombre exacto del workspace para confirmar la eliminación.")
+      return
+    }
+
     try {
       setDeleting(true)
-      const response = await supabase.from("tenants").delete().eq("id", tenant.id)
-      if (response.error) throw response.error
+      setDeleteError(null)
+
+      // Autorización, confirmación y borrado transaccional los aplica el backend.
+      const result = await deleteWorkspace(tenant.id, deleteConfirmation.trim())
+
+      // El workspace eliminado no puede seguir siendo el contexto actual.
+      if (currentTenant?.id === tenant.id) {
+        clearCurrentTenant()
+        clearCurrentEntity()
+      }
+
+      // Ninguna vista puede seguir mostrando datos del workspace eliminado.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["entity-summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["contract-alerts"] }),
+      ])
+
       setDeleteTenant(null)
+      setDeleteConfirmation("")
+      setDeleteSummary(null)
       await loadData()
+
+      if (result.storage?.failed) {
+        toast.warning(
+          `Workspace eliminado, pero ${result.storage.failed} archivo(s) privados no pudieron borrarse del almacenamiento.`,
+        )
+        console.error("Objetos de Storage no eliminados del workspace.", {
+          tenantId: tenant.id,
+          failures: result.storage.failures,
+        })
+      } else {
+        toast.success("Workspace eliminado correctamente.")
+      }
+
+      if (currentTenant?.id === tenant.id) {
+        navigate("/admin/companies", { replace: true })
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo eliminar el workspace.")
+      console.error("No se pudo eliminar el workspace.", { tenantId: tenant.id, error: err })
+      setDeleteError(err instanceof Error ? err.message : "No se pudo eliminar el workspace.")
     } finally {
       setDeleting(false)
     }
@@ -536,7 +623,7 @@ const Organizations = () => {
                         <Plus className="mr-1 h-3.5 w-3.5" /> Grupo
                       </SiteCorpButton>
                       {canDeleteTenants && (
-                        <SiteCorpButton size="sm" variant="outline" onClick={() => setDeleteTenant(tenant)}>
+                        <SiteCorpButton size="sm" variant="outline" onClick={() => openDeleteTenant(tenant)}>
                           <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
                         </SiteCorpButton>
                       )}
@@ -698,23 +785,87 @@ const Organizations = () => {
               </DialogContent>
             </Dialog>
 
-            <Dialog open={Boolean(deleteTenant)} onOpenChange={(open) => !open && setDeleteTenant(null)}>
-                          <DialogContent className="max-w-md rounded-2xl">
+            <Dialog open={Boolean(deleteTenant)} onOpenChange={(open) => !open && closeDeleteTenant()}>
+                          <DialogContent className="max-w-lg rounded-2xl">
                             <DialogHeader>
                               <DialogTitle className="flex items-center gap-2 text-xl">
                                 <Trash2 className="h-5 w-5 text-destructive" />
-                                Eliminar workspace
+                                Eliminar Workspace
                               </DialogTitle>
-                              <DialogDescription>
-                                ¿Estás seguro de que deseas eliminar el workspace "{deleteTenant?.name}"?
-                                Esta acción no se puede deshacer.
+                              <DialogDescription asChild>
+                                <div className="space-y-3 pt-1 text-sm text-muted-foreground">
+                                  <p>
+                                    Esta acción eliminará permanentemente el Workspace{" "}
+                                    <strong className="text-ink">{deleteTenant?.name}</strong> y los datos
+                                    pertenecientes a sus entidades: grupos empresariales, empresas, UEB,
+                                    áreas, cargos, puestos, candidatos, plantilla, trabajadores,
+                                    contratos, anexos, documentos y plantillas documentales, además de
+                                    los roles internos y los accesos a esas entidades.
+                                  </p>
+                                  <p>
+                                    Se conservan intactos los usuarios, sus perfiles, sus accesos a
+                                    otros workspaces, los roles de plataforma y todos los catálogos
+                                    globales.
+                                  </p>
+                                  <p className="font-medium text-destructive">
+                                    Esta acción no se puede deshacer.
+                                  </p>
+                                </div>
                               </DialogDescription>
                             </DialogHeader>
+
+                            {deleteSummaryLoading ? (
+                              <p className="text-sm text-muted-foreground">Analizando dependencias...</p>
+                            ) : null}
+
+                            {deleteSummary ? (
+                              <div className="rounded-xl border border-sitecorp-border bg-sitecorp-background p-3 text-sm">
+                                <p className="font-medium text-ink">Contenido actual del Workspace</p>
+                                <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                                  <li>Entidades: {deleteSummary.entities}</li>
+                                  <li>Puestos: {deleteSummary.positions}</li>
+                                  <li>Trabajadores: {deleteSummary.workers}</li>
+                                  <li>Candidatos: {deleteSummary.candidates}</li>
+                                  <li>Contratos: {deleteSummary.contracts}</li>
+                                  <li>Anexos: {deleteSummary.addendums}</li>
+                                  <li>Documentos de trabajador: {deleteSummary.worker_documents}</li>
+                                  <li>Documentos de candidato: {deleteSummary.candidate_documents}</li>
+                                  <li>Plantillas: {deleteSummary.document_templates}</li>
+                                  <li>Roles internos: {deleteSummary.roles}</li>
+                                  <li>Membresías: {deleteSummary.memberships}</li>
+                                  <li>Invitaciones: {deleteSummary.invitations}</li>
+                                </ul>
+                              </div>
+                            ) : null}
+
+                            <div className="space-y-2">
+                              <label
+                                htmlFor="delete-workspace-confirmation"
+                                className="text-sm font-medium text-ink"
+                              >
+                                Escribe «{deleteTenant?.name}» para confirmar:
+                              </label>
+                              <SiteCorpInput
+                                id="delete-workspace-confirmation"
+                                value={deleteConfirmation}
+                                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                                placeholder={deleteTenant?.name ?? ""}
+                                disabled={deleting || Boolean(deleteError && !deleteSummary)}
+                                autoComplete="off"
+                              />
+                            </div>
+
+                            {deleteError ? (
+                              <SiteCorpAlert type="danger" title="No se pudo eliminar el Workspace">
+                                {deleteError}
+                              </SiteCorpAlert>
+                            ) : null}
+
                             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                               <SiteCorpButton
                                 type="button"
                                 variant="outline"
-                                onClick={() => setDeleteTenant(null)}
+                                onClick={closeDeleteTenant}
                                 disabled={deleting}
                               >
                                 Cancelar
@@ -723,9 +874,14 @@ const Organizations = () => {
                                 type="button"
                                 variant="destructive"
                                 onClick={() => deleteTenant && deleteWorkspaceTenant(deleteTenant)}
-                                disabled={deleting}
+                                disabled={
+                                  deleting ||
+                                  deleteSummaryLoading ||
+                                  !deleteTenant ||
+                                  deleteConfirmation.trim() !== deleteTenant.name
+                                }
                               >
-                                {deleting ? "Eliminando..." : "Eliminar"}
+                                {deleting ? "Eliminando Workspace..." : "Eliminar definitivamente"}
                               </SiteCorpButton>
                             </div>
                           </DialogContent>
