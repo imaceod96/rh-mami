@@ -33,6 +33,7 @@ import CandidateEdit from "./pages/CandidateEdit"
 import EntityStaffing from "./pages/EntityStaffing"
 import EntityHiring from "./pages/EntityHiring"
 import EntityContractAlerts from "./pages/EntityContractAlerts"
+import EntityVacations from "./pages/EntityVacations"
 import WorkerDetail from "./pages/WorkerDetail"
 import EntitySettings from "./pages/EntitySettings"
 import EntitySettingsUsers from "./pages/EntitySettingsUsers"
@@ -147,6 +148,7 @@ const AppRoutes = () => {
           <Route path="/entity/:entityId/staffing/workers/:workerId" element={<WorkerDetail />} />
           <Route path="/entity/:entityId/hiring" element={<EntityHiring />} />
           <Route path="/entity/:entityId/contracts/alerts" element={<EntityContractAlerts />} />
+          <Route path="/entity/:entityId/vacations" element={<EntityVacations />} />
           <Route path="/entity/:entityId/settings" element={<EntitySettings />} />
           <Route path="/entity/:entityId/settings/staffing" element={<EntitySettingsStaffing />} />
           <Route path="/entity/:entityId/settings/users" element={<EntitySettingsUsers />} />

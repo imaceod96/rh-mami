@@ -53,6 +53,12 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
     path: (id) => `/entity/${id}/hiring`,
     permissions: ["hiring.view", "hiring.manage", "workers.view", "workers.manage"],
   },
+  {
+    key: "vacations",
+    label: "Vacaciones",
+    path: (id) => `/entity/${id}/vacations`,
+    permissions: ["vacations.view", "vacations.manage"],
+  },
   { key: "settings", label: "Ajustes", path: (id) => `/entity/${id}/settings` },
 ]
 

@@ -31,6 +31,8 @@ import {
   Wallet,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import WorkerVacationsTab from "@/components/vacations/WorkerVacationsTab"
+import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { WorkerForm } from "@/components/workers/WorkerForm"
@@ -261,6 +263,10 @@ const WorkerDetail = () => {
   const [timelineAddendumId, setTimelineAddendumId] = React.useState<string | null>(null)
   const [timelineDetailOpen, setTimelineDetailOpen] = React.useState(false)
   const queryClient = useQueryClient()
+  // Vacaciones (Fase 18): permisos internos efectivos de la entidad.
+  const { has: hasEntityPermission } = useEntityPermissions(entityId)
+  const canViewVacations = hasEntityPermission(["vacations.view", "vacations.manage"])
+  const canManageVacations = hasEntityPermission(["vacations.manage"])
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
   // Fase 11A.3: horario habitual del puesto vigente (no se copia al trabajador)
   const [positionSegments, setPositionSegments] = React.useState<PositionScheduleSegment[]>([])
@@ -896,7 +902,9 @@ const WorkerDetail = () => {
       />
 
       <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="mb-4 grid w-full max-w-xl grid-cols-3">
+        <TabsList
+          className={`mb-4 grid w-full ${canViewVacations ? "max-w-2xl grid-cols-2 sm:grid-cols-4" : "max-w-xl grid-cols-3"}`}
+        >
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="contratacion">
             Contratación
@@ -907,6 +915,7 @@ const WorkerDetail = () => {
             )}
           </TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
+          {canViewVacations && <TabsTrigger value="vacaciones">Vacaciones</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="resumen" className="space-y-6">
@@ -1657,6 +1666,17 @@ const WorkerDetail = () => {
             <WorkerDocumentsTab workerId={worker.id} canManage={canManage} />
           </SiteCorpCard>
         </TabsContent>
+
+        {canViewVacations && (
+          <TabsContent value="vacaciones" className="space-y-6">
+            <WorkerVacationsTab
+              workerId={worker.id}
+              entityId={entityId as string}
+              workerName={fullName(worker)}
+              canManage={canManageVacations}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Diálogo de edición */}

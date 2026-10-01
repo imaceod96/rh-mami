@@ -14,6 +14,7 @@ import {
   fetchPlantillaSummary,
   fetchRepresentativeStatus,
   fetchSalaryScaleStatus,
+  fetchVacationsSummary,
   type SummaryScope,
 } from "@/lib/entity-summary"
 
@@ -67,6 +68,7 @@ export function useEntitySummaryDashboard(entityId: string | undefined) {
     "workers.manage",
   ])
   const canAlerts = has(["contract_alerts.view", "workers.view", "workers.manage"])
+  const canVacations = has(["vacations.view", "vacations.manage"])
   const canContractData = has([
     "contract_data.view",
     "contract_data.manage",
@@ -140,6 +142,13 @@ export function useEntitySummaryDashboard(entityId: string | undefined) {
     ...REFRESH_OPTIONS,
   })
 
+  const vacationsQuery = useQuery({
+    queryKey: ["entity-summary", entityId, scope, "vacations", entityIds],
+    queryFn: () => fetchVacationsSummary(entityIds),
+    enabled: scopeReady && canVacations,
+    ...REFRESH_OPTIONS,
+  })
+
   const contractDataQuery = useQuery({
     queryKey: ["entity-summary", entityId, "config", "contract-data"],
     queryFn: () => fetchContractDataReadiness(entityId as string),
@@ -208,6 +217,7 @@ export function useEntitySummaryDashboard(entityId: string | undefined) {
       candidates: canCandidates,
       contracts: canContracts,
       alerts: canAlerts,
+      vacations: canVacations,
       configuration: hasConfigurationRow,
       contractData: canContractData,
       representative: canRepresentative,
@@ -233,6 +243,8 @@ export function useEntitySummaryDashboard(entityId: string | undefined) {
     expirationsLoading: expirationsQuery.isLoading,
     movements: movementsQuery.data ?? null,
     movementsLoading: movementsQuery.isLoading,
+    vacations: vacationsQuery.data ?? null,
+    vacationsLoading: vacationsQuery.isLoading,
     distribution,
     distributionLoading: plantillaQuery.isLoading || occupancyQuery.isLoading,
 

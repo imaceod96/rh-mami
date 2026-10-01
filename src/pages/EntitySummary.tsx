@@ -26,6 +26,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   TrendingDown,
+  Palmtree,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -202,6 +203,13 @@ const EntitySummary = () => {
       icon: <Mail className="h-4 w-4" />,
       enabled: summary.has(["hiring.view", "hiring.manage", "workers.view", "workers.manage"]),
     },
+    {
+      key: "vacations",
+      label: "Vacaciones",
+      path: `/entity/${entityId}/vacations`,
+      icon: <Palmtree className="h-4 w-4" />,
+      enabled: summary.has(["vacations.view", "vacations.manage"]),
+    },
   ].filter((link) => link.enabled)
 
   const showMainBlock = summary.permissions.staffing || summary.permissions.workers
@@ -213,6 +221,7 @@ const EntitySummary = () => {
     summary.permissions.contracts ||
     summary.permissions.alerts ||
     summary.permissions.workers ||
+    summary.permissions.vacations ||
     summary.permissions.configuration
 
   return (
@@ -446,6 +455,54 @@ const EntitySummary = () => {
           </SiteCorpCard>
         )}
       </div>
+
+      {/* VACACIONES */}
+      {summary.permissions.vacations && summary.vacations && (
+        <SiteCorpCard
+          title="Vacaciones"
+          description="Saldos y devengos de los trabajadores activos del ámbito seleccionado"
+          className="rounded-2xl"
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+              <p className="text-xs text-muted-foreground">Actualmente de vacaciones</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {formatInt(summary.vacations.onVacation)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-sitecorp-warning/20 bg-sitecorp-warning/5 p-3">
+              <p className="text-xs text-muted-foreground">Próximos al límite</p>
+              <p className="text-2xl font-bold text-sitecorp-warning">
+                {formatInt(summary.vacations.nearLimit)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-sitecorp-danger/20 bg-sitecorp-danger/5 p-3">
+              <p className="text-xs text-muted-foreground">En límite (24 días)</p>
+              <p className="text-2xl font-bold text-sitecorp-danger">
+                {formatInt(summary.vacations.atLimit)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-3">
+              <p className="text-xs text-muted-foreground">Promedio disponible</p>
+              <p className="text-2xl font-bold text-ink">
+                {summary.vacations.averageBalance.toLocaleString("es-CU", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                d
+              </p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <Link
+              to={`/entity/${entityId}/vacations`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-sitecorp-primary hover:underline"
+            >
+              Ver vacaciones <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </SiteCorpCard>
+      )}
 
       {/* MOVIMIENTOS */}
       {summary.permissions.workers && summary.movements && (

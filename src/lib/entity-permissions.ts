@@ -82,6 +82,9 @@ export const ENTITY_PERMISSION_LABELS: Record<string, string> = {
 
   "contract_alerts.view": "Ver alertas de contratos",
 
+  "vacations.view": "Ver vacaciones (saldos, períodos e historial)",
+  "vacations.manage": "Gestionar vacaciones (registrar, cancelar y ajustar)",
+
   "reports.view": "Ver informes",
 }
 
@@ -110,6 +113,7 @@ export const ENTITY_PERMISSION_GROUPS: EntityPermissionGroup[] = [
     codes: ["document_templates.view", "document_templates.manage"],
   },
   { title: "ALERTAS DE CONTRATOS", codes: ["contract_alerts.view"] },
+  { title: "VACACIONES", codes: ["vacations.view", "vacations.manage"] },
   { title: "INFORMES", codes: ["reports.view"] },
 ]
 
