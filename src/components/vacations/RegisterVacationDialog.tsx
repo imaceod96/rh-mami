@@ -1,28 +1,22 @@
 import * as React from "react"
-import { useQueryClient } from "@tanstack/react-query"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
+import { useState, useEffect } from "react"
+import { useToast } from "@/components/ui/use-toast"
+import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
+import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
+import { SiteCorpFormSection } from "@/components/ui/sitecorp-form-section"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
-import { Textarea } from "@/components/ui/textarea"
-import { invalidateVacationData } from "@/hooks/use-vacations"
-import {
-  VACATION_MAX_NATURAL_DAYS,
-  formatVacationDays,
-  previewVacationConsumption,
-  registerWorkerVacation,
-} from "@/lib/vacations"
-import { CalendarPlus } from "lucide-react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { previewVacationConsumption } from "@/lib/vacations"
+import { registerWorkerVacation } from "@/lib/vacations"
+import { formatVacationDays } from "@/lib/vacations"
+import { CalendarCheck2, XCircle } from "lucide-react"
+import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 
-export interface VacationWorkerOption {
+interface VacationWorkerOption {
   id: string
   full_name: string
   balance: number
@@ -39,223 +33,216 @@ interface RegisterVacationDialogProps {
   onSuccess?: () => void
 }
 
-const newRequestId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+const formSchema = z.object({
+  workerId: z.string().nonempty("El trabajador es obligatorio"),
+  startDate: z.string().nonempty("La fecha de inicio es obligatoria"),
+  endDate: z.string().nonempty("La fecha final es obligatoria"),
+  notes: z.string().optional(),
+})
 
-const RegisterVacationDialog = ({
+export const RegisterVacationDialog = ({
   open,
   onOpenChange,
   entityId,
   workers,
-  preselectedWorkerId = null,
-  preselectedWorkerName = null,
-  preselectedBalance = null,
+  preselectedWorkerId,
+  preselectedWorkerName,
+  preselectedBalance,
   onSuccess,
 }: RegisterVacationDialogProps) => {
-  const queryClient = useQueryClient()
-  const [workerId, setWorkerId] = React.useState("")
-  const [startDate, setStartDate] = React.useState("")
-  const [endDate, setEndDate] = React.useState("")
-  const [notes, setNotes] = React.useState("")
-  const [submitting, setSubmitting] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [requestId, setRequestId] = React.useState<string>("")
+  const { toast } = useToast()
+  const [requestId] = useState(() => crypto.randomUUID())
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Re/Inicializa al abrir: nueva clave de idempotencia y trabajador preseleccionado.
-  React.useEffect(() => {
-    if (!open) return
-    setWorkerId(preselectedWorkerId ?? "")
-    setStartDate("")
-    setEndDate("")
-    setNotes("")
-    setError(null)
-    setSubmitting(false)
-    setRequestId(newRequestId())
-  }, [open, preselectedWorkerId])
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      workerId: preselectedWorkerId || "",
+      startDate: "",
+      endDate: "",
+      notes: "",
+    },
+  })
 
-  const effectiveWorkerId = workerId || preselectedWorkerId || ""
-  const selectedBalance = React.useMemo(() => {
-    if (preselectedWorkerId && effectiveWorkerId === preselectedWorkerId) {
-      return preselectedBalance ?? 0
+  const workerId = form.watch("workerId")
+  const startDate = form.watch("startDate")
+  const endDate = form.watch("endDate")
+
+  const [preview, setPreview] = useState<{
+    naturalDays: number
+    sundays: number
+    chargedDays: number
+    valid: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (startDate && endDate) {
+      setPreview(previewVacationConsumption(startDate, endDate))
+    } else {
+      setPreview(null)
     }
-    return workers.find((w) => w.id === effectiveWorkerId)?.balance ?? null
-  }, [workers, effectiveWorkerId, preselectedWorkerId, preselectedBalance])
+  }, [startDate, endDate])
 
-  const preview = React.useMemo(
-    () => previewVacationConsumption(startDate, endDate),
-    [startDate, endDate]
-  )
+  const selectedWorker = workers.find((w) => w.id === workerId)
+  const workerBalance = selectedWorker?.balance ?? preselectedBalance ?? 0
+  const chargedDays = preview?.chargedDays ?? 0
+  const balanceOk = chargedDays <= workerBalance
 
-  const tooLong = preview.naturalDays > VACATION_MAX_NATURAL_DAYS
-  const insufficient = selectedBalance !== null && preview.valid && preview.chargedDays > selectedBalance
-  const datesInvalid = !!startDate && !!endDate && new Date(endDate) < new Date(startDate)
-
-  const canSubmit =
-    !submitting &&
-    !!effectiveWorkerId &&
-    preview.valid &&
-    !tooLong &&
-    !insufficient &&
-    !datesInvalid
-
-  const balanceAfter =
-    selectedBalance === null ? null : Math.round((selectedBalance - preview.chargedDays) * 10000) / 10000
-
-  const handleSubmit = async () => {
-    if (!canSubmit) return
-    setSubmitting(true)
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setError(null)
+    setSubmitting(true)
+
     try {
-      await registerWorkerVacation({
-        workerId: effectiveWorkerId,
-        startDate,
-        endDate,
-        notes: notes.trim() || null,
+      const result = await registerWorkerVacation({
+        workerId: data.workerId,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        notes: data.notes ?? null,
         requestId,
       })
-      invalidateVacationData(queryClient)
-      onSuccess?.()
+
+      toast({
+        title: "Vacaciones registradas",
+        description: `Se registraron ${result.charged_days} días consumidos. Saldo actual: ${formatVacationDays(result.balance)}.`,
+      })
+
+      setSubmitting(false)
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron registrar las vacaciones.")
-    } finally {
+      if (onSuccess) onSuccess()
+    } catch (e: any) {
+      setError(e.message || "Error desconocido al registrar vacaciones")
       setSubmitting(false)
     }
   }
 
+  if (!open) {
+    return null
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CalendarPlus className="h-5 w-5 text-sitecorp-primary" /> Registrar vacaciones
-          </DialogTitle>
-          <DialogDescription>
-            Entre 1 y 15 días naturales. Los domingos no consumen saldo; los sábados sí.
-          </DialogDescription>
-        </DialogHeader>
+    <SiteCorpCard>
+      <h2 className="text-lg font-semibold text-ink mb-4">
+        {preselectedWorkerName ? `Registrar vacaciones para ${preselectedWorkerName}` : "Registrar vacaciones"}
+      </h2>
 
-        <div className="space-y-4">
-          {error && (
-            <SiteCorpAlert type="danger" title="No se pudo registrar">
-              {error}
-            </SiteCorpAlert>
-          )}
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Worker selection */}
+        <SiteCorpFormSection title="Trabajador">
+          <SiteCorpSelect
+            disabled={workers.length <= 1}
+            onValueChange={(val) => form.setValue("workerId", val as string)}
+          >
+            <option value="">Seleccionar trabajador</option>
+            {workers.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.full_name}
+              </option>
+            ))}
+          </SiteCorpSelect>
+        </SiteCorpFormSection>
 
-          {!preselectedWorkerId && (
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Trabajador</label>
-              <SiteCorpSelect value={workerId} onValueChange={setWorkerId} disabled={submitting}>
-                <option value="">Seleccione un trabajador…</option>
-                {workers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.full_name}
-                  </option>
-                ))}
-              </SiteCorpSelect>
+        {/* Balance info */}
+        {workers.length > 0 && (
+          <SiteCorpFormSection title="Saldo">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-border p-2">
+                <p className="text-xs font-medium text-muted-foreground">Disponible</p>
+                <p className="text-lg font-semibold text-ink">{formatVacationDays(workerBalance)}</p>
+              </div>
+              <div className="rounded-xl border border-border p-2">
+                <p className="text-xs font-medium text-muted-foreground">A cargo</p>
+                <p className="text-lg font-semibold text-sitecorp-danger">{formatVacationDays(chargedDays)}</p>
+              </div>
             </div>
-          )}
+          </SiteCorpFormSection>
+        )}
 
-          {preselectedWorkerId && preselectedWorkerName && (
-            <p className="text-sm text-ink">
-              Trabajador: <strong>{preselectedWorkerName}</strong>
-            </p>
-          )}
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Fecha de inicio</label>
-              <SiteCorpInput
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={submitting}
-              />
+        {/* Preview */}
+        {preview && (
+          <SiteCorpAlert
+            type={balanceOk ? "success" : "warning"}
+            title={preview.valid ? "Previsualización" : "Período inválido"}
+          >
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <p className="text-muted-foreground">Días naturales</p>
+                <p className="font-medium text-ink">{preview.naturalDays}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Domingos</p>
+                <p className="font-medium text-ink">{preview.sundays}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">A descontar</p>
+                <p className="font-medium text-ink">{formatVacationDays(preview.chargedDays)}</p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Fecha final</label>
-              <SiteCorpInput
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-          </div>
+            {preview.valid && balanceOk && (
+              <p className="mt-2 text-sm text-sitecorp-success">
+                Saldo suficiente: el trabajador dispone de {formatVacationDays(workerBalance)} días.
+              </p>
+            )}
+            {!preview.valid && (
+              <p className="mt-2 text-sm text-sitecorp-danger">
+                El período debe tener entre 1 y 15 días naturales.
+              </p>
+            )}
+            {preview.valid && !balanceOk && (
+              <p className="mt-2 text-sm text-sitecorp-danger">
+                Saldo insuficiente: el trabajador dispone de {formatVacationDays(workerBalance)} días y el período consumiría {formatVacationDays(preview.chargedDays)} días.
+              </p>
+            )}
+          </SiteCorpAlert>
+        )}
 
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Observaciones (opcional)</label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Motivo, referencia o comentario"
-              disabled={submitting}
-              rows={2}
-            />
-          </div>
+        {/* Date fields */}
+        <SiteCorpFormSection title="Fechas">
+          <SiteCorpInput
+            type="date"
+            name="startDate"
+            placeholder="Fecha de inicio"
+            {...form.register("startDate")}
+          />
+          <SiteCorpInput
+            type="date"
+            name="endDate"
+            placeholder="Fecha final"
+            {...form.register("endDate")}
+          />
+          <SiteCorpInput
+            name="notes"
+            placeholder="Observaciones (opcional)"
+            {...form.register("notes")}
+          />
+        </SiteCorpFormSection>
 
-          {preview.valid && (
-            <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <dl className="grid grid-cols-2 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">Período natural</dt>
-                <dd className="text-right font-medium text-ink">{preview.naturalDays} días</dd>
-                <dt className="text-muted-foreground">Domingos incluidos</dt>
-                <dd className="text-right font-medium text-ink">{preview.sundays}</dd>
-                <dt className="text-muted-foreground">Días que se descontarán</dt>
-                <dd className="text-right font-semibold text-sitecorp-primary">
-                  {formatVacationDays(preview.chargedDays)}
-                </dd>
-                {selectedBalance !== null && (
-                  <>
-                    <dt className="text-muted-foreground">Saldo actual</dt>
-                    <dd className="text-right font-medium text-ink">
-                      {formatVacationDays(selectedBalance)}
-                    </dd>
-                    <dt className="text-muted-foreground">Saldo después</dt>
-                    <dd className="text-right font-semibold text-ink">
-                      {formatVacationDays(balanceAfter)}
-                    </dd>
-                  </>
-                )}
-              </dl>
-            </div>
-          )}
-
-          {tooLong && (
-            <SiteCorpAlert type="warning">
-              El período supera el máximo de 15 días naturales consecutivos.
-            </SiteCorpAlert>
-          )}
-          {insufficient && selectedBalance !== null && (
-            <SiteCorpAlert type="warning">
-              El trabajador dispone de {formatVacationDays(selectedBalance)} días y el período
-              seleccionado consumiría {formatVacationDays(preview.chargedDays)} días.
-            </SiteCorpAlert>
-          )}
-          {datesInvalid && (
-            <SiteCorpAlert type="warning">
-              La fecha final no puede ser anterior a la fecha inicial.
-            </SiteCorpAlert>
-          )}
-        </div>
-
-        <DialogFooter>
+        {/* Action buttons */}
+        <div className="flex gap-3 pt-3">
           <SiteCorpButton
-            variant="outline"
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
+            variant="outline"
           >
-            Cancelar
+            <XCircle className="mr-1 h-3.5 w-3.5" /> Cancelar
           </SiteCorpButton>
-          <SiteCorpButton type="button" onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting ? "Registrando…" : "Registrar vacaciones"}
+
+          <SiteCorpButton
+            type="submit"
+            disabled={submitting || !balanceOk}
+            variant="default"
+          >
+            {submitting ? "Guardando…" : "Guardar vacaciones"}
+            {!submitting && <CalendarCheck2 className="ml-1 h-3.5 w-3.5" />}
           </SiteCorpButton>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+
+        {error && (
+          <p className="mt-2 text-sm text-sitecorp-danger">{error}</p>
+        )}
+      </form>
+    </SiteCorpCard>
   )
 }
 
