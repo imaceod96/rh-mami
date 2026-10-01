@@ -1,5 +1,7 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import {
   Dialog,
   DialogContent,
@@ -34,6 +36,12 @@ import {
   previewPositionChange,
   type PositionChangePreview,
 } from "@/lib/addendums"
+import {
+  ensureAddendumDocumentGenerated,
+  MISSING_ADDENDUM_TEMPLATE_MESSAGE,
+  resolveAddendumTemplateAvailability,
+  type TemplateAvailability,
+} from "@/lib/contract-automation"
 import { formatConditionDate } from "@/lib/contract-conditions"
 
 interface PositionRow {
@@ -130,6 +138,11 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
   const [representativeAssignmentId, setRepresentativeAssignmentId] = React.useState<string | null>(
     null
   )
+  // Centro de contratación: plantilla del anexo y estado de proceso documental
+  const [addendumTemplate, setAddendumTemplate] = React.useState<TemplateAvailability | null>(null)
+  const [addendumTemplateChecking, setAddendumTemplateChecking] = React.useState(false)
+  const [processStage, setProcessStage] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const loadPositions = React.useCallback(async () => {
     if (!entityId) return
@@ -276,6 +289,38 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
     }
   }, [open, selectedPositionId, effectiveDate, workerId])
 
+  // §41/§43: si el anexo se va a formalizar, se valida su plantilla documental
+  // ANTES de aplicar el cambio, para no dejar cambios sin documento.
+  React.useEffect(() => {
+    if (!open || !formalizeNow || !signatureDate) {
+      setAddendumTemplate(null)
+      setAddendumTemplateChecking(false)
+      return
+    }
+    let active = true
+    setAddendumTemplateChecking(true)
+    resolveAddendumTemplateAvailability(entityId, signatureDate)
+      .then((result) => {
+        if (active) setAddendumTemplate(result)
+      })
+      .catch((err) => {
+        console.error("Error resolving addendum template:", err)
+        if (active) setAddendumTemplate(null)
+      })
+      .finally(() => {
+        if (active) setAddendumTemplateChecking(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [open, formalizeNow, signatureDate, entityId])
+
+  const addendumTemplateBlocked =
+    !!addendumTemplate &&
+    (addendumTemplate.status === "NONE" ||
+      addendumTemplate.status === "AMBIGUOUS" ||
+      addendumTemplate.status === "UNKNOWN")
+
   const handleSubmit = async () => {
     setError(null)
 
@@ -309,6 +354,10 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
         setError("Seleccione el representante vigente en la fecha de firma del anexo.")
         return
       }
+      if (addendumTemplateBlocked) {
+        setError(MISSING_ADDENDUM_TEMPLATE_MESSAGE)
+        return
+      }
     }
 
     setSubmitting(true)
@@ -329,16 +378,44 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
 
       const addendumStatus = result.addendum?.addendum_status
       const addendumNumber = result.addendum?.addendum_number
+      const addendumId = result.addendum?.addendum_id
 
-      showSuccess(
-        addendumStatus === "FORMALIZED"
-          ? `Cambio de puesto realizado. Anexo Nº ${addendumNumber} formalizado.`
-          : addendumNumber
+      // §42/§65: el documento del anexo se genera AUTOMÁTICAMENTE al formalizarlo.
+      let documentWarning: string | null = null
+      if (addendumStatus === "FORMALIZED" && addendumId) {
+        setProcessStage("Generando documento del anexo…")
+        try {
+          const doc = await ensureAddendumDocumentGenerated(addendumId)
+          if (!doc.skipped && !doc.generated) {
+            documentWarning =
+              doc.result?.error || "No se pudo generar el documento del anexo automáticamente."
+          }
+        } catch (genErr) {
+          documentWarning =
+            genErr instanceof Error
+              ? genErr.message
+              : "No se pudo generar el documento del anexo automáticamente."
+        }
+      }
+
+      invalidateContractAlertData(queryClient)
+      setProcessStage(null)
+
+      if (addendumStatus === "FORMALIZED") {
+        showSuccess(
+          documentWarning
+            ? `Cambio de puesto realizado. Anexo Nº ${addendumNumber} formalizado, pero el documento no se pudo generar: ${documentWarning}`
+            : `Cambio aplicado correctamente. Se generó automáticamente el Anexo Nº ${addendumNumber} y su documento.`
+        )
+      } else {
+        showSuccess(
+          addendumNumber
             ? `Cambio de puesto realizado. Anexo Nº ${addendumNumber} pendiente de formalizar.`
             : result.addendum_skipped === "NO_CONTRACT"
               ? "Cambio de puesto realizado. No se registró anexo: el trabajador no tiene un contrato vigente."
               : "Cambio de puesto realizado correctamente."
-      )
+        )
+      }
       onOpenChange(false)
       onSuccess()
     } catch (err) {
@@ -368,6 +445,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
       showError(friendly)
     } finally {
       setSubmitting(false)
+      setProcessStage(null)
     }
   }
 
@@ -671,6 +749,18 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
                               signatureDate ? ` (${formatConditionDate(signatureDate)})` : ""
                             }.`}
                           />
+                          {addendumTemplateBlocked && (
+                            <SiteCorpAlert type="warning" title="Plantilla de anexo requerida">
+                              <span className="whitespace-pre-line">
+                                {MISSING_ADDENDUM_TEMPLATE_MESSAGE}
+                              </span>
+                            </SiteCorpAlert>
+                          )}
+                          {addendumTemplateChecking && !addendumTemplateBlocked && (
+                            <p className="text-xs text-muted-foreground">
+                              Comprobando la plantilla del anexo…
+                            </p>
+                          )}
                         </div>
                       )}
                     </>
@@ -723,9 +813,15 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
           <SiteCorpButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || loading || selectable.length === 0 || previewLoading}
+            disabled={
+              submitting ||
+              loading ||
+              selectable.length === 0 ||
+              previewLoading ||
+              (formalizeNow && (addendumTemplateBlocked || addendumTemplateChecking))
+            }
           >
-            {submitting ? "Procesando…" : "Confirmar cambio de puesto"}
+            {processStage ? processStage : submitting ? "Procesando…" : "Confirmar cambio de puesto"}
           </SiteCorpButton>
         </div>
       </DialogContent>

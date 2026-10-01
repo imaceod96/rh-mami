@@ -1,5 +1,8 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
+import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import {
   Dialog,
   DialogContent,
@@ -100,6 +103,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   entityId,
   onSuccess,
 }) => {
+  const queryClient = useQueryClient()
   const [positions, setPositions] = React.useState<PositionRow[]>([])
   const [occupancy, setOccupancy] = React.useState<Record<string, number>>({})
   const [contractTypes, setContractTypes] = React.useState<ContractType[]>([])
@@ -347,7 +351,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
 
     setSubmitting(true)
     try {
-      const { error: rpcError } = await supabase.rpc("reincorporate_worker", {
+      const { data: reincData, error: rpcError } = await supabase.rpc("reincorporate_worker", {
         p_worker_id: workerId,
         p_new_position_id: positionId,
         p_reincorporation_date: reincorporationDate,
@@ -364,7 +368,30 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
-      showSuccess("Reincorporación realizada correctamente.")
+      // El contrato de la reincorporación produce su documento automáticamente (§13/§14).
+      const newContractId = (reincData as { contract_id?: string } | null)?.contract_id
+      let documentWarning: string | null = null
+      if (newContractId) {
+        try {
+          const doc = await ensureContractDocumentGenerated(newContractId)
+          if (!doc.skipped && !doc.generated) {
+            documentWarning =
+              doc.result?.error || "No se pudo generar el documento contractual automáticamente."
+          }
+        } catch (genErr) {
+          documentWarning =
+            genErr instanceof Error
+              ? genErr.message
+              : "No se pudo generar el documento contractual automáticamente."
+        }
+      }
+
+      invalidateContractAlertData(queryClient)
+      showSuccess(
+        documentWarning
+          ? `Reincorporación completada, pero no se pudo generar el documento contractual: ${documentWarning}`
+          : "Reincorporación completada correctamente. El contrato y su documento fueron generados."
+      )
       onOpenChange(false)
       onSuccess()
     } catch (err) {

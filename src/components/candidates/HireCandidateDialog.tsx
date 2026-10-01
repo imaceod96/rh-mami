@@ -35,6 +35,12 @@ import {
   type ReadinessResult,
 } from "@/lib/contract-readiness"
 import {
+  ensureContractDocumentGenerated,
+  missingContractTemplateMessage,
+  resolveContractTemplateAvailability,
+  type TemplateAvailability,
+} from "@/lib/contract-automation"
+import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
 } from "@/lib/position-schedule"
@@ -183,6 +189,11 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
   const queryClient = useQueryClient()
   const [readiness, setReadiness] = React.useState<ReadinessResult | null>(null)
   const [readinessLoading, setReadinessLoading] = React.useState(false)
+  // Centro de contratación: validación de la plantilla documental ANTES de contratar
+  const [templateAvailability, setTemplateAvailability] =
+    React.useState<TemplateAvailability | null>(null)
+  const [templateChecking, setTemplateChecking] = React.useState(false)
+  const [processStage, setProcessStage] = React.useState<string | null>(null)
   const [segmentsByPosition, setSegmentsByPosition] = React.useState<
     Record<string, PositionScheduleSegment[]>
   >({})
@@ -434,6 +445,38 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     isDetermined,
   ])
 
+  // §16/§17: la contratación exige una plantilla documental activa aplicable.
+  // Se valida ANTES de crear el contrato para no dejar contrataciones sin documento.
+  React.useEffect(() => {
+    if (!open || !entityId || !selectedType || !signatureDate) {
+      setTemplateAvailability(null)
+      setTemplateChecking(false)
+      return
+    }
+    let active = true
+    setTemplateChecking(true)
+    resolveContractTemplateAvailability(entityId, selectedType.code, signatureDate)
+      .then((result) => {
+        if (active) setTemplateAvailability(result)
+      })
+      .catch((err) => {
+        console.error("Error resolving contract template:", err)
+        if (active) setTemplateAvailability(null)
+      })
+      .finally(() => {
+        if (active) setTemplateChecking(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [open, entityId, selectedType, signatureDate])
+
+  const templateBlocked =
+    !!templateAvailability &&
+    (templateAvailability.status === "NONE" ||
+      templateAvailability.status === "AMBIGUOUS" ||
+      templateAvailability.status === "UNKNOWN")
+
   const handleSubmit = async () => {
     setError(null)
 
@@ -489,6 +532,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setError(formatReadinessMessage(readiness))
       return
     }
+    if (templateBlocked) {
+      setError(missingContractTemplateMessage(selectedType?.name ?? null))
+      return
+    }
 
     const effectiveContractStart = contractStartDate || hireDate
     if (isDetermined && !contractEndDate) {
@@ -519,14 +566,48 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
+      const payload = (data as any) || {}
+      const workerId = payload.worker_id as string | undefined
+      const contractId = payload.contract_id as string | undefined
+
+      // §13/§14/§62: el documento contractual se genera automáticamente tras
+      // formalizar la contratación. No hay paso manual de «Generar contrato».
+      let documentWarning: string | null = null
+      if (contractId) {
+        setProcessStage("Generando documento contractual…")
+        try {
+          const doc = await ensureContractDocumentGenerated(contractId)
+          if (!doc.skipped && !doc.generated) {
+            documentWarning =
+              doc.result?.error || "No se pudo generar el documento contractual automáticamente."
+          }
+        } catch (genErr) {
+          documentWarning =
+            genErr instanceof Error
+              ? genErr.message
+              : "No se pudo generar el documento contractual automáticamente."
+        }
+      }
+
       // Contratación/reincorporación crea el contrato vigente: recalcular alertas.
       invalidateContractAlertData(queryClient)
+      setProcessStage(null)
 
-      const workerId = (data as any)?.worker_id as string | undefined
+      if (documentWarning && workerId) {
+        // §67: no se presenta como completada sin documento, pero el contrato queda
+        // registrado y su documento puede regenerarse desde la ficha del trabajador.
+        showError(
+          `La contratación se completó, pero no se pudo generar el documento contractual: ${documentWarning}. Puede regenerarlo desde la pestaña Contratación del trabajador.`
+        )
+        onOpenChange(false)
+        onSuccess(workerId)
+        return
+      }
+
       showSuccess(
         isReincorporation
-          ? "Trabajador reincorporado correctamente."
-          : "Trabajador contratado correctamente."
+          ? "Reincorporación completada correctamente. El contrato y su documento fueron generados."
+          : "Contratación completada correctamente. El contrato y su documento fueron generados."
       )
       onOpenChange(false)
       if (workerId) onSuccess(workerId)
@@ -569,6 +650,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       showError(friendly)
     } finally {
       setSubmitting(false)
+      setProcessStage(null)
     }
   }
 
@@ -954,6 +1036,18 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
 
         <ContractReadinessChecklist readiness={readiness} loading={readinessLoading} />
 
+        {/* §16/§17: la plantilla documental se valida antes de contratar */}
+        {templateBlocked && selectedType && (
+          <SiteCorpAlert type="warning" title="Plantilla documental requerida">
+            <span className="whitespace-pre-line">
+              {missingContractTemplateMessage(selectedType.name)}
+            </span>
+          </SiteCorpAlert>
+        )}
+        {templateChecking && !templateBlocked && (
+          <p className="text-xs text-muted-foreground">Comprobando la plantilla documental…</p>
+        )}
+
         <div className="space-y-2">
           <Label>Observaciones</Label>
           <textarea
@@ -987,15 +1081,19 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
               hasInvalidComponent(components) ||
               formalizationBlocked ||
               !representativeAssignmentId ||
+              templateBlocked ||
+              (!!contractTypeId && !!signatureDate && templateChecking) ||
               (!!readiness && !readiness.ready)
             }
           >
             <UserPlus className="mr-2 h-4 w-4" />
-            {submitting
-              ? "Procesando…"
-              : isReincorporation
-                ? "Confirmar reincorporación"
-                : "Confirmar contratación"}
+            {processStage
+              ? processStage
+              : submitting
+                ? "Procesando…"
+                : isReincorporation
+                  ? "Confirmar reincorporación"
+                  : "Confirmar contratación"}
           </SiteCorpButton>
         </div>
       </DialogContent>

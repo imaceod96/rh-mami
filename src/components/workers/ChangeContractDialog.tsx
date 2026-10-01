@@ -14,6 +14,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
 import { showSuccess, showError } from "@/utils/toast"
+import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/lib/representatives"
@@ -258,7 +259,7 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
 
     setSubmitting(true)
     try {
-      const { error: rpcError } = await supabase.rpc("change_worker_contract", {
+      const { data: changeData, error: rpcError } = await supabase.rpc("change_worker_contract", {
         p_worker_id: workerId,
         p_new_contract_type_id: newContractTypeId,
         p_effective_date: effectiveDate,
@@ -273,9 +274,31 @@ const ChangeContractDialog: React.FC<ChangeContractDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
+      // El nuevo contrato formalizado produce su documento automáticamente (§13/§14).
+      const newContractId = (changeData as { new_contract_id?: string } | null)?.new_contract_id
+      let documentWarning: string | null = null
+      if (newContractId) {
+        try {
+          const doc = await ensureContractDocumentGenerated(newContractId)
+          if (!doc.skipped && !doc.generated) {
+            documentWarning =
+              doc.result?.error || "No se pudo generar el documento contractual automáticamente."
+          }
+        } catch (genErr) {
+          documentWarning =
+            genErr instanceof Error
+              ? genErr.message
+              : "No se pudo generar el documento contractual automáticamente."
+        }
+      }
+
       // El contrato vigente cambió: recalcular alertas de vencimiento y resumen.
       invalidateContractAlertData(queryClient)
-      showSuccess("Cambio de contrato realizado correctamente.")
+      showSuccess(
+        documentWarning
+          ? `Cambio de contrato realizado, pero no se pudo generar su documento: ${documentWarning}`
+          : "Cambio de contrato realizado correctamente. El contrato y su documento fueron generados."
+      )
       onOpenChange(false)
       onSuccess()
     } catch (err) {

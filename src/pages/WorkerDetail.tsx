@@ -71,12 +71,17 @@ import {
 } from "@/components/contracts/ContractConditionsFields"
 import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
 import { ContractRetributionSummary } from "@/components/contracts/ContractRetributionSummary"
+import { CurrentContractSummary } from "@/components/contracts/CurrentContractSummary"
+import { ContractualTimeline } from "@/components/contracts/ContractualTimeline"
+import { AddendumDetailDialog } from "@/components/addendums/AddendumDetailDialog"
+import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import {
   buildComponentsPayload,
   fetchComponentsByContract,
   fetchPaymentMethods,
   formatConditionDate,
+  formatContractMoney,
   hasInvalidComponent,
   type CompensationComponentDraft,
   type ContractCompensationComponent,
@@ -234,6 +239,7 @@ const WorkerDetail = () => {
   const [licenseCategories, setLicenseCategories] = React.useState<CatalogOption[]>([])
   const [licenseIds, setLicenseIds] = React.useState<string[]>([])
   const [applicableScaleId, setApplicableScaleId] = React.useState<string | null>(null)
+  const [applicableScaleName, setApplicableScaleName] = React.useState<string | null>(null)
   const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<Record<string, SalaryValue | null>>({})
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -251,6 +257,9 @@ const WorkerDetail = () => {
   const [addendums, setAddendums] = React.useState<ContractAddendum[]>([])
   const [contractualConditions, setContractualConditions] =
     React.useState<WorkerContractualConditions | null>(null)
+  // Centro de contratación: detalle de un anexo abierto desde la timeline
+  const [timelineAddendumId, setTimelineAddendumId] = React.useState<string | null>(null)
+  const [timelineDetailOpen, setTimelineDetailOpen] = React.useState(false)
   const queryClient = useQueryClient()
   const [contractAlert, setContractAlert] = React.useState<ContractAlertRow | null>(null)
   // Fase 11A.3: horario habitual del puesto vigente (no se copia al trabajador)
@@ -518,6 +527,16 @@ const WorkerDetail = () => {
       // `worker`, que aún no se ha actualizado en este punto del mismo ciclo async.
       const applicableScale = await resolveApplicableScaleId(entityId)
       setApplicableScaleId(applicableScale)
+      if (applicableScale) {
+        const { data: scaleRow } = await supabase
+          .from("salary_scales")
+          .select("name")
+          .eq("id", applicableScale)
+          .maybeSingle()
+        setApplicableScaleName((scaleRow as { name?: string } | null)?.name ?? null)
+      } else {
+        setApplicableScaleName(null)
+      }
 
       const localAssignments = (mappedWorker.assignments || []) as any[]
       const localCurrentAssignment =
@@ -703,7 +722,7 @@ const WorkerDetail = () => {
 
     setContractSubmitting(true)
     try {
-      const { error: rpcError } = await supabase.rpc("complete_worker_contract", {
+      const { data: contractData, error: rpcError } = await supabase.rpc("complete_worker_contract", {
         p_worker_id: worker.id,
         p_contract_type_id: contractForm.contractTypeId,
         p_contract_start_date: start,
@@ -716,6 +735,15 @@ const WorkerDetail = () => {
         p_payment_schedule_text: contractForm.paymentSchedule.trim() || null,
       })
       if (rpcError) throw rpcError
+      // El contrato formalizado produce su documento automáticamente (§13/§14).
+      const newContractId = (contractData as { contract_id?: string } | null)?.contract_id
+      if (newContractId) {
+        try {
+          await ensureContractDocumentGenerated(newContractId)
+        } catch (genErr) {
+          console.error("Error generating contract document:", genErr)
+        }
+      }
       // El contrato vigente cambió: recalcular alertas de vencimiento.
       invalidateContractAlertData(queryClient)
       setContractDialogOpen(false)
@@ -758,6 +786,9 @@ const WorkerDetail = () => {
     [w.first_name, w.first_surname, w.second_surname].filter(Boolean).join(" ")
 
   const salary = salaryForGroup(applicableScaleId, group, salaryValuesByGroup)
+
+  // Condiciones FORMALIZADAS vigentes (contrato original + anexos formalizados en orden)
+  const formalizedConditions = contractualConditions?.formalized ?? null
 
   // Anexos pendientes de formalizar (todavía NO forman parte de las condiciones formalizadas)
   const pendingContractAddendums = React.useMemo(
@@ -867,8 +898,8 @@ const WorkerDetail = () => {
       <Tabs defaultValue="resumen" className="w-full">
         <TabsList className="mb-4 grid w-full max-w-xl grid-cols-3">
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
-          <TabsTrigger value="salario">
-            Salario
+          <TabsTrigger value="contratacion">
+            Contratación
             {pendingContractAddendums.length > 0 && (
               <span className="ml-2 rounded-full bg-sitecorp-warning/10 px-2 py-0.5 text-xs font-semibold text-sitecorp-warning">
                 {pendingContractAddendums.length}
@@ -1120,19 +1151,46 @@ const WorkerDetail = () => {
                           </dd>
                         </div>
                       )}
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Escala salarial</dt>
+                        <dd className="text-sm text-ink">
+                          {applicableScaleName || (
+                            <span className="italic text-muted-foreground">
+                              Sin escala configurada
+                            </span>
+                          )}
+                        </dd>
+                      </div>
                       {salary ? (
                         <div>
-                          <dt className="text-xs text-muted-foreground">Salario de referencia</dt>
+                          <dt className="text-xs text-muted-foreground">Salario base</dt>
                           <dd className="text-sm font-medium text-ink">{formatSalary(salary)}</dd>
                         </div>
                       ) : (
                         <div>
-                          <dt className="text-xs text-muted-foreground">Salario de referencia</dt>
+                          <dt className="text-xs text-muted-foreground">Salario base</dt>
                           <dd className="text-sm text-muted-foreground italic">
                             Salario no configurado
                           </dd>
                         </div>
                       )}
+                      <div>
+                        <dt className="text-xs text-muted-foreground">
+                          Retribución total contractual
+                        </dt>
+                        <dd className="text-sm font-medium text-ink">
+                          {formalizedConditions?.total_compensation != null ? (
+                            formatContractMoney(
+                              formalizedConditions.total_compensation,
+                              formalizedConditions.currency_code || salary?.currency_code || "CUP"
+                            )
+                          ) : (
+                            <span className="italic text-muted-foreground">
+                              Sin contrato formalizado
+                            </span>
+                          )}
+                        </dd>
+                      </div>
                     </>
                   )}
                 </>
@@ -1194,245 +1252,6 @@ const WorkerDetail = () => {
               </div>
             )}
 
-            {/* Contratación */}
-            <div className="mt-5 border-t border-border pt-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold text-ink">Contratación</h4>
-                <div className="flex flex-wrap items-center gap-2">
-                  {canManage && currentAssignment && !currentContract && (
-                    <SiteCorpButton
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setActionError(null)
-                        setContractForm({
-                          contractTypeId: "",
-                          startDate: worker.hire_date || "",
-                          endDate: "",
-                          representativeAssignmentId: null,
-                          signatureDate: "",
-                          signaturePlace: "",
-                          paymentMethodId: "",
-                          paymentSchedule: "",
-                          components: [],
-                        })
-                        setActionError(null)
-                        setFormalizationPending(null)
-                        setContractDialogOpen(true)
-                      }}
-                    >
-                      <FileText className="mr-2 h-4 w-4" /> Registrar contrato
-                    </SiteCorpButton>
-                  )}
-                  {canManage && !isInactive && currentContract && (
-                    <SiteCorpButton
-                      type="button"
-                      variant="outline"
-                      onClick={() => setChangeContractOpen(true)}
-                    >
-                      <FileSignature className="mr-2 h-4 w-4" /> Cambiar contrato
-                    </SiteCorpButton>
-                  )}
-                </div>
-              </div>
-              {currentContract ? (
-                <>
-                <dl className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Tipo de contrato</dt>
-                    <dd>
-                      <SiteCorpStatusBadge
-                        status={
-                          currentContract.contract_type?.code === "DETERMINADO" ? "warning" : "info"
-                        }
-                      >
-                        {currentContract.contract_type?.name || "—"}
-                      </SiteCorpStatusBadge>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Inicio</dt>
-                    <dd className="text-sm text-ink">
-                      {formatConditionDate(currentContract.start_date)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Finalización prevista</dt>
-                    <dd className="text-sm text-ink">
-                      {currentContract.end_date ? (
-                        formatConditionDate(currentContract.end_date)
-                      ) : (
-                        <span className="text-muted-foreground">Sin fecha de fin</span>
-                      )}
-                    </dd>
-                  </div>
-                  {/* Fase 11A.5: la fecha de firma es independiente de la fecha de inicio */}
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Fecha de firma</dt>
-                    <dd className="text-sm text-ink">
-                      {currentContract.signature_date ? (
-                        formatConditionDate(currentContract.signature_date)
-                      ) : (
-                        <span className="italic text-muted-foreground">
-                          Sin información histórica
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Lugar de firma</dt>
-                    <dd className="text-sm text-ink">
-                      {currentContract.signature_place || (
-                        <span className="italic text-muted-foreground">
-                          Sin información histórica
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Forma de pago</dt>
-                    <dd className="text-sm text-ink">
-                      {currentContract.payment_method?.name || (
-                        <span className="italic text-muted-foreground">
-                          Sin información histórica
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Día / momento de pago</dt>
-                    <dd className="text-sm text-ink">
-                      {currentContract.payment_schedule_text || (
-                        <span className="italic text-muted-foreground">
-                          Sin información histórica
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-
-                {/* Retribución formalizada en el contrato vs. salario actual (Fase 11A.5) */}
-                <ContractRetributionSummary
-                  className="mt-3"
-                  salaryAmount={currentContract.salary_amount}
-                  salaryCurrencyCode={currentContract.salary_currency_code}
-                  salarySnapshotStatus={currentContract.salary_snapshot_status}
-                  salaryEffectiveDate={currentContract.salary_effective_date}
-                  totalCompensationSnapshot={currentContract.total_compensation_snapshot}
-                  components={componentsByContract[currentContract.id] || []}
-                  capturedAt={currentContract.conditions_captured_at}
-                  salaryGroupSequence={currentContract.salary_group?.sequence_number ?? null}
-                  currentSalaryAmount={salary?.amount ?? null}
-                  currentSalaryCurrency={salary?.currency_code ?? null}
-                />
-
-                {/* Representante que comparece: snapshot histórico (Fase 11A.1) */}
-                <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Representante de la entidad al formalizarse el contrato
-                  </p>
-                  {currentContract.representative_captured_at &&
-                  currentContract.representative_name_snapshot ? (
-                    <>
-                      <p className="mt-1 text-sm font-medium text-ink">
-                        {currentContract.representative_name_snapshot}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {currentContract.representative_position_snapshot || "—"}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-1 text-sm italic text-muted-foreground">
-                      Sin información histórica: este contrato se formalizó antes de que se registrara
-                      el representante autorizado de la entidad.
-                    </p>
-                  )}
-                </div>
-
-                {/* Alerta de vencimiento contractual (Fase 12) */}
-                {showContractAlert && contractAlert && (
-                  <div
-                    className={`mt-3 rounded-xl border p-3 ${
-                      contractAlertTone === "danger"
-                        ? "border-sitecorp-danger/30 bg-sitecorp-danger/5"
-                        : contractAlertTone === "warning"
-                          ? "border-sitecorp-warning/30 bg-sitecorp-warning/5"
-                          : "border-blue-500/30 bg-blue-500/5"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <SiteCorpStatusBadge
-                        status={
-                          contractAlert.alert_state === "NO_END_DATE"
-                            ? "warning"
-                            : CONTRACT_ALERT_META[contractAlert.alert_state].badge
-                        }
-                      >
-                        {contractAlert.alert_state === "NO_END_DATE"
-                          ? "Requiere corrección"
-                          : CONTRACT_ALERT_META[contractAlert.alert_state].label}
-                      </SiteCorpStatusBadge>
-                      <span className="text-sm font-medium text-ink">
-                        {contractAlert.alert_state === "NO_END_DATE"
-                          ? "Contrato determinado sin fecha de finalización"
-                          : deadlineLabel(
-                              contractAlert.days_remaining,
-                              contractAlert.contract_end_date
-                            )}
-                      </span>
-                    </div>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {contractAlert.alert_state === "NO_END_DATE"
-                        ? "Corrija la fecha de finalización del contrato o cámbielo a tiempo indeterminado."
-                        : `Inició ${formatContractDate(contractAlert.contract_start_date)}${
-                            contractAlert.contract_end_date
-                              ? ` · ${
-                                  contractAlert.days_remaining !== null &&
-                                  contractAlert.days_remaining < 0
-                                    ? "Finalizó"
-                                    : "Finaliza"
-                                } ${formatContractDate(contractAlert.contract_end_date)}`
-                              : ""
-                          }`}
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      La fecha del contrato genera una alerta administrativa: no se da de baja al
-                      trabajador, no se cierra su asignación ni se libera el puesto
-                      automáticamente.
-                    </p>
-
-                    {canManage && contractAlert.alert_state !== "NO_END_DATE" && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <SiteCorpButton
-                          size="sm"
-                          variant="outline"
-                          type="button"
-                          onClick={() => setChangeContractOpen(true)}
-                        >
-                          <FileSignature className="mr-1 h-3.5 w-3.5" /> Cambiar contrato
-                        </SiteCorpButton>
-                        <SiteCorpButton
-                          size="sm"
-                          variant="outline"
-                          type="button"
-                          onClick={() => setSeparateOpen(true)}
-                        >
-                          <UserMinus className="mr-1 h-3.5 w-3.5" /> Dar de baja
-                        </SiteCorpButton>
-                      </div>
-                    )}
-                  </div>
-                )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Sin contrato registrado para este trabajador.
-                </p>
-              )}
-            </div>
           </div>
         </SiteCorpCard>
       </div>
@@ -1519,90 +1338,119 @@ const WorkerDetail = () => {
             </ol>
           )}
 
-          {sortedContracts.length > 0 && (
-            <div className="mt-6 border-t border-border pt-4">
-              <h4 className="mb-3 text-sm font-semibold text-ink">Historial de contratos</h4>
-              <ul className="space-y-2">
-                {sortedContracts.map((c) => (
-                  <li key={c.id} className="rounded-lg border border-border px-3 py-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm text-ink">
-                        {c.contract_type?.name || "Contrato"}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {c.start_date} →{" "}
-                        {c.is_current
-                          ? c.end_date
-                            ? `previsto hasta ${c.end_date}`
-                            : "sin fecha de fin"
-                          : c.actual_end_date
-                            ? `hasta ${c.actual_end_date}`
-                            : c.end_date
-                              ? `previsto hasta ${c.end_date}`
-                              : "sin fecha de fin"}
-                      </span>
-                      {c.is_current ? (
-                        <SiteCorpStatusBadge status="success">Vigente</SiteCorpStatusBadge>
-                      ) : (
-                        <SiteCorpStatusBadge status="neutral">Finalizado</SiteCorpStatusBadge>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {/* Snapshot histórico del contrato: nunca se resuelve con el representante actual */}
-                      {c.representative_captured_at && c.representative_name_snapshot
-                        ? `Representante: ${c.representative_name_snapshot} · ${
-                            c.representative_position_snapshot || "—"
-                          }`
-                        : "Representante: sin información histórica"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {/* Fase 11A.5/11A.7: firma, lugar, forma y momento de pago formalizados (histórico) */}
-                      {c.signature_date || c.signature_place || c.payment_method?.name
-                        ? [
-                            c.signature_date
-                              ? `Firmado: ${formatConditionDate(c.signature_date)}`
-                              : null,
-                            c.signature_place ? `Lugar: ${c.signature_place}` : null,
-                            c.payment_method?.name
-                              ? `Forma de pago: ${c.payment_method.name}`
-                              : null,
-                            c.payment_schedule_text
-                              ? `Momento de pago: ${c.payment_schedule_text}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
-                        : "Firma y forma de pago: sin información histórica"}
-                    </p>
-
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs font-medium text-sitecorp-primary">
-                        Ver condiciones retributivas formalizadas
-                      </summary>
-                      <ContractRetributionSummary
-                        className="mt-2 bg-background"
-                        title="Retribución de este contrato"
-                        salaryAmount={c.salary_amount}
-                        salaryCurrencyCode={c.salary_currency_code}
-                        salarySnapshotStatus={c.salary_snapshot_status}
-                        salaryEffectiveDate={c.salary_effective_date}
-                        totalCompensationSnapshot={c.total_compensation_snapshot}
-                        components={componentsByContract[c.id] || []}
-                        capturedAt={c.conditions_captured_at}
-                        salaryGroupSequence={c.salary_group?.sequence_number ?? null}
-                      />
-                    </details>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       </SiteCorpCard>
 
         </TabsContent>
 
-        <TabsContent value="salario" className="space-y-6">
+        <TabsContent value="contratacion" className="space-y-6">
+          {/* Alerta de vencimiento contractual (Fase 12) */}
+          {showContractAlert && contractAlert && (
+            <div
+              className={'rounded-xl border p-3 ' + (
+                contractAlertTone === 'danger'
+                  ? 'border-sitecorp-danger/30 bg-sitecorp-danger/5'
+                  : contractAlertTone === 'warning'
+                    ? 'border-sitecorp-warning/30 bg-sitecorp-warning/5'
+                    : 'border-blue-500/30 bg-blue-500/5'
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <SiteCorpStatusBadge
+                  status={
+                    contractAlert.alert_state === 'NO_END_DATE'
+                      ? 'warning'
+                      : CONTRACT_ALERT_META[contractAlert.alert_state].badge
+                  }
+                >
+                  {contractAlert.alert_state === 'NO_END_DATE'
+                    ? 'Requiere corrección'
+                    : CONTRACT_ALERT_META[contractAlert.alert_state].label}
+                </SiteCorpStatusBadge>
+                <span className="text-sm font-medium text-ink">
+                  {contractAlert.alert_state === 'NO_END_DATE'
+                    ? 'Contrato determinado sin fecha de finalización'
+                    : deadlineLabel(contractAlert.days_remaining, contractAlert.contract_end_date)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Contrato vigente con condiciones formalizadas (§8) */}
+          <CurrentContractSummary
+            hasContract={!!currentContract}
+            isInactive={isInactive}
+            contractTypeName={currentContract?.contract_type?.name ?? null}
+            contractStartDate={currentContract?.start_date ?? null}
+            contractEndDate={currentContract?.end_date ?? null}
+            representativeName={currentContract?.representative_name_snapshot ?? null}
+            representativePosition={currentContract?.representative_position_snapshot ?? null}
+            formalized={formalizedConditions}
+            currentSalaryAmount={salary?.amount ?? null}
+            currentSalaryCurrency={salary?.currency_code ?? null}
+            alert={contractAlert}
+            canManage={canManage}
+            onRegisterContract={() => {
+              setActionError(null)
+              setContractForm({
+                contractTypeId: "",
+                startDate: worker.hire_date || "",
+                endDate: "",
+                representativeAssignmentId: null,
+                signatureDate: "",
+                signaturePlace: "",
+                paymentMethodId: "",
+                paymentSchedule: "",
+                components: [],
+              })
+              setFormalizationPending(null)
+              setContractDialogOpen(true)
+            }}
+            onChangeContract={() => setChangeContractOpen(true)}
+            onSeparate={() => setSeparateOpen(true)}
+          />
+
+          {/* Fase 11A.6: contratos y anexos al contrato (§51) */}
+          <ContractAddendumsSection
+            workerId={worker.id}
+            entityId={entityId as string}
+            canManage={canManage}
+            addendums={addendums}
+            contracts={sortedContracts.map((c) => ({
+              id: c.id,
+              typeName: c.contract_type?.name ?? null,
+              startDate: c.start_date,
+              endDate: c.end_date,
+              isCurrent: !!c.is_current,
+            }))}
+            conditions={contractualConditions}
+            operational={{
+              jobName: job?.name ?? null,
+              positionName: position?.name ?? null,
+              groupSequence: group?.sequence_number ?? null,
+              salaryAmount: salary?.amount ?? null,
+              salaryCurrency: salary?.currency_code ?? null,
+            }}
+            paymentMethods={paymentMethods}
+            onChanged={loadWorker}
+          />
+
+          {/* Histórico contractual cronológico (§9/§10) */}
+          <ContractualTimeline
+            contracts={sortedContracts.map((c) => ({
+              id: c.id,
+              typeName: c.contract_type?.name ?? null,
+              startDate: c.start_date,
+              endDate: c.end_date,
+              isCurrent: !!c.is_current,
+            }))}
+            addendums={addendums}
+            onOpenAddendum={(id) => {
+              setTimelineAddendumId(id)
+              setTimelineDetailOpen(true)
+            }}
+          />
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Salario operativo actual (derivado, nunca almacenado en el trabajador) */}
             <SiteCorpCard
@@ -1802,30 +1650,6 @@ const WorkerDetail = () => {
             )}
           </SiteCorpCard>
 
-          {/* Fase 11A.6: contratos y anexos al contrato (§51) */}
-          <ContractAddendumsSection
-            workerId={worker.id}
-            entityId={entityId as string}
-            canManage={canManage}
-            addendums={addendums}
-            contracts={sortedContracts.map((c) => ({
-              id: c.id,
-              typeName: c.contract_type?.name ?? null,
-              startDate: c.start_date,
-              endDate: c.end_date,
-              isCurrent: !!c.is_current,
-            }))}
-            conditions={contractualConditions}
-            operational={{
-              jobName: job?.name ?? null,
-              positionName: position?.name ?? null,
-              groupSequence: group?.sequence_number ?? null,
-              salaryAmount: salary?.amount ?? null,
-              salaryCurrency: salary?.currency_code ?? null,
-            }}
-            paymentMethods={paymentMethods}
-            onChanged={loadWorker}
-          />
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-6">
@@ -2266,6 +2090,16 @@ const WorkerDetail = () => {
           onSuccess={loadWorker}
         />
       )}
+
+      {/* Detalle del anexo abierto desde el histórico contractual */}
+      <AddendumDetailDialog
+        open={timelineDetailOpen}
+        onOpenChange={setTimelineDetailOpen}
+        addendum={addendums.find((row) => row.id === timelineAddendumId) || null}
+        entityId={entityId as string}
+        canManage={canManage}
+        onChanged={loadWorker}
+      />
     </div>
   )
 }

@@ -1,4 +1,7 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
+import { ensureAddendumDocumentGenerated } from "@/lib/contract-automation"
 import {
   Dialog,
   DialogContent,
@@ -80,6 +83,8 @@ export const AddendumDetailDialog: React.FC<AddendumDetailDialogProps> = ({
   const [cancelling, setCancelling] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [confirmCancelOpen, setConfirmCancelOpen] = React.useState(false)
+  const [processStage, setProcessStage] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const addendumId = addendum?.id ?? null
   const status = addendum?.status ?? null
@@ -148,8 +153,29 @@ export const AddendumDetailDialog: React.FC<AddendumDetailDialogProps> = ({
         signaturePlace,
         representativeAssignmentId,
       })
+
+      // §42: al formalizar, el documento del anexo se genera automáticamente.
+      let documentWarning: string | null = null
+      setProcessStage("Generando documento del anexo…")
+      try {
+        const doc = await ensureAddendumDocumentGenerated(addendumId)
+        if (!doc.skipped && !doc.generated) {
+          documentWarning =
+            doc.result?.error || "No se pudo generar el documento del anexo automáticamente."
+        }
+      } catch (genErr) {
+        documentWarning =
+          genErr instanceof Error
+            ? genErr.message
+            : "No se pudo generar el documento del anexo automáticamente."
+      }
+      invalidateContractAlertData(queryClient)
+      setProcessStage(null)
+
       showSuccess(
-        "Anexo formalizado. Sus condiciones pasan a formar parte del histórico contractual del trabajador."
+        documentWarning
+          ? `Anexo formalizado. Sus condiciones forman parte del histórico contractual, pero el documento no se pudo generar: ${documentWarning}`
+          : "Anexo formalizado. Se generó automáticamente su documento contractual."
       )
       onOpenChange(false)
       onChanged()
@@ -160,6 +186,7 @@ export const AddendumDetailDialog: React.FC<AddendumDetailDialogProps> = ({
       showError(friendly)
     } finally {
       setSubmitting(false)
+      setProcessStage(null)
     }
   }
 
@@ -388,9 +415,8 @@ export const AddendumDetailDialog: React.FC<AddendumDetailDialogProps> = ({
 
           {status === "FORMALIZED" && (
             <SiteCorpAlert type="success" title="Anexo formalizado">
-              Sus condiciones forman parte del histórico contractual del trabajador. Todavía no
-              existe un documento generado: la generación y firma electrónica llegan en la fase
-              documental.
+              Sus condiciones forman parte del histórico contractual del trabajador. El documento
+              Word del anexo se genera automáticamente desde el motor documental.
             </SiteCorpAlert>
           )}
 
@@ -433,7 +459,7 @@ export const AddendumDetailDialog: React.FC<AddendumDetailDialogProps> = ({
                       : undefined
                   }
                 >
-                  {submitting ? "Formalizando…" : "Formalizar anexo"}
+                  {processStage ? processStage : submitting ? "Formalizando…" : "Formalizar anexo"}
                 </SiteCorpButton>
               )}
             </div>

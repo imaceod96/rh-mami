@@ -1,4 +1,7 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
+import { ensureAddendumDocumentGenerated } from "@/lib/contract-automation"
 import {
   Dialog,
   DialogContent,
@@ -109,6 +112,8 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
 
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [processStage, setProcessStage] = React.useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const baseComponents = React.useMemo(
     () =>
@@ -368,9 +373,33 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
 
       const number =
         result.addendum_number != null ? `Anexo Nº ${result.addendum_number}` : "Anexo"
+
+      // §42: el documento del anexo se genera automáticamente al formalizarlo.
+      let documentWarning: string | null = null
+      if (result.addendum_status === "FORMALIZED" && result.addendum_id) {
+        setProcessStage("Generando documento del anexo…")
+        try {
+          const doc = await ensureAddendumDocumentGenerated(result.addendum_id)
+          if (!doc.skipped && !doc.generated) {
+            documentWarning =
+              doc.result?.error || "No se pudo generar el documento del anexo automáticamente."
+          }
+        } catch (genErr) {
+          documentWarning =
+            genErr instanceof Error
+              ? genErr.message
+              : "No se pudo generar el documento del anexo automáticamente."
+        }
+      }
+
+      invalidateContractAlertData(queryClient)
+      setProcessStage(null)
+
       showSuccess(
         result.addendum_status === "FORMALIZED"
-          ? `${number} creado y formalizado.`
+          ? documentWarning
+            ? `${number} creado y formalizado, pero el documento no se pudo generar: ${documentWarning}`
+            : `Cambio aplicado correctamente. Se generó automáticamente el ${number} y su documento.`
           : `${number} creado como pendiente de formalizar.`
       )
       onOpenChange(false)
@@ -392,6 +421,7 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
       showError(friendly)
     } finally {
       setSubmitting(false)
+      setProcessStage(null)
     }
   }
 
@@ -642,11 +672,13 @@ export const CreateManualAddendumDialog: React.FC<CreateManualAddendumDialogProp
             onClick={handleSubmit}
             disabled={submitting || !formalized || changes.length === 0}
           >
-            {submitting
-              ? "Registrando…"
-              : formalizeNow
-                ? "Crear y formalizar anexo"
-                : "Crear anexo pendiente"}
+            {processStage
+              ? processStage
+              : submitting
+                ? "Registrando…"
+                : formalizeNow
+                  ? "Crear y formalizar anexo"
+                  : "Crear anexo pendiente"}
           </SiteCorpButton>
         </div>
       </DialogContent>
