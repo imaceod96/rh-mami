@@ -23,8 +23,15 @@ import {
   Settings,
   UserCheck,
   Briefcase,
+  Download,
+  Loader2,
 } from "lucide-react"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import {
+  fetchStaffingExportRows,
+  buildStaffingWorkbookBlob,
+  saveStaffingExcelBlob,
+} from "@/lib/staffing-export"
 import {
   WorkerForm,
   type WorkerPositionOption,
@@ -126,7 +133,9 @@ const EntityStaffing = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [canManage, setCanManage] = React.useState(false)
-  const [notice, setNotice] = React.useState<{ type: "success" | "danger"; message: string } | null>(null)
+  const [notice, setNotice] = React.useState<{ type: "success" | "danger" | "info"; message: string } | null>(null)
+  const [entityName, setEntityName] = React.useState("")
+  const [exporting, setExporting] = React.useState(false)
 
   const [workerSearch, setWorkerSearch] = React.useState("")
   const [areaFilter, setAreaFilter] = React.useState("all")
@@ -137,7 +146,7 @@ const EntityStaffing = () => {
   const [workerDialogOpen, setWorkerDialogOpen] = React.useState(false)
   const [editingWorker, setEditingWorker] = React.useState<WorkerEditingData | null>(null)
 
-  const showNotice = (type: "success" | "danger", message: string) => {
+  const showNotice = (type: "success" | "danger" | "info", message: string) => {
     setNotice({ type, message })
     setTimeout(() => setNotice(null), 5000)
   }
@@ -169,6 +178,13 @@ const EntityStaffing = () => {
         return
       }
       setCanManage(!!canViewManage)
+
+      const { data: entityData } = await supabase
+        .from("organization_entities")
+        .select("name")
+        .eq("id", entityId)
+        .maybeSingle()
+      setEntityName((entityData as { name: string } | null)?.name || "")
 
       const { data: areasData, error: areasError } = await supabase
         .from("organization_areas")
@@ -458,6 +474,25 @@ const EntityStaffing = () => {
     showNotice("success", createdNew ? "Trabajador creado correctamente" : "Trabajador actualizado correctamente")
   }
 
+  const handleDownloadExcel = async () => {
+    if (!entityId || exporting) return
+    setExporting(true)
+    try {
+      const rows = await fetchStaffingExportRows(entityId)
+      if (rows.length === 0) {
+        showNotice("info", "Esta entidad todavía no tiene puestos configurados en su plantilla.")
+        return
+      }
+      const blob = await buildStaffingWorkbookBlob(rows)
+      saveStaffingExcelBlob(blob, entityName)
+    } catch (err) {
+      console.error("Error generating staffing Excel:", err)
+      showNotice("danger", "No se pudo generar la plantilla. Inténtalo nuevamente.")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // ---------- Render ----------
 
   if (loading) {
@@ -506,11 +541,26 @@ const EntityStaffing = () => {
         title="Plantilla"
         description="Gestiona los trabajadores y la ocupación actual de los puestos de la entidad."
         actions={
-          canManage && activePositions.length > 0 && (
-            <SiteCorpButton onClick={openCreateWorkerDialog} disabled={vacantCount === 0}>
-              <Plus className="mr-2 h-4 w-4" /> Nuevo trabajador
+          <div className="flex flex-wrap items-center gap-2">
+            <SiteCorpButton
+              variant="outline"
+              onClick={handleDownloadExcel}
+              disabled={exporting}
+              title="Descargar la plantilla completa en Excel"
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              {exporting ? "Generando Excel..." : "Descargar Excel"}
             </SiteCorpButton>
-          )
+            {canManage && activePositions.length > 0 && (
+              <SiteCorpButton onClick={openCreateWorkerDialog} disabled={vacantCount === 0}>
+                <Plus className="mr-2 h-4 w-4" /> Nuevo trabajador
+              </SiteCorpButton>
+            )}
+          </div>
         }
       />
 
