@@ -244,8 +244,9 @@ export async function setWorkerVacationOpeningBalance(params: {
 
 /**
  * Previsualización de consumo (SIN tocar la BD): días naturales, domingos y días a
- * descontar. Réplica EXACTA de la regla backend (`charged = natural − domingos`), usada
- * solo para el diálogo; la validación definitiva es del backend.
+ * descontar. Réplica EXACTA de la regla backend (`charged = natural − domingos`,
+ * `1 ≤ natural ≤ 15`), usada solo para el diálogo; la validación definitiva es del
+ * backend.
  */
 export function previewVacationConsumption(startDate: string, endDate: string): {
   naturalDays: number
@@ -265,7 +266,13 @@ export function previewVacationConsumption(startDate: string, endDate: string): 
     const day = new Date(start.getTime() + i * 86400000).getUTCDay()
     if (day === 0) sundays += 1
   }
-  return { naturalDays, sundays, chargedDays: naturalDays - sundays, valid: naturalDays >= 1 }
+  return {
+    naturalDays,
+    sundays,
+    chargedDays: naturalDays - sundays,
+    valid:
+      naturalDays >= VACATION_MIN_NATURAL_DAYS && naturalDays <= VACATION_MAX_NATURAL_DAYS,
+  }
 }
 
 export const vacationWorkspaceAlertsEnabled = (permissions: string[]): boolean =>
