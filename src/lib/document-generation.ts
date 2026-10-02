@@ -505,7 +505,9 @@ export const buildGeneratedDocumentName = (
     precheck.kind === "ADDENDUM"
       ? ["Anexo", "Contrato", workerName]
       : isSc404Kind(precheck.kind)
-        ? ["SC-4-04", workerName]
+        ? precheck.kind === "VACATION"
+          ? ["Modelo SC-4-04 - Vacaciones", workerName]
+          : ["Modelo SC-4-04 - Certificados/Licencia", workerName]
         : [
           "Contrato",
           precheck.template.documentTypeCode === "EMPLOYMENT_CONTRACT_DETERMINED"

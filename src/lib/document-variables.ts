@@ -381,6 +381,14 @@ export const formatDocumentAmount = (amount: number | string | null | undefined)
   return `${parsed < 0 ? "-" : ""}${grouped},${decPart}`
 }
 
+/** Formatea s.dias: 1 → "1 día", >1 → "X días". */
+export const formatSc404Dias = (value: number | string | null | undefined): string | null => {
+  if (value === null || value === undefined || value === "") return null
+  const parsed = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(parsed)) return null
+  return parsed === 1 ? "1 día" : `${parsed} días`
+}
+
 /** Horas sin unidad: 8 → "8", 8.5 → "8,5". */
 export const formatDocumentHours = (hours: number | string | null | undefined): string | null => {
   if (hours === null || hours === undefined || hours === "") return null
@@ -746,6 +754,12 @@ const formatByDataType = (
   raw: string | number | null
 ): string | null => {
   if (raw === null || raw === undefined) return null
+  
+  // Special formatting for s.dias: append "días" / "día"
+  if (definition.key === "s.dias") {
+    return formatSc404Dias(raw)
+  }
+  
   switch (definition.dataType) {
     case "date": return formatDocumentDate(typeof raw === "string" ? raw : String(raw))
     case "amount": return formatDocumentAmount(raw)
