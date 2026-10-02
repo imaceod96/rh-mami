@@ -420,14 +420,35 @@ export const precheckDocumentGeneration = async (
     "sc404.fecha_desde",
     "sc404.dias",
   ])
+  // §16 Fase 24: si la plantilla exige la Fecha de incorporación y el origen es
+  // VACATION pero no pudo determinarse (Puesto sin horario laboral configurado),
+  // la generación se bloquea con un mensaje claro — nunca se inventa una fecha.
+  const SC404_INCORPORATION_KEYS = new Set([
+    "sc404.incorporacion_dia",
+    "sc404.incorporacion_mes",
+    "sc404.incorporacion_anio",
+    "vacaciones.reincorporacion",
+  ])
+  const sc404IncorporationUndetermined =
+    isSc404Kind(kind) &&
+    documentData.document_type === "SC_4_04" &&
+    documentData.origin.source_type === "VACATION" &&
+    documentData.origin.incorporation_date === null
   const missingKeyList = isSc404Kind(kind)
-    ? requiredVariables.filter((key) => !(key in resolved.values) && SC404_CRITICAL_KEYS.has(key))
+    ? requiredVariables.filter(
+        (key) =>
+          !(key in resolved.values) &&
+          (SC404_CRITICAL_KEYS.has(key) ||
+            (sc404IncorporationUndetermined && SC404_INCORPORATION_KEYS.has(key)))
+      )
     : requiredVariables.filter((key) => !(key in resolved.values))
   const missing: MissingVariable[] = missingKeyList
     .map((key) => ({
       key,
       label: documentVariableByKey(key)?.label ?? key,
-      hint: documentVariableHint(key),
+      hint: SC404_INCORPORATION_KEYS.has(key) && sc404IncorporationUndetermined
+        ? "No puede determinarse la Fecha de incorporación: el Puesto vigente al período de vacaciones no tiene horario laboral configurado (días laborables)."
+        : documentVariableHint(key),
     }))
 
   let blockedReason: GenerationBlockedReason = null
