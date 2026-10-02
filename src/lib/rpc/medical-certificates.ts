@@ -192,12 +192,30 @@ export async function createMedicalCertificate(params: {
 
   const documentId = await uploadCertificateDocument(params.worker_id, params.document)
 
+  // Obtener tenant_id y organization_entity_id del trabajador
+  const { data: workerData, error: workerError } = await supabase
+    .from("workers")
+    .select("tenant_id, organization_entity_id")
+    .eq("id", params.worker_id)
+    .single()
+
+  if (workerError || !workerData) {
+    throw new Error("No se pudo obtener la información del trabajador.")
+  }
+
+  // Obtener el usuario actual para created_by
+  const { data: { user } } = await supabase.auth.getUser()
+  const createdBy = user?.id
+
   const { data, error } = await supabase.rpc("create_worker_medical_certificate", {
+    p_tenant_id: workerData.tenant_id,
+    p_organization_entity_id: workerData.organization_entity_id,
     p_worker_id: params.worker_id,
     p_start_date: params.start_date,
     p_return_date: params.return_date,
     p_days: params.days,
     p_document_id: documentId,
+    p_created_by: createdBy,
   })
 
   if (error) rpcError(error)
