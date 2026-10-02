@@ -52,15 +52,17 @@ export const JobForm: React.FC<JobFormProps> = ({
   const [selectedGroup, setSelectedGroup] = React.useState<string>("")
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [salaryVigente, setSalaryVigente] = React.useState<{
-    amount: number
-    currency_code: string
-  } | null>(null)
-  const [scaleInfo, setScaleInfo] = React.useState<{
-    scaleId: string | null
-    scaleName: string
-    scopeType: string | null
-    regime: string | null
-  } | null>(null)
+      amount: number
+      currency_code: string
+    } | null>(null)
+    const [scaleInfo, setScaleInfo] = React.useState<{
+      scaleId: string | null
+      scaleName: string
+      scopeType: string | null
+      regime: string | null
+    } | null>(null)
+    const [hasAbnormalConditions, setHasAbnormalConditions] = React.useState(false)
+    const [abnormalConditionsAmount, setAbnormalConditionsAmount] = React.useState("")
 
   const navigate = useNavigate()
 
@@ -192,10 +194,16 @@ export const JobForm: React.FC<JobFormProps> = ({
     }
 
     setSelectedGroup(editingJob.salary_group_id)
-    setSelectedCategory(editingJob.occupational_category_id || "")
-
-    // Load the current salary value for the editing job's group
-    if (editingJob.salary_group_id) {
+        setSelectedCategory(editingJob.occupational_category_id || "")
+        setHasAbnormalConditions(editingJob.has_abnormal_conditions || false)
+        setAbnormalConditionsAmount(
+          editingJob.has_abnormal_conditions && editingJob.abnormal_conditions_amount != null
+            ? String(editingJob.abnormal_conditions_amount)
+            : ""
+        )
+    
+        // Load the current salary value for the editing job's group
+        if (editingJob.salary_group_id) {
       supabase
         .from("salary_group_values")
         .select("*")
@@ -554,26 +562,61 @@ export const JobForm: React.FC<JobFormProps> = ({
         </div>
 
         {/* Salario derivado: nunca se escribe manualmente desde el cargo */}
-        {salaryVigente && (
-          <div className="rounded-lg border border-border bg-muted/30 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">Salario actual</p>
-              <SiteCorpStatusBadge status="info">Calculado automáticamente</SiteCorpStatusBadge>
-            </div>
-            <p className="text-lg font-semibold text-ink">
-              {salaryVigente.amount.toLocaleString("es-CU", {
-                minimumFractionDigits: 2,
-              })}{" "}
-              {salaryVigente.currency_code}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Derivado del grupo salarial y de la escala aplicable a la entidad.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* CONTENIDO DE TRABAJO */}
+                {salaryVigente && (
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">Salario actual</p>
+                      <SiteCorpStatusBadge status="info">Calculado automáticamente</SiteCorpStatusBadge>
+                    </div>
+                    <p className="text-lg font-semibold text-ink">
+                      {salaryVigente.amount.toLocaleString("es-CU", {
+                        minimumFractionDigits: 2,
+                      })}{" "}
+                      {salaryVigente.currency_code}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Derivado del grupo salarial y de la escala aplicable a la entidad.
+                    </p>
+                  </div>
+                )}
+              </div>
+        
+              {/* CONDICIONES ANORMALES */}
+              <div className="space-y-4 border-t border-border pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Condiciones anormales
+                </p>
+        
+                <div className="space-y-2">
+                  <SiteCorpCheckbox
+                    label="Condiciones Anormales"
+                    checked={hasAbnormalConditions}
+                    onCheckedChange={setHasAbnormalConditions}
+                  />
+                </div>
+        
+                {hasAbnormalConditions && (
+                  <div className="space-y-2">
+                    <Label htmlFor="job-abnormal-amount">Total a pagar *</Label>
+                    <SiteCorpInput
+                      id="job-abnormal-amount"
+                      name="abnormal_conditions_amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={abnormalConditionsAmount}
+                      onChange={(e) => setAbnormalConditionsAmount(e.target.value)}
+                      required
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Importe monetario asociado a las condiciones anormales de este cargo.
+                    </p>
+                  </div>
+                )}
+              </div>
+        
+              {/* CONTENIDO DE TRABAJO */}
       <div className="space-y-4 border-t border-border pt-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Contenido de trabajo
