@@ -50,7 +50,15 @@ const DocumentTemplateVariablesPanel = ({ templateTypeCode, usedVariables }: Pro
   }, [usedVariables])
 
   const applicable = React.useMemo(
-    () => DOCUMENT_VARIABLES.filter((definition) => definition.documentTypes.includes(documentType)),
+    () =>
+      DOCUMENT_VARIABLES.filter(
+        (definition) =>
+          definition.documentTypes.includes(documentType) &&
+          // Aislamiento de catálogo (§Fase 22): p. ej. SC_4_04 muestra
+          // exclusivamente variables sc404.*; las legacy siguen resolviendo
+          // pero no se ofrecen en el selector.
+          !definition.catalogHiddenFor?.includes(documentType)
+      ),
     [documentType]
   )
 

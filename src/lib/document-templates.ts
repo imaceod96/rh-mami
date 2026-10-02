@@ -35,6 +35,7 @@ export type DocumentTemplateTypeCode =
   | "EMPLOYMENT_CONTRACT_DETERMINED"
   | "EMPLOYMENT_CONTRACT_INDETERMINED"
   | "EMPLOYMENT_CONTRACT_ADDENDUM"
+  | "SC_4_04"
 
 export type DocumentTemplateVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE"
 
@@ -42,7 +43,11 @@ export type DocumentTemplateFileKind = "ORIGINAL" | "CONFIGURED"
 
 /** Código de documento de 11A.7 al que pertenece cada tipo de plantilla (§19). */
 export const documentTypeCodeForTemplateType = (templateTypeCode: string): DocumentTypeCode =>
-  templateTypeCode === "EMPLOYMENT_CONTRACT_ADDENDUM" ? "ADDENDUM" : "CONTRACT"
+  templateTypeCode === "EMPLOYMENT_CONTRACT_ADDENDUM"
+    ? "ADDENDUM"
+    : templateTypeCode === "SC_4_04"
+      ? "SC_4_04"
+      : "CONTRACT"
 
 export interface DocumentTemplateType {
   code: string
