@@ -65,100 +65,110 @@ const WITH_SC404: DocumentTypeCode[] = ["CONTRACT", "ADDENDUM", "SC_4_04"]
 /**
  * Variables comunes que SC-4-04 sigue RESOLVIENDO (compatibilidad de plantillas
  * legacy, §Fase 22) pero que quedan OCULTAS del selector visible: el modelo
- * SC-4-04 expone exclusivamente variables sc404.*.
+ * SC-4-04 expone exclusivamente variables sc404.* y s.*.
  */
 const SC404_INTERNAL = ["SC_4_04"] as DocumentTypeCode[]
+
+/**
+ * Variables que quedan OCULTAS del selector de Contrato y Anexo, pero que
+ * siguen resolviéndose para compatibilidad con plantillas legacy.
+ * El selector de Contrato muestra exclusivamente variables c.*;
+ * el selector de Anexo muestra exclusivamente variables a.*.
+ */
+const CONTRACT_HIDDEN = ["CONTRACT"] as DocumentTypeCode[]
+const ADDENDUM_HIDDEN = ["ADDENDUM"] as DocumentTypeCode[]
+const ALL_DOC_TYPES = ["CONTRACT", "ADDENDUM", "SC_4_04"] as DocumentTypeCode[]
 
 /** Catálogo global de variables documentales (no pertenece a ningún tenant). */
 export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   // ---------------- Entidad ----------------
-  { key: "entity.name", label: "Nombre de la entidad", category: "Entidad", documentTypes: WITH_SC404, catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "SOURCE", description: "Snapshot contractual de la entidad firmante." },
-  { key: "entity.organism", label: "Organismo", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Organismo al que pertenece la entidad (snapshot)." },
-  { key: "entity.branch", label: "Rama", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Rama de la entidad (snapshot)." },
-  { key: "entity.labor_code", label: "Código laboral/organizacional", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Código de identificación laboral (snapshot)." },
-  { key: "entity.address", label: "Dirección de la entidad", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Dirección de la entidad (snapshot)." },
-  { key: "entity.province", label: "Provincia de la entidad", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Provincia de la entidad (snapshot)." },
-  { key: "entity.municipality", label: "Municipio de la entidad", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Municipio de la entidad (snapshot)." },
-  { key: "entity.revolution_year", label: "Año de la Revolución", category: "Entidad", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Valor institucional configurado por entidad (texto libre, p. ej. 68) y preservado en el snapshot (nunca se calcula)." },
+  { key: "entity.name", label: "Nombre de la entidad", category: "Entidad", documentTypes: WITH_SC404, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Snapshot contractual de la entidad firmante." },
+  { key: "entity.organism", label: "Organismo", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Organismo al que pertenece la entidad (snapshot)." },
+  { key: "entity.branch", label: "Rama", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Rama de la entidad (snapshot)." },
+  { key: "entity.labor_code", label: "Código laboral/organizacional", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Código de identificación laboral (snapshot)." },
+  { key: "entity.address", label: "Dirección de la entidad", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Dirección de la entidad (snapshot)." },
+  { key: "entity.province", label: "Provincia de la entidad", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Provincia de la entidad (snapshot)." },
+  { key: "entity.municipality", label: "Municipio de la entidad", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Municipio de la entidad (snapshot)." },
+  { key: "entity.revolution_year", label: "Año de la Revolución", category: "Entidad", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Valor institucional configurado por entidad (texto libre, p. ej. 68) y preservado en el snapshot (nunca se calcula)." },
 
   // ---------------- Representante ----------------
-  { key: "representative.name", label: "Nombre del representante", category: "Representante", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Representante histórico que suscribió el documento (snapshot)." },
-  { key: "representative.position", label: "Cargo del representante", category: "Representante", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Cargo del representante histórico (snapshot)." },
+  { key: "representative.name", label: "Nombre del representante", category: "Representante", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Representante histórico que suscribió el documento (snapshot)." },
+  { key: "representative.position", label: "Cargo del representante", category: "Representante", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Cargo del representante histórico (snapshot)." },
 
   // ---------------- Trabajador ----------------
-  { key: "worker.full_name", label: "Nombre completo", category: "Trabajador", documentTypes: WITH_SC404, catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "SOURCE", description: "Nombre y apellidos del trabajador." },
-  { key: "worker.identification", label: "Carné de identidad", category: "Trabajador", documentTypes: WITH_SC404, catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
-  { key: "worker.birth_date", label: "Fecha de nacimiento", category: "Trabajador", documentTypes: BOTH, dataType: "date", kind: "SOURCE", description: "Fecha de nacimiento del trabajador." },
-  { key: "worker.profession", label: "Profesión u oficio", category: "Trabajador", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Profesión u oficio (dato profesional, no nivel de estudios)." },
-  { key: "worker.address", label: "Dirección del trabajador", category: "Trabajador", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Dirección particular del trabajador." },
-  { key: "worker.province", label: "Provincia del trabajador", category: "Trabajador", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Provincia de residencia del trabajador." },
-  { key: "worker.municipality", label: "Municipio del trabajador", category: "Trabajador", documentTypes: BOTH, dataType: "text", kind: "SOURCE", description: "Municipio de residencia del trabajador." },
+  { key: "worker.full_name", label: "Nombre completo", category: "Trabajador", documentTypes: WITH_SC404, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Nombre y apellidos del trabajador." },
+  { key: "worker.identification", label: "Carné de identidad", category: "Trabajador", documentTypes: WITH_SC404, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
+  { key: "worker.birth_date", label: "Fecha de nacimiento", category: "Trabajador", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "date", kind: "SOURCE", description: "Fecha de nacimiento del trabajador." },
+  { key: "worker.profession", label: "Profesión u oficio", category: "Trabajador", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Profesión u oficio (dato profesional, no nivel de estudios)." },
+  { key: "worker.address", label: "Dirección del trabajador", category: "Trabajador", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Dirección particular del trabajador." },
+  { key: "worker.province", label: "Provincia del trabajador", category: "Trabajador", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Provincia de residencia del trabajador." },
+  { key: "worker.municipality", label: "Municipio del trabajador", category: "Trabajador", documentTypes: BOTH, catalogHiddenFor: ALL_DOC_TYPES, dataType: "text", kind: "SOURCE", description: "Municipio de residencia del trabajador." },
 
   // ---------------- Cargo y Puesto ----------------
-  { key: "job.name", label: "Cargo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Cargo del trabajador según condiciones formalizadas vigentes." },
-  { key: "job.salary_group", label: "Grupo salarial", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Grupo salarial en números romanos (p. ej. XII)." },
-  { key: "job.occupational_category", label: "Categoría ocupacional", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Categoría ocupacional del cargo." },
-  { key: "position.name", label: "Puesto de trabajo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Puesto que ocupa el trabajador." },
-  { key: "position.code", label: "Código del puesto", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Código del puesto formalizado (tras anexos de cambio de puesto)." },
-  { key: "position.work_location", label: "Lugar de trabajo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Lugar de trabajo según condiciones formalizadas." },
+  { key: "job.name", label: "Cargo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Cargo del trabajador según condiciones formalizadas vigentes." },
+  { key: "job.salary_group", label: "Grupo salarial", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Grupo salarial en números romanos (p. ej. XII)." },
+  { key: "job.occupational_category", label: "Categoría ocupacional", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Categoría ocupacional del cargo." },
+  { key: "position.name", label: "Puesto de trabajo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Puesto que ocupa el trabajador." },
+  { key: "position.code", label: "Código del puesto", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Código del puesto formalizado (tras anexos de cambio de puesto)." },
+  { key: "position.work_location", label: "Lugar de trabajo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Lugar de trabajo según condiciones formalizadas." },
 
   // ---------------- Jornada ----------------
-  { key: "schedule.daily_hours", label: "Horas diarias", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "hours", kind: "SOURCE", description: "Horas de trabajo al día." },
-  { key: "schedule.weekly_hours", label: "Horas semanales", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "hours", kind: "SOURCE", description: "Horas de trabajo a la semana." },
-  { key: "schedule.monthly_hours", label: "Horas mensuales", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "hours", kind: "SOURCE", description: "Horas de trabajo al mes." },
-  { key: "schedule.text", label: "Horario", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Horario / jornada en texto (del puesto o sus segmentos)." },
-  { key: "schedule.break", label: "Descanso", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "integer", kind: "SOURCE", description: "Minutos de descanso dentro de la jornada." },
+  { key: "schedule.daily_hours", label: "Horas diarias", category: "Jornada", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "hours", kind: "SOURCE", description: "Horas de trabajo al día." },
+  { key: "schedule.weekly_hours", label: "Horas semanales", category: "Jornada", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "hours", kind: "SOURCE", description: "Horas de trabajo a la semana." },
+  { key: "schedule.monthly_hours", label: "Horas mensuales", category: "Jornada", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "hours", kind: "SOURCE", description: "Horas de trabajo al mes." },
+  { key: "schedule.text", label: "Horario", category: "Jornada", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Horario / jornada en texto (del puesto o sus segmentos)." },
+  { key: "schedule.break", label: "Descanso", category: "Jornada", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "integer", kind: "SOURCE", description: "Minutos de descanso dentro de la jornada." },
 
   // ---------------- Contrato ----------------
-  { key: "contract.type", label: "Tipo de contrato", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Nombre del tipo de contrato (determinado / indeterminado)." },
-  { key: "contract.start_date", label: "Fecha de inicio", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de inicio del contrato." },
-  { key: "contract.end_date", label: "Fecha de fin", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de fin prevista (contrato por tiempo determinado)." },
-  { key: "contract.duration", label: "Duración", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "CALCULATED", description: "Duración humana calculada a partir de start_date y end_date (p. ej. «6 meses»)." },
-  { key: "contract.signature_date", label: "Fecha de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de firma del contrato." },
-  { key: "contract.signature_day", label: "Día de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "integer", kind: "CALCULATED", description: "Día de la fecha de firma (calculado, no se persiste)." },
-  { key: "contract.signature_month", label: "Mes de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de firma en español (calculado, no se persiste)." },
-  { key: "contract.signature_year", label: "Año de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "integer", kind: "CALCULATED", description: "Año de la fecha de firma (calculado, no se persiste)." },
-  { key: "contract.signature_place", label: "Lugar de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Lugar/municipio de firma." },
-  { key: "contract.payment_method", label: "Forma de pago", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Forma de pago (A tiempo / A rendimiento), incluidos anexos formalizados." },
-  { key: "contract.payment_schedule", label: "Día / momento de pago", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Día o momento de pago (p. ej. «Día 10 de cada mes»), incluidos anexos formalizados." },
+  { key: "contract.type", label: "Tipo de contrato", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Nombre del tipo de contrato (determinado / indeterminado)." },
+  { key: "contract.start_date", label: "Fecha de inicio", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "date", kind: "SOURCE", description: "Fecha de inicio del contrato." },
+  { key: "contract.end_date", label: "Fecha de fin", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "date", kind: "SOURCE", description: "Fecha de fin prevista (contrato por tiempo determinado)." },
+  { key: "contract.duration", label: "Duración", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "CALCULATED", description: "Duración humana calculada a partir de start_date y end_date (p. ej. «6 meses»)." },
+  { key: "contract.signature_date", label: "Fecha de firma", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "date", kind: "SOURCE", description: "Fecha de firma del contrato." },
+  { key: "contract.signature_day", label: "Día de firma", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "integer", kind: "CALCULATED", description: "Día de la fecha de firma (calculado, no se persiste)." },
+  { key: "contract.signature_month", label: "Mes de firma", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de firma en español (calculado, no se persiste)." },
+  { key: "contract.signature_year", label: "Año de firma", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "integer", kind: "CALCULATED", description: "Año de la fecha de firma (calculado, no se persiste)." },
+  { key: "contract.signature_place", label: "Lugar de firma", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Lugar/municipio de firma." },
+  { key: "contract.payment_method", label: "Forma de pago", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Forma de pago (A tiempo / A rendimiento), incluidos anexos formalizados." },
+  { key: "contract.payment_schedule", label: "Día / momento de pago", category: "Contrato", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Día o momento de pago (p. ej. «Día 10 de cada mes»), incluidos anexos formalizados." },
 
   // ---------------- Retribución ----------------
-  { key: "compensation.base_salary", label: "Salario de escala", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Salario de escala formalizado vigente." },
-  { key: "compensation.additional_payments", label: "Pagos adicionales", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Suma de pagos adicionales formalizados." },
-  { key: "compensation.abnormal_conditions_payments", label: "Pagos por condiciones anormales", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Suma de pagos por condiciones laborales anormales." },
-  { key: "compensation.other_payments", label: "Otros pagos", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Suma de otros pagos del contrato." },
-  { key: "compensation.total", label: "Total contractual", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Total contractual formalizado (salario + conceptos)." },
-  { key: "compensation.currency", label: "Moneda", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Moneda de la retribución (p. ej. CUP)." },
+  { key: "compensation.base_salary", label: "Salario de escala", category: "Retribución", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Salario de escala formalizado vigente." },
+  { key: "compensation.additional_payments", label: "Pagos adicionales", category: "Retribución", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Suma de pagos adicionales formalizados." },
+  { key: "compensation.abnormal_conditions_payments", label: "Pagos por condiciones anormales", category: "Retribución", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Suma de pagos por condiciones laborales anormales." },
+  { key: "compensation.other_payments", label: "Otros pagos", category: "Retribución", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Suma de otros pagos del contrato." },
+  { key: "compensation.total", label: "Total contractual", category: "Retribución", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Total contractual formalizado (salario + conceptos)." },
+  { key: "compensation.currency", label: "Moneda", category: "Retribución", documentTypes: ["CONTRACT"], catalogHiddenFor: CONTRACT_HIDDEN, dataType: "text", kind: "SOURCE", description: "Moneda de la retribución (p. ej. CUP)." },
 
   // ---------------- Anexo ----------------
-  { key: "addendum.number", label: "Número de anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "integer", kind: "SOURCE", description: "Numeración secuencial del anexo dentro del contrato." },
-  { key: "addendum.reason", label: "Motivo del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Motivo legible del anexo." },
-  { key: "addendum.effective_date", label: "Fecha efectiva", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "date", kind: "SOURCE", description: "Fecha desde la cual aplican las nuevas condiciones." },
-  { key: "addendum.signature_date", label: "Fecha de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "date", kind: "SOURCE", description: "Fecha de firma del anexo." },
-  { key: "addendum.signature_day", label: "Día de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "integer", kind: "CALCULATED", description: "Día de la fecha de firma del anexo (calculado)." },
-  { key: "addendum.signature_month", label: "Mes de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de firma del anexo en español (calculado)." },
-  { key: "addendum.signature_year", label: "Año de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "integer", kind: "CALCULATED", description: "Año de la fecha de firma del anexo (calculado)." },
-  { key: "addendum.signature_place", label: "Lugar de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Lugar de firma del anexo." },
+  { key: "addendum.number", label: "Número de anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "integer", kind: "SOURCE", description: "Numeración secuencial del anexo dentro del contrato." },
+  { key: "addendum.reason", label: "Motivo del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Motivo legible del anexo." },
+  { key: "addendum.effective_date", label: "Fecha efectiva", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "date", kind: "SOURCE", description: "Fecha desde la cual aplican las nuevas condiciones." },
+  { key: "addendum.signature_date", label: "Fecha de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "date", kind: "SOURCE", description: "Fecha de firma del anexo." },
+  { key: "addendum.signature_day", label: "Día de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "integer", kind: "CALCULATED", description: "Día de la fecha de firma del anexo (calculado)." },
+  { key: "addendum.signature_month", label: "Mes de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de firma del anexo en español (calculado)." },
+  { key: "addendum.signature_year", label: "Año de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "integer", kind: "CALCULATED", description: "Año de la fecha de firma del anexo (calculado)." },
+  { key: "addendum.signature_place", label: "Lugar de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Lugar de firma del anexo." },
 
-  { key: "addendum.previous.job", label: "Cargo anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Cargo anterior según el snapshot del anexo." },
-  { key: "addendum.previous.salary_group", label: "Grupo salarial anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Grupo salarial anterior según el snapshot del anexo." },
-  { key: "addendum.previous.occupational_category", label: "Categoría ocupacional anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Categoría ocupacional anterior según el snapshot." },
-  { key: "addendum.previous.salary", label: "Salario anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Salario anterior según el snapshot del anexo." },
+  { key: "addendum.previous.job", label: "Cargo anterior", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Cargo anterior según el snapshot del anexo." },
+  { key: "addendum.previous.salary_group", label: "Grupo salarial anterior", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Grupo salarial anterior según el snapshot del anexo." },
+  { key: "addendum.previous.occupational_category", label: "Categoría ocupacional anterior", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Categoría ocupacional anterior según el snapshot." },
+  { key: "addendum.previous.salary", label: "Salario anterior", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Salario anterior según el snapshot del anexo." },
 
-  { key: "addendum.new.job", label: "Cargo nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Cargo nuevo según el snapshot del anexo." },
-  { key: "addendum.new.salary_group", label: "Grupo salarial nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Grupo salarial nuevo según el snapshot del anexo." },
-  { key: "addendum.new.occupational_category", label: "Categoría ocupacional nueva", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Categoría ocupacional nueva según el snapshot." },
-  { key: "addendum.new.salary", label: "Salario nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Salario nuevo según el snapshot del anexo." },
-  { key: "addendum.new.other_payments", label: "Otros pagos nuevos", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Otros pagos según el lado «después» del anexo." },
-  { key: "addendum.new.total", label: "Total nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Total contractual nuevo según el anexo." },
+  { key: "addendum.new.job", label: "Cargo nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Cargo nuevo según el snapshot del anexo." },
+  { key: "addendum.new.salary_group", label: "Grupo salarial nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Grupo salarial nuevo según el snapshot del anexo." },
+  { key: "addendum.new.occupational_category", label: "Categoría ocupacional nueva", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "text", kind: "SOURCE", description: "Categoría ocupacional nueva según el snapshot." },
+  { key: "addendum.new.salary", label: "Salario nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Salario nuevo según el snapshot del anexo." },
+  { key: "addendum.new.other_payments", label: "Otros pagos nuevos", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Otros pagos según el lado «después» del anexo." },
+  { key: "addendum.new.total", label: "Total nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], catalogHiddenFor: ADDENDUM_HIDDEN, dataType: "amount", kind: "SOURCE", description: "Total contractual nuevo según el anexo." },
 
   // ---------------- SC-4-04 (variables unificadas según origen) ----------------
-  { key: "sc404.fecha_desde", label: "SC-4-04 · Fecha desde", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Inicio del período en formato DD/MM/AA. Vacaciones: start_date. Certificado: fecha de salida." },
-  { key: "sc404.fecha_hasta", label: "SC-4-04 · Fecha hasta", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "ÚLTIMO día del período en DD/MM/AA. Vacaciones: end_date. Certificado médico: vacío (return_date es reincorporación)." },
-  { key: "sc404.dias", label: "SC-4-04 · Días", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "integer", kind: "SOURCE", description: "Vacaciones: DÍAS NATURALES del período (no el consumo del ledger). Certificado: days explícito." },
-  { key: "sc404.incorporacion_dia", label: "SC-4-04 · Día de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Día (1–31) de la fecha de incorporación. Vacaciones: primer día hábil posterior al período según el horario del Puesto. Certificado: día de return_date." },
-  { key: "sc404.incorporacion_mes", label: "SC-4-04 · Mes de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Mes numérico (1–12) de la fecha de incorporación." },
-  { key: "sc404.incorporacion_anio", label: "SC-4-04 · Año de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Año en dos dígitos (AA) de la fecha de incorporación." },
+  { key: "sc404.fecha_desde", label: "SC-4-04 · Fecha desde", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "SOURCE", description: "Inicio del período en formato DD/MM/AA. Vacaciones: start_date. Certificado: fecha de salida." },
+  { key: "sc404.fecha_hasta", label: "SC-4-04 · Fecha hasta", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "SOURCE", description: "ÚLTIMO día del período en DD/MM/AA. Vacaciones: end_date. Certificado médico: vacío (return_date es reincorporación)." },
+  { key: "sc404.dias", label: "SC-4-04 · Días", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "integer", kind: "SOURCE", description: "Vacaciones: DÍAS NATURALES del período (no el consumo del ledger). Certificado: days explícito." },
+  { key: "sc404.incorporacion_dia", label: "SC-4-04 · Día de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "CALCULATED", description: "Día (1–31) de la fecha de incorporación. Vacaciones: primer día hábil posterior al período según el horario del Puesto. Certificado: día de return_date." },
+  { key: "sc404.incorporacion_mes", label: "SC-4-04 · Mes de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "CALCULATED", description: "Mes numérico (1–12) de la fecha de incorporación." },
+  { key: "sc404.incorporacion_anio", label: "SC-4-04 · Año de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "CALCULATED", description: "Año en dos dígitos (AA) de la fecha de incorporación." },
   { key: "certificado.es_licencia_subsidio", label: "Marcador Licencia/Subsidio", category: "SC-4-04", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un certificado médico; vacío para vacaciones." },
 
   // ---------------- Certificado médico (origen, interno) ----------------
@@ -178,19 +188,120 @@ export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   { key: "entity.code", label: "Código de la entidad", category: "Entidad", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "SOURCE", description: "organization_entities.code de la entidad real del trabajador." },
   { key: "documento.fecha_emision", label: "Fecha de emisión del documento", category: "Documento", documentTypes: ["SC_4_04"], catalogHiddenFor: SC404_INTERNAL, dataType: "text", kind: "CALCULATED", description: "Fecha (día de la generación) en que se emite el documento, en DD/MM/AA." },
 
-  // ---------------- SC-4-04 · catálogo VISIBLE exclusivo ----------------
-  // wrappers sc404.* de los datos comunes: quien prepara el Word no necesita
+  // ---------------- SC-4-04 · catálogo VISIBLE exclusivo (short aliases s.*) ----------------
+  // wrappers s.* de los datos comunes: quien prepara el Word no necesita
   // conocer la estructura interna de SiteCorp (§Fase 22).
-  { key: "sc404.fecha_emision", label: "SC-4-04 · Fecha de emisión", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Fecha (día de la generación) en que se emite el documento, en DD/MM/AA." },
-  { key: "sc404.entidad_nombre", label: "SC-4-04 · Nombre de la entidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre de la entidad real del trabajador." },
-  { key: "sc404.entidad_codigo", label: "SC-4-04 · Código de la entidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Código (organization_entities.code) de la entidad real del trabajador." },
-  { key: "sc404.trabajador_nombre", label: "SC-4-04 · Nombre del trabajador", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre o nombres del trabajador, sin apellidos." },
-  { key: "sc404.trabajador_primer_apellido", label: "SC-4-04 · Primer apellido", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Primer apellido del trabajador." },
-  { key: "sc404.trabajador_segundo_apellido", label: "SC-4-04 · Segundo apellido", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Segundo apellido del trabajador." },
-  { key: "sc404.trabajador_ci", label: "SC-4-04 · Carné de identidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
-  { key: "sc404.area", label: "SC-4-04 · Área", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Área del puesto de la asignación vigente al período." },
-  { key: "sc404.es_vacaciones", label: "Marcador Vacaciones", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un período de vacaciones; vacío para certificado médico." },
-  { key: "sc404.es_licencia_subsidio", label: "Marcador Licencia/Subsidio", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un certificado médico; vacío para vacaciones." },
+  { key: "s.fem", label: "SC-4-04 · Fecha de emisión", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Fecha (día de la generación) en que se emite el documento, en DD/MM/AA." },
+  { key: "s.ent", label: "SC-4-04 · Nombre de la entidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre de la entidad real del trabajador." },
+  { key: "s.cod", label: "SC-4-04 · Código de la entidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Código (organization_entities.code) de la entidad real del trabajador." },
+  { key: "s.nom", label: "SC-4-04 · Nombre del trabajador", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre o nombres del trabajador, sin apellidos." },
+  { key: "s.ap1", label: "SC-4-04 · Primer apellido", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Primer apellido del trabajador." },
+  { key: "s.ap2", label: "SC-4-04 · Segundo apellido", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Segundo apellido del trabajador." },
+  { key: "s.ci", label: "SC-4-04 · Carné de identidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
+  { key: "s.area", label: "SC-4-04 · Área", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Área del puesto de la asignación vigente al período." },
+  { key: "s.f_des", label: "SC-4-04 · Fecha desde", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Inicio del período en formato DD/MM/AA. Vacaciones: start_date. Certificado: fecha de salida." },
+  { key: "s.f_has", label: "SC-4-04 · Fecha hasta", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "ÚLTIMO día del período en DD/MM/AA. Vacaciones: end_date. Certificado médico: vacío (return_date es reincorporación)." },
+  { key: "s.dias", label: "SC-4-04 · Días", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "integer", kind: "SOURCE", description: "Vacaciones: DÍAS NATURALES del período (no el consumo del ledger). Certificado: days explícito." },
+  { key: "s.inc_d", label: "SC-4-04 · Día de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Día (1–31) de la fecha de incorporación. Vacaciones: primer día hábil posterior al período según el horario del Puesto. Certificado: día de return_date." },
+  { key: "s.inc_m", label: "SC-4-04 · Mes de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Mes numérico (1–12) de la fecha de incorporación." },
+  { key: "s.inc_a", label: "SC-4-04 · Año de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Año en dos dígitos (AA) de la fecha de incorporación." },
+  { key: "s.vac", label: "SC-4-04 · Marca de vacaciones", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un período de vacaciones; vacío para certificado médico." },
+  { key: "s.lic", label: "SC-4-04 · Marca de licencia/subsidio", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un certificado médico; vacío para vacaciones." },
+
+  // ---------------- Contrato · catálogo VISIBLE exclusivo (short aliases c.*) ----------------
+  { key: "c.ent", label: "Contrato · Nombre de la entidad", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Nombre de la entidad firmante (snapshot)." },
+  { key: "c.org", label: "Contrato · Organismo", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Organismo al que pertenece la entidad (snapshot)." },
+  { key: "c.ram", label: "Contrato · Rama", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Rama de la entidad (snapshot)." },
+  { key: "c.cod", label: "Contrato · Código laboral", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Código de identificación laboral (snapshot)." },
+  { key: "c.dir", label: "Contrato · Dirección de la entidad", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Dirección de la entidad (snapshot)." },
+  { key: "c.prov", label: "Contrato · Provincia de la entidad", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Provincia de la entidad (snapshot)." },
+  { key: "c.mun", label: "Contrato · Municipio de la entidad", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Municipio de la entidad (snapshot)." },
+  { key: "c.rev", label: "Contrato · Año de la Revolución", category: "Entidad", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Valor institucional configurado por entidad (texto libre, p. ej. 68) y preservado en el snapshot (nunca se calcula)." },
+
+  { key: "c.rep_nom", label: "Contrato · Nombre del representante", category: "Representante", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Representante histórico que suscribió el documento (snapshot)." },
+  { key: "c.rep_cargo", label: "Contrato · Cargo del representante", category: "Representante", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Cargo del representante histórico (snapshot)." },
+
+  { key: "c.nom", label: "Contrato · Nombre completo", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Nombre y apellidos del trabajador." },
+  { key: "c.ci", label: "Contrato · Carné de identidad", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
+  { key: "c.nac", label: "Contrato · Fecha de nacimiento", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de nacimiento del trabajador." },
+  { key: "c.prof", label: "Contrato · Profesión u oficio", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Profesión u oficio (dato profesional, no nivel de estudios)." },
+  { key: "c.dir_trab", label: "Contrato · Dirección del trabajador", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Dirección particular del trabajador." },
+  { key: "c.prov_trab", label: "Contrato · Provincia del trabajador", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Provincia de residencia del trabajador." },
+  { key: "c.mun_trab", label: "Contrato · Municipio del trabajador", category: "Trabajador", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Municipio de residencia del trabajador." },
+
+  { key: "c.cargo", label: "Contrato · Cargo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Cargo del trabajador según condiciones formalizadas vigentes." },
+  { key: "c.grupo", label: "Contrato · Grupo salarial", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Grupo salarial en números romanos (p. ej. XII)." },
+  { key: "c.cat_ocup", label: "Contrato · Categoría ocupacional", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Categoría ocupacional del cargo." },
+  { key: "c.puesto", label: "Contrato · Puesto de trabajo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Puesto que ocupa el trabajador." },
+  { key: "c.cod_puesto", label: "Contrato · Código del puesto", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Código del puesto formalizado (tras anexos de cambio de puesto)." },
+  { key: "c.lug_trab", label: "Contrato · Lugar de trabajo", category: "Cargo y Puesto", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Lugar de trabajo según condiciones formalizadas." },
+
+  { key: "c.horas_dia", label: "Contrato · Horas diarias", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "hours", kind: "SOURCE", description: "Horas de trabajo al día." },
+  { key: "c.horas_sem", label: "Contrato · Horas semanales", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "hours", kind: "SOURCE", description: "Horas de trabajo a la semana." },
+  { key: "c.horas_mes", label: "Contrato · Horas mensuales", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "hours", kind: "SOURCE", description: "Horas de trabajo al mes." },
+  { key: "c.horario", label: "Contrato · Horario", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Horario / jornada en texto (del puesto o sus segmentos)." },
+  { key: "c.descanso", label: "Contrato · Descanso", category: "Jornada", documentTypes: ["CONTRACT"], dataType: "integer", kind: "SOURCE", description: "Minutos de descanso dentro de la jornada." },
+
+  { key: "c.tipo", label: "Contrato · Tipo de contrato", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Nombre del tipo de contrato (determinado / indeterminado)." },
+  { key: "c.inicio", label: "Contrato · Fecha de inicio", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de inicio del contrato." },
+  { key: "c.fin", label: "Contrato · Fecha de fin", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de fin prevista (contrato por tiempo determinado)." },
+  { key: "c.duracion", label: "Contrato · Duración", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "CALCULATED", description: "Duración humana calculada a partir de start_date y end_date (p. ej. «6 meses»)." },
+  { key: "c.firma", label: "Contrato · Fecha de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "date", kind: "SOURCE", description: "Fecha de firma del contrato." },
+  { key: "c.firma_dia", label: "Contrato · Día de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "integer", kind: "CALCULATED", description: "Día de la fecha de firma (calculado, no se persiste)." },
+  { key: "c.firma_mes", label: "Contrato · Mes de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de firma en español (calculado, no se persiste)." },
+  { key: "c.firma_anio", label: "Contrato · Año de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "integer", kind: "CALCULATED", description: "Año de la fecha de firma (calculado, no se persiste)." },
+  { key: "c.lugar_firma", label: "Contrato · Lugar de firma", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Lugar/municipio de firma." },
+  { key: "c.formaPago", label: "Contrato · Forma de pago", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Forma de pago (A tiempo / A rendimiento), incluidos anexos formalizados." },
+  { key: "c.momentoPago", label: "Contrato · Día / momento de pago", category: "Contrato", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Día o momento de pago (p. ej. «Día 10 de cada mes»), incluidos anexos formalizados." },
+
+  { key: "c.salario", label: "Contrato · Salario de escala", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Salario de escala formalizado vigente." },
+  { key: "c.pagos_adic", label: "Contrato · Pagos adicionales", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Suma de pagos adicionales formalizados." },
+  { key: "c.cond_anorm", label: "Contrato · Pagos por condiciones anormales", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Suma de pagos por condiciones laborales anormales." },
+  { key: "c.otros_pagos", label: "Contrato · Otros pagos", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Suma de otros pagos del contrato." },
+  { key: "c.total", label: "Contrato · Total contractual", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "amount", kind: "SOURCE", description: "Total contractual formalizado (salario + conceptos)." },
+  { key: "c.moneda", label: "Contrato · Moneda", category: "Retribución", documentTypes: ["CONTRACT"], dataType: "text", kind: "SOURCE", description: "Moneda de la retribución (p. ej. CUP)." },
+
+  // ---------------- Anexo · catálogo VISIBLE exclusivo (short aliases a.*) ----------------
+  { key: "a.ent", label: "Anexo · Nombre de la entidad", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Nombre de la entidad firmante (snapshot)." },
+  { key: "a.org", label: "Anexo · Organismo", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Organismo al que pertenece la entidad (snapshot)." },
+  { key: "a.ram", label: "Anexo · Rama", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Rama de la entidad (snapshot)." },
+  { key: "a.cod", label: "Anexo · Código laboral", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Código de identificación laboral (snapshot)." },
+  { key: "a.dir", label: "Anexo · Dirección de la entidad", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Dirección de la entidad (snapshot)." },
+  { key: "a.prov", label: "Anexo · Provincia de la entidad", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Provincia de la entidad (snapshot)." },
+  { key: "a.mun", label: "Anexo · Municipio de la entidad", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Municipio de la entidad (snapshot)." },
+  { key: "a.rev", label: "Anexo · Año de la Revolución", category: "Entidad", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Valor institucional configurado por entidad (texto libre, p. ej. 68) y preservado en el snapshot (nunca se calcula)." },
+
+  { key: "a.rep_nom", label: "Anexo · Nombre del representante", category: "Representante", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Representante histórico que suscribió el documento (snapshot)." },
+  { key: "a.rep_cargo", label: "Anexo · Cargo del representante", category: "Representante", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Cargo del representante histórico (snapshot)." },
+
+  { key: "a.nom", label: "Anexo · Nombre completo", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Nombre y apellidos del trabajador." },
+  { key: "a.ci", label: "Anexo · Carné de identidad", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
+  { key: "a.nac", label: "Anexo · Fecha de nacimiento", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "date", kind: "SOURCE", description: "Fecha de nacimiento del trabajador." },
+  { key: "a.prof", label: "Anexo · Profesión u oficio", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Profesión u oficio (dato profesional, no nivel de estudios)." },
+  { key: "a.dir_trab", label: "Anexo · Dirección del trabajador", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Dirección particular del trabajador." },
+  { key: "a.prov_trab", label: "Anexo · Provincia del trabajador", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Provincia de residencia del trabajador." },
+  { key: "a.mun_trab", label: "Anexo · Municipio del trabajador", category: "Trabajador", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Municipio de residencia del trabajador." },
+
+  { key: "a.num", label: "Anexo · Número de anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "integer", kind: "SOURCE", description: "Numeración secuencial del anexo dentro del contrato." },
+  { key: "a.motivo", label: "Anexo · Motivo del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Motivo legible del anexo." },
+  { key: "a.efectiva", label: "Anexo · Fecha efectiva", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "date", kind: "SOURCE", description: "Fecha desde la cual aplican las nuevas condiciones." },
+  { key: "a.firma", label: "Anexo · Fecha de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "date", kind: "SOURCE", description: "Fecha de firma del anexo." },
+  { key: "a.firma_dia", label: "Anexo · Día de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "integer", kind: "CALCULATED", description: "Día de la fecha de firma del anexo (calculado)." },
+  { key: "a.firma_mes", label: "Anexo · Mes de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de firma del anexo en español (calculado)." },
+  { key: "a.firma_anio", label: "Anexo · Año de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "integer", kind: "CALCULATED", description: "Año de la fecha de firma del anexo (calculado)." },
+  { key: "a.lugar_firma", label: "Anexo · Lugar de firma del anexo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Lugar de firma del anexo." },
+
+  { key: "a.ant_cargo", label: "Anexo · Cargo anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Cargo anterior según el snapshot del anexo." },
+  { key: "a.ant_grupal", label: "Anexo · Grupo salarial anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Grupo salarial anterior según el snapshot del anexo." },
+  { key: "a.ant_cat", label: "Anexo · Categoría ocupacional anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Categoría ocupacional anterior según el snapshot." },
+  { key: "a.ant_salario", label: "Anexo · Salario anterior", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Salario anterior según el snapshot del anexo." },
+
+  { key: "a.nue_cargo", label: "Anexo · Cargo nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Cargo nuevo según el snapshot del anexo." },
+  { key: "a.nue_grupal", label: "Anexo · Grupo salarial nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Grupo salarial nuevo según el snapshot del anexo." },
+  { key: "a.nue_cat", label: "Anexo · Categoría ocupacional nueva", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "text", kind: "SOURCE", description: "Categoría ocupacional nueva según el snapshot." },
+  { key: "a.nue_salario", label: "Anexo · Salario nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Salario nuevo según el snapshot del anexo." },
+  { key: "a.nue_otros", label: "Anexo · Otros pagos nuevos", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Otros pagos según el lado «después» del anexo." },
+  { key: "a.nue_total", label: "Anexo · Total nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Total contractual nuevo según el anexo." },
 ]
 
 export const documentVariableByKey = (key: string): DocumentVariableDefinition | undefined =>
@@ -393,6 +504,57 @@ const rawValueFor = (
       case "compensation.other_payments": return data.compensation.other_payments
       case "compensation.total": return data.compensation.total
       case "compensation.currency": return textOrNull(data.compensation.currency)
+
+      // Short aliases c.* (delegate to same resolution as long keys)
+      case "c.ent": return textOrNull(data.entity.name)
+      case "c.org": return textOrNull(data.entity.organism)
+      case "c.ram": return textOrNull(data.entity.branch)
+      case "c.cod": return textOrNull(data.entity.labor_code)
+      case "c.dir": return textOrNull(data.entity.address)
+      case "c.prov": return textOrNull(data.entity.province)
+      case "c.mun": return textOrNull(data.entity.municipality)
+      case "c.rev": return data.entity.revolution_year
+      case "c.rep_nom": return textOrNull(data.representative.name)
+      case "c.rep_cargo": return textOrNull(data.representative.position)
+      case "c.nom": return textOrNull(data.worker.full_name)
+      case "c.ci": return textOrNull(data.worker.identification)
+      case "c.nac": return textOrNull(data.worker.birth_date)
+      case "c.prof": return textOrNull(data.worker.profession)
+      case "c.dir_trab": return textOrNull(data.worker.address)
+      case "c.prov_trab": return textOrNull(data.worker.province)
+      case "c.mun_trab": return textOrNull(data.worker.municipality)
+      case "c.cargo": return textOrNull(data.job.name)
+      case "c.grupo":
+        return data.job.salary_group_sequence != null
+          ? toRomanNumeral(data.job.salary_group_sequence)
+          : null
+      case "c.cat_ocup": return textOrNull(data.job.occupational_category)
+      case "c.puesto": return textOrNull(data.position.name)
+      case "c.cod_puesto": return textOrNull(data.position.code)
+      case "c.lug_trab": return textOrNull(data.position.work_location)
+      case "c.horas_dia": return data.schedule.daily_hours
+      case "c.horas_sem": return data.schedule.weekly_hours
+      case "c.horas_mes": return data.schedule.monthly_hours
+      case "c.horario": return textOrNull(data.schedule.text)
+      case "c.descanso": return data.schedule.break_minutes
+      case "c.tipo": return textOrNull(data.contract.type_name)
+      case "c.inicio": return textOrNull(data.contract.start_date)
+      case "c.fin": return textOrNull(data.contract.end_date)
+      case "c.duracion":
+        return describeDocumentDuration(data.contract.start_date, data.contract.end_date)
+      case "c.firma": return textOrNull(data.contract.signature_date)
+      case "c.firma_dia": return documentSignatureDay(data.contract.signature_date)
+      case "c.firma_mes": return documentSignatureMonth(data.contract.signature_date)
+      case "c.firma_anio": return documentSignatureYear(data.contract.signature_date)
+      case "c.lugar_firma": return textOrNull(data.contract.signature_place)
+      case "c.formaPago": return textOrNull(data.contract.payment_method)
+      case "c.momentoPago": return textOrNull(data.contract.payment_schedule)
+      case "c.salario": return data.compensation.base_salary
+      case "c.pagos_adic": return data.compensation.additional_payments
+      case "c.cond_anorm": return data.compensation.abnormal_conditions_payments
+      case "c.otros_pagos": return data.compensation.other_payments
+      case "c.total": return data.compensation.total
+      case "c.moneda": return textOrNull(data.compensation.currency)
       default: return null
     }
   }
@@ -457,6 +619,27 @@ const rawValueFor = (
       case "vacaciones.reincorporacion": return isVacation ? formatDocumentDateShort(incorporation) : null
 
       case "documento.fecha_emision": return formatDocumentDateShort(data.issued_at)
+
+      // Short aliases s.* (delegate to same resolution as long keys)
+      case "s.fem": return formatDocumentDateShort(data.issued_at)
+      case "s.ent": return textOrNull(data.entity.name)
+      case "s.cod": return textOrNull(data.entity.code)
+      case "s.nom": return textOrNull(data.worker.first_name)
+      case "s.ap1": return textOrNull(data.worker.first_surname)
+      case "s.ap2": return textOrNull(data.worker.second_surname)
+      case "s.ci": return textOrNull(data.worker.identification)
+      case "s.area": return textOrNull(data.area_name)
+      case "s.f_des": return formatDocumentDateShort(data.origin.start_date)
+      case "s.f_has":
+        return isVacation ? formatDocumentDateShort(data.origin.end_date) : null
+      case "s.dias":
+        return isVacation ? data.origin.natural_days : data.origin.days
+      case "s.inc_d": return incorporationDay !== null ? String(incorporationDay) : null
+      case "s.inc_m": return incorporationMonth !== null ? String(incorporationMonth) : null
+      case "s.inc_a":
+        return incorporationYear !== null ? String(incorporationYear).slice(-2) : null
+      case "s.vac": return isVacation ? "X" : null
+      case "s.lic": return isMedical ? "X" : null
       default: return null
     }
   }
@@ -514,6 +697,45 @@ const rawValueFor = (
     case "addendum.new.salary": return amountSide(next("SALARY"))
     case "addendum.new.other_payments": return amountSide(next("OTHER_PAYMENT"))
     case "addendum.new.total":
+      return data.totals.after ?? amountSide(next("TOTAL_COMPENSATION"))
+
+    // Short aliases a.* (delegate to same resolution as long keys)
+    case "a.ent": return textOrNull(data.entity.name)
+    case "a.org": return textOrNull(data.entity.organism)
+    case "a.ram": return textOrNull(data.entity.branch)
+    case "a.cod": return textOrNull(data.entity.labor_code)
+    case "a.dir": return textOrNull(data.entity.address)
+    case "a.prov": return textOrNull(data.entity.province)
+    case "a.mun": return textOrNull(data.entity.municipality)
+    case "a.rev": return data.entity.revolution_year
+    case "a.rep_nom": return textOrNull(data.representative.name)
+    case "a.rep_cargo": return textOrNull(data.representative.position)
+    case "a.nom": return textOrNull(data.worker.full_name)
+    case "a.ci": return textOrNull(data.worker.identification)
+    case "a.nac": return textOrNull(data.worker.birth_date)
+    case "a.prof": return textOrNull(data.worker.profession)
+    case "a.dir_trab": return textOrNull(data.worker.address)
+    case "a.prov_trab": return textOrNull(data.worker.province)
+    case "a.mun_trab": return textOrNull(data.worker.municipality)
+    case "a.num": return data.addendum.number
+    case "a.motivo":
+      return textOrNull(data.addendum.reason) ?? textOrNull(data.addendum.reason_code)
+    case "a.efectiva": return textOrNull(data.addendum.effective_date)
+    case "a.firma": return textOrNull(data.addendum.signature_date)
+    case "a.firma_dia": return documentSignatureDay(data.addendum.signature_date)
+    case "a.firma_mes": return documentSignatureMonth(data.addendum.signature_date)
+    case "a.firma_anio": return documentSignatureYear(data.addendum.signature_date)
+    case "a.lugar_firma": return textOrNull(data.addendum.signature_place)
+    case "a.ant_cargo": return previous("JOB").display ?? previous("JOB").value
+    case "a.ant_grupal": return previous("SALARY_GROUP").display ?? previous("SALARY_GROUP").value
+    case "a.ant_cat": return previous("OCCUPATIONAL_CATEGORY").display ?? previous("OCCUPATIONAL_CATEGORY").value
+    case "a.ant_salario": return amountSide(previous("SALARY"))
+    case "a.nue_cargo": return next("JOB").display ?? next("JOB").value
+    case "a.nue_grupal": return next("SALARY_GROUP").display ?? next("SALARY_GROUP").value
+    case "a.nue_cat": return next("OCCUPATIONAL_CATEGORY").display ?? next("OCCUPATIONAL_CATEGORY").value
+    case "a.nue_salario": return amountSide(next("SALARY"))
+    case "a.nue_otros": return amountSide(next("OTHER_PAYMENT"))
+    case "a.nue_total":
       return data.totals.after ?? amountSide(next("TOTAL_COMPENSATION"))
     default: return null
   }
