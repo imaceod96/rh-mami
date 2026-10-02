@@ -62,6 +62,9 @@ export const ENTITY_PERMISSION_LABELS: Record<string, string> = {
   "salary.view": "Ver compensación (escala empresarial)",
   "salary.manage": "Gestionar compensación (escala empresarial)",
 
+  "tenure_scale.view": "Ver escala de pago de antigüedad",
+  "tenure_scale.manage": "Gestionar escala de pago de antigüedad",
+
   "contracts.view": "Ver contratos",
   "contracts.manage": "Formalizar y gestionar contratos",
 
@@ -96,7 +99,7 @@ export const ENTITY_PERMISSION_GROUPS: EntityPermissionGroup[] = [
   { title: "CONFIGURACIÓN DE PLANTILLA", codes: ["staffing.view", "staffing.manage"] },
   { title: "TRABAJADORES", codes: ["workers.view", "workers.manage"] },
   { title: "CONTRATACIÓN", codes: ["hiring.view", "hiring.manage"] },
-  { title: "COMPENSACIÓN", codes: ["salary.view", "salary.manage"] },
+  { title: "COMPENSACIÓN", codes: ["salary.view", "salary.manage", "tenure_scale.view", "tenure_scale.manage"] },
   { title: "CONTRATOS", codes: ["contracts.view", "contracts.manage"] },
   {
     title: "ANEXOS CONTRACTUALES",

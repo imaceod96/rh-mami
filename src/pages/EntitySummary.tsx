@@ -212,6 +212,7 @@ const EntitySummary = () => {
     },
   ].filter((link) => link.enabled)
 
+  const showMainBlock = summary.permissions.staffing || summary.permissions.workers
   const showDistribution = !!summary.distribution
   const hasAnyBlock =
     showDistribution ||

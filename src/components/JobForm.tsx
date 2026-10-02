@@ -611,10 +611,10 @@ export const JobForm: React.FC<JobFormProps> = ({
         
                 <div className="space-y-2">
                   <SiteCorpCheckbox
-                    label="Condiciones Anormales"
-                    checked={hasAbnormalConditions}
-                    onCheckedChange={setHasAbnormalConditions}
-                  />
+                                      label="Condiciones Anormales"
+                                      checked={hasAbnormalConditions}
+                                      onCheckedChange={(checked) => setHasAbnormalConditions(!!checked)}
+                                    />
                 </div>
         
                 {hasAbnormalConditions && (
