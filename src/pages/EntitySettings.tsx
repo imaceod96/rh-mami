@@ -4,7 +4,7 @@ import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
-import { Users, Shield, Scale, FileText, Network, ClipboardList, FileType2 } from "lucide-react"
+import { Users, Shield, Scale, FileText, Network, ClipboardList, FileType2, Briefcase } from "lucide-react"
 
 interface SettingsItem {
   title: string

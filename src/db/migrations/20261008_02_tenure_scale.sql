@@ -2,16 +2,9 @@
 -- FASE — ESCALA DE PAGO DE ANTIGÜEDAD (FASE 9-16)
 -- Migración incremental idempotente.
 --
--- La escala de pago de antigüedad es una configuración OPERACIONAL propia de
--- cada entidad (organization_entity_id). Es INDEPENDIENTE de:
---   - Escala salarial (salary_scales)
---   - Grupo escala (salary_groups)
---   - Cargo (organization_jobs)
---   - Salario contractual (employment_contracts)
---
--- Los intervalos se normalizan internamente a MESES para evitar ambigüedades
--- de límites (desde inclusive, hasta exclusive). El último tramo puede quedar
--- abierto (to_months IS NULL) representando ">= desde".
+-- Tabla de tramos de la escala de pago de antigüedad.
+-- Cada entidad configura su propia escala (organization_entity_id).
+-- INDEPENDIENTE de escala salarial, grupo salarial, cargo, salario contractual.
 -- ============================================================================
 
 -- 1. Tabla de tramos de la escala de pago de antigüedad.
@@ -27,8 +20,6 @@ CREATE TABLE IF NOT EXISTS public.tenure_payment_scales (
 );
 
 -- 2. Restricciones de integridad.
---    - amount >= 0
---    - to_months, cuando existe, debe ser > from_months (intervalo no vacío)
 ALTER TABLE public.tenure_payment_scales
 ADD CONSTRAINT tenure_payment_scales_amount_check
 CHECK (amount >= 0);
@@ -37,8 +28,8 @@ ALTER TABLE public.tenure_payment_scales
 ADD CONSTRAINT tenure_payment_scales_range_check
 CHECK (to_months IS NULL OR to_months > from_months);
 
--- 3. Unicidad: un solo tramo activo por entidad con el mismo límite inferior.
-CREATE UNIQUE INDEX IF NOT EXISTS tenure_payment_scales_entity_from_unique
+-- 3. Índice para consultas por entidad.
+CREATE INDEX IF NOT EXISTS idx_tenure_payment_scales_entity
 ON public.tenure_payment_scales (organization_entity_id, from_months)
 WHERE is_active = true;
 
@@ -77,9 +68,6 @@ FOR DELETE TO authenticated
 USING (can_access_entity(organization_entity_id, 'staffing.manage'));
 
 -- 8. Función: resolver el pago por antigüedad aplicable a un trabajador.
---    Recibe la entidad y el id del trabajador; calcula la antigüedad en meses
---    desde la fecha de contratación (hire_date) hasta la fecha actual, y
---    devuelve el importe del tramo aplicable (o NULL si no hay tramo).
 CREATE OR REPLACE FUNCTION public.resolve_tenure_payment_for_worker(
     p_entity_id  uuid,
     p_worker_id  uuid
@@ -110,7 +98,7 @@ BEGIN
         RAISE EXCEPTION 'No tiene permiso para consultar la antigüedad de este trabajador';
     END IF;
 
-    -- Fecha de contratación REAL del trabajador (no created_at).
+    -- Fecha de contratación REAL del trabajador.
     SELECT hire_date INTO v_hire_date
     FROM public.workers
     WHERE id = p_worker_id
@@ -122,7 +110,7 @@ BEGIN
         RETURN;
     END IF;
 
-    -- Antigüedad en meses (diferencia de calendario: años*12 + meses).
+    -- Antigüedad en meses (diferencia de calendario).
     v_years     := date_part('year', age(current_date, v_hire_date));
     v_months_int := date_part('month', age(current_date, v_hire_date));
     v_months    := (v_years * 12 + v_months_int)::numeric(10,2);
@@ -157,8 +145,7 @@ BEGIN
 END;
 $$;
 
--- 9. Función: reporte de demografía de trabajadores activos de una entidad.
---    Devuelve agregados por edad, color de piel, sexo y nivel académico.
+-- 9. Función: reporte de demografía de trabajadores activos.
 CREATE OR REPLACE FUNCTION public.report_worker_demographics(
     p_entity_id uuid,
     p_scope     text DEFAULT 'SELF'
@@ -182,7 +169,7 @@ BEGIN
         RAISE EXCEPTION 'No tiene permiso para consultar la demografía de esta entidad';
     END IF;
 
-    -- Normalizar scope: SELF_AND_DESCENDANTS incluye a la entidad y descendientes.
+    -- Normalizar scope.
     RETURN QUERY
     WITH target_entities AS (
         SELECT oe.id
@@ -201,7 +188,6 @@ BEGIN
         JOIN target_entities te ON te.id = w.organization_entity_id
         WHERE w.employment_status = 'active'
     )
-    -- Edad
     SELECT 'edad' AS category,
            CASE
                WHEN w.birth_date IS NULL THEN 'Sin información'
@@ -217,8 +203,6 @@ BEGIN
     GROUP BY value
 
     UNION ALL
-
-    -- Color de piel
     SELECT 'color_piel' AS category,
            COALESCE(sc.name, 'Sin información') AS value,
            count(*) AS count
@@ -227,8 +211,6 @@ BEGIN
     GROUP BY value
 
     UNION ALL
-
-    -- Sexo
     SELECT 'sexo' AS category,
            COALESCE(g.name, 'Sin información') AS value,
            count(*) AS count
@@ -237,8 +219,6 @@ BEGIN
     GROUP BY value
 
     UNION ALL
-
-    -- Nivel académico
     SELECT 'nivel_academico' AS category,
            COALESCE(el.name, 'Sin información') AS value,
            count(*) AS count

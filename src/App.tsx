@@ -40,6 +40,7 @@ import EntitySettings from "./pages/EntitySettings"
 import EntitySettingsUsers from "./pages/EntitySettingsUsers"
 import EntitySettingsRoles from "./pages/EntitySettingsRoles"
 import EntitySettingsSalary from "./pages/EntitySettingsSalary"
+import EntitySettingsTenureScale from "./pages/EntitySettingsTenureScale"
 import EntitySettingsGoverningDocuments from "./pages/EntitySettingsGoverningDocuments"
 import EntitySettingsStaffing from "./pages/EntitySettingsStaffing"
 import EntitySettingsContractData from "./pages/EntitySettingsContractData"
@@ -155,7 +156,7 @@ const AppRoutes = () => {
           <Route path="/entity/:entityId/settings/staffing" element={<EntitySettingsStaffing />} />
           <Route path="/entity/:entityId/settings/users" element={<EntitySettingsUsers />} />
           <Route path="/entity/:entityId/settings/roles" element={<EntitySettingsRoles />} />
-          <Route path="/entity/:entityId/settings/salary" element={<EntitySettingsSalary />} />
+          <Route path="/entity/:entityId/settings/salary" element={<EntitySettingsSalary />} />\n          <Route path="/entity/:entityId/settings/tenure-scale" element={<EntitySettingsTenureScale />} />
           <Route path="/entity/:entityId/settings/governing-documents" element={<EntitySettingsGoverningDocuments />} />
           <Route path="/entity/:entityId/settings/contract-data" element={<EntitySettingsContractData />} />
           <Route path="/entity/:entityId/settings/document-templates" element={<EntitySettingsDocumentTemplates />} />
