@@ -184,7 +184,9 @@ export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   { key: "sc404.fecha_emision", label: "SC-4-04 · Fecha de emisión", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Fecha (día de la generación) en que se emite el documento, en DD/MM/AA." },
   { key: "sc404.entidad_nombre", label: "SC-4-04 · Nombre de la entidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre de la entidad real del trabajador." },
   { key: "sc404.entidad_codigo", label: "SC-4-04 · Código de la entidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Código (organization_entities.code) de la entidad real del trabajador." },
-  { key: "sc404.trabajador_nombre", label: "SC-4-04 · Nombre del trabajador", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre completo del trabajador." },
+  { key: "sc404.trabajador_nombre", label: "SC-4-04 · Nombre del trabajador", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Nombre o nombres del trabajador, sin apellidos." },
+  { key: "sc404.trabajador_primer_apellido", label: "SC-4-04 · Primer apellido", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Primer apellido del trabajador." },
+  { key: "sc404.trabajador_segundo_apellido", label: "SC-4-04 · Segundo apellido", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Segundo apellido del trabajador." },
   { key: "sc404.trabajador_ci", label: "SC-4-04 · Carné de identidad", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Carné de identidad del trabajador." },
   { key: "sc404.area", label: "SC-4-04 · Área", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Área del puesto de la asignación vigente al período." },
   { key: "sc404.es_vacaciones", label: "Marcador Vacaciones", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un período de vacaciones; vacío para certificado médico." },
@@ -437,7 +439,9 @@ const rawValueFor = (
       case "sc404.fecha_emision": return formatDocumentDateShort(data.issued_at)
       case "sc404.entidad_nombre": return textOrNull(data.entity.name)
       case "sc404.entidad_codigo": return textOrNull(data.entity.code)
-      case "sc404.trabajador_nombre": return textOrNull(data.worker.full_name)
+      case "sc404.trabajador_nombre": return textOrNull(data.worker.first_name)
+      case "sc404.trabajador_primer_apellido": return textOrNull(data.worker.first_surname)
+      case "sc404.trabajador_segundo_apellido": return textOrNull(data.worker.second_surname)
       case "sc404.trabajador_ci": return textOrNull(data.worker.identification)
       case "sc404.area": return textOrNull(data.area_name)
       case "sc404.es_vacaciones": return isVacation ? "X" : null

@@ -153,6 +153,12 @@ export interface Sc404DocumentData {
   worker: {
     full_name: string | null
     identification: string | null
+    /** Nombre/nombres del trabajador, SIN apellidos (dato estructurado). */
+    first_name: string | null
+    /** Primer apellido del trabajador (dato estructurado). */
+    first_surname: string | null
+    /** Segundo apellido del trabajador (dato estructurado; null → resuelve vacío). */
+    second_surname: string | null
   }
   area_name: string | null
   /** Fecha de emisión del documento (día de la generación). */
@@ -232,6 +238,9 @@ export async function getSc404DocumentData(
       worker: {
         full_name: worker ? fullNameOf(worker) : null,
         identification: worker?.identification ?? null,
+        first_name: worker?.first_name ?? null,
+        first_surname: worker?.first_surname ?? null,
+        second_surname: worker?.second_surname ?? null,
       },
       area_name: assignment?.area_name ?? null,
       issued_at: issuedAt,
@@ -284,6 +293,9 @@ export async function getSc404DocumentData(
     worker: {
       full_name: worker ? fullNameOf(worker) : null,
       identification: worker?.identification ?? null,
+      first_name: worker?.first_name ?? null,
+      first_surname: worker?.first_surname ?? null,
+      second_surname: worker?.second_surname ?? null,
     },
     area_name: assignment?.area_name ?? null,
     issued_at: issuedAt,
