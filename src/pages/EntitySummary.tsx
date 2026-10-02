@@ -6,9 +6,9 @@ import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useEntitySummaryDashboard } from "@/hooks/use-entity-summary"
 import type { DistributionSlice } from "@/lib/entity-summary"
-import { ENTITY_INTERNAL_MODULES } from "@/lib/sitecorp-account"
 import {
   Building2,
   Layers,
@@ -16,16 +16,12 @@ import {
   Users,
   Briefcase,
   FileText,
-  CalendarClock,
   Mail,
   UserCheck,
-  UserPlus,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   ArrowUpRight,
-  TrendingUp,
-  TrendingDown,
   Palmtree,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -44,12 +40,14 @@ const typeIcon = (type: string) => {
 
 const formatInt = (value: number): string => (value || 0).toLocaleString("es-ES")
 
-const formatDateShort = (iso: string | null | undefined): string => {
-  if (!iso) return "—"
-  const [year, month, day] = iso.split("-")
-  if (!year || !month || !day) return iso
-  return `${day}/${month}/${year}`
-}
+// --- Estado de pestañas internas del Resumen -----------------------------
+
+type SummaryTab = "overview" | "reports"
+
+const TABS: { key: SummaryTab; label: string }[] = [
+  { key: "overview", label: "Vista general" },
+  { key: "reports", label: "Reportes" },
+]
 
 // --- Tarjeta KPI -----------------------------------------------------------
 
@@ -73,7 +71,9 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, subtitle, icon, tone = 
   <SiteCorpCard className="rounded-2xl">
     <div className="flex items-start justify-between gap-3">
       <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
         <p className="text-3xl font-bold leading-none text-ink">{value}</p>
         {subtitle && <p className="pt-1 text-xs text-muted-foreground">{subtitle}</p>}
       </div>
@@ -82,7 +82,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, subtitle, icon, tone = 
   </SiteCorpCard>
 )
 
-// --- Fila de distribución --------------------------------------------------
+// --- Fila de barra de distribución -----------------------------------------
 
 const BarRow: React.FC<{ slice: DistributionSlice; max: number; tone: "primary" | "orange" }> = ({
   slice,
@@ -128,52 +128,121 @@ const DistributionList: React.FC<{ slices: DistributionSlice[]; tone: "primary" 
   )
 }
 
-// --- Checklist de configuración -------------------------------------------
+// --- Tarjeta de informe demográfico ----------------------------------------
 
-const ChecklistRow: React.FC<{ label: string; ready: boolean; hint?: string }> = ({
-  label,
-  ready,
-  hint,
-}) => (
-  <div className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5">
-    <div className="min-w-0">
-      <p className="truncate text-sm text-ink">{label}</p>
-      {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
-    </div>
-    {ready ? (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-sitecorp-success">
-        <CheckCircle2 className="h-4 w-4" /> Listo
-      </span>
-    ) : (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-sitecorp-warning">
-        <XCircle className="h-4 w-4" /> Pendiente
-      </span>
-    )}
-  </div>
-)
+interface DemographicReportCardProps {
+  title: string
+  description?: string
+  total?: number
+  slices?: { key: string; label: string; value: number }[]
+  tone: "primary" | "orange" | "success" | "warning" | "danger" | "blue"
+  loading?: boolean
+}
 
-// --- Página ----------------------------------------------------------------
+const reportToneStyles: Record<
+  NonNullable<DemographicReportCardProps["tone"]>,
+  string
+> = {
+  primary: "bg-sitecorp-primary",
+  orange: "bg-sitecorp-secondary-orange",
+  success: "bg-sitecorp-success",
+  danger: "bg-sitecorp-danger",
+  warning: "bg-sitecorp-warning",
+  blue: "bg-blue-600",
+}
 
-const EntitySummary = () => {
-  const { entityId } = useParams<{ entityId: string }>()
-  const { currentEntity } = useCurrentEntity()
-  const summary = useEntitySummaryDashboard(entityId)
-
-  if (!entityId) {
+const DemographicReportCard: React.FC<DemographicReportCardProps> = ({
+  title,
+  description,
+  total,
+  slices,
+  tone,
+  loading,
+}) => {
+  if (loading) {
     return (
-      <div className="space-y-6 p-6">
-        <SiteCorpPageHeader title="Resumen" description="No se indicó una entidad" />
-        <SiteCorpAlert type="danger" title="Entidad no encontrada">
-          La ruta no incluye una entidad válida.
-        </SiteCorpAlert>
-      </div>
+      <SiteCorpCard className="rounded-2xl">
+        <div className="p-4">
+          <div className="h-5 w-1/3 animate-pulse rounded bg-muted" />
+          <div className="mt-3 space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+                <div className="h-4 w-1/4 animate-pulse rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </SiteCorpCard>
     )
   }
 
-  const entityType = currentEntity ? entityTypeLabels[currentEntity.entity_type] || "Entidad" : "Entidad"
-  const scopeLabel =
-    summary.scope === "descendants" ? "Entidad + descendientes" : "Esta entidad"
+  const max = slices ? slices.reduce((m, s) => Math.max(m, s.value), 0) : 0
 
+  return (
+    <SiteCorpCard className="rounded-2xl">
+      {title && (
+        <div className="border-b border-border px-4 pb-3">
+          <h3 className="text-base font-semibold text-ink">{title}</h3>
+          {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+          {typeof total === "number" && total >= 0 && (
+            <p className="mt-1.5 text-sm font-medium text-muted-foreground">
+              {formatInt(total)} trabajador(es) activo(s) en el ámbito
+            </p>
+          )}
+        </div>
+      )}
+      <div className="p-4">
+        {slices && slices.length > 0 ? (
+          <div className="space-y-3">
+            {slices.map((slice) => {
+              const pct = max > 0 ? Math.round((slice.value / max) * 100) : 0
+              return (
+                <div key={slice.key} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="truncate pr-3 text-ink" title={slice.label}>
+                      {slice.label}
+                    </span>
+                    <span className="font-semibold text-ink">{formatInt(slice.value)}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        reportToneStyles[tone]
+                      )}
+                      style={{ width: `${Math.max(pct, 4)}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="py-4 text-sm text-muted-foreground">
+            No hay datos disponibles para este informe.
+          </p>
+        )}
+      </div>
+    </SiteCorpCard>
+  )
+}
+
+// --- Contenido: PESTAÑA VISTA GENERAL --------------------------------------
+
+interface VistaGeneralProps {
+  summary: ReturnType<typeof useEntitySummaryDashboard>
+  entityId: string
+  currentEntity: any
+  entityType: string
+}
+
+const VistaGeneral: React.FC<VistaGeneralProps> = ({
+  summary,
+  entityId,
+  currentEntity,
+  entityType,
+}) => {
   const quickLinks = [
     {
       key: "candidates",
@@ -188,13 +257,6 @@ const EntitySummary = () => {
       path: `/entity/${entityId}/staffing`,
       icon: <Briefcase className="h-4 w-4" />,
       enabled: summary.has(["workers.view", "workers.manage"]),
-    },
-    {
-      key: "alerts",
-      label: "Vencimientos",
-      path: `/entity/${entityId}/contracts/alerts`,
-      icon: <CalendarClock className="h-4 w-4" />,
-      enabled: summary.has(["contract_alerts.view", "workers.view", "workers.manage"]),
     },
     {
       key: "hiring",
@@ -218,56 +280,10 @@ const EntitySummary = () => {
     showDistribution ||
     summary.permissions.candidates ||
     summary.permissions.contracts ||
-    summary.permissions.alerts ||
-    summary.permissions.workers ||
-    summary.permissions.vacations ||
-    summary.permissions.configuration
+    summary.permissions.vacations
 
   return (
-    <div className="space-y-6 p-6">
-      <SiteCorpPageHeader
-        title={`Resumen — ${currentEntity?.name ?? "Entidad"}`}
-        description={`${entityType}${currentEntity?.code ? ` • ${currentEntity.code}` : ""}`}
-      />
-
-      {/* Selector de ámbito + aviso de alcance */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-xl border border-border bg-card p-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => summary.setScope("self")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              summary.scope === "self"
-                ? "bg-sitecorp-primary text-white"
-                : "text-ink hover:bg-muted"
-            )}
-          >
-            Esta entidad
-          </button>
-          {summary.descendantsAvailable && (
-            <button
-              type="button"
-              onClick={() => summary.setScope("descendants")}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                summary.scope === "descendants"
-                  ? "bg-sitecorp-primary text-white"
-                  : "text-ink hover:bg-muted"
-              )}
-            >
-              Entidad + descendientes
-            </button>
-          )}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          Ámbito mostrado: <strong className="text-ink">{scopeLabel}</strong>
-          {summary.scope === "descendants" && summary.descendantCount > 0
-            ? ` (${formatInt(summary.descendantCount)} entidad(es) descendiente(s))`
-            : ""}
-        </span>
-      </div>
-
+    <>
       {summary.scopeLoading && <SiteCorpLoading rows={2} />}
 
       {/* BLOQUE PRINCIPAL — PLANTILLA */}
@@ -321,7 +337,7 @@ const EntitySummary = () => {
                       ? `${formatInt(summary.staffing.occupied)} / ${formatInt(summary.staffing.authorized)}`
                       : "Sin plantilla autorizada"
                   }
-                  icon={<TrendingUp className="h-5 w-5" />}
+                  icon={<Briefcase className="h-5 w-5" />}
                   tone="primary"
                 />
               </>
@@ -335,56 +351,6 @@ const EntitySummary = () => {
             </SiteCorpAlert>
           )}
         </div>
-      )}
-
-      {/* PRÓXIMOS VENCIMIENTOS */}
-      {summary.permissions.alerts && summary.expirations && (
-        <SiteCorpCard
-          title="Próximos vencimientos"
-          description="Contratos por tiempo determinado que requieren atención (≤ 30 días)"
-          className="rounded-2xl"
-        >
-          {summary.expirations.attention === 0 && summary.expirations.correction === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay contratos próximos a vencer.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-sitecorp-danger/20 bg-sitecorp-danger/5 p-3">
-                <p className="text-xs text-muted-foreground">Vencidos / hoy</p>
-                <p className="text-2xl font-bold text-sitecorp-danger">
-                  {formatInt(summary.expirations.overdue + summary.expirations.dueToday)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-sitecorp-warning/20 bg-sitecorp-warning/5 p-3">
-                <p className="text-xs text-muted-foreground">Próximos 7 días</p>
-                <p className="text-2xl font-bold text-sitecorp-warning">
-                  {formatInt(summary.expirations.dueIn7)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border p-3">
-                <p className="text-xs text-muted-foreground">8–15 días</p>
-                <p className="text-2xl font-bold text-ink">{formatInt(summary.expirations.dueIn15)}</p>
-              </div>
-              <div className="rounded-xl border border-border p-3">
-                <p className="text-xs text-muted-foreground">16–30 días</p>
-                <p className="text-2xl font-bold text-ink">{formatInt(summary.expirations.dueIn30)}</p>
-              </div>
-            </div>
-          )}
-          {summary.expirations.correction > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {formatInt(summary.expirations.correction)} contrato(s) determinado(s) sin fecha de
-              finalización (inconsistencia administrativa).
-            </p>
-          )}
-          <div className="mt-3">
-            <Link
-              to={`/entity/${entityId}/contracts/alerts`}
-              className="inline-flex items-center gap-1 text-sm font-medium text-sitecorp-primary hover:underline"
-            >
-              Ver vencimientos <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </SiteCorpCard>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -503,65 +469,6 @@ const EntitySummary = () => {
         </SiteCorpCard>
       )}
 
-      {/* MOVIMIENTOS */}
-      {summary.permissions.workers && summary.movements && (
-        <SiteCorpCard
-          title="Movimientos de personal"
-          description={`Últimos ${summary.movements.days} días (${formatDateShort(
-            summary.movements.from
-          )} – ${formatDateShort(summary.movements.to)})`}
-          className="rounded-2xl"
-        >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex items-center gap-3 rounded-xl border border-border p-3">
-              <span className="rounded-lg bg-sitecorp-success/10 p-2 text-sitecorp-success">
-                <UserPlus className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-xs text-muted-foreground">Altas</p>
-                <p className="text-xl font-bold text-ink">{formatInt(summary.movements.hires)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-border p-3">
-              <span className="rounded-lg bg-sitecorp-danger/10 p-2 text-sitecorp-danger">
-                <TrendingDown className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-xs text-muted-foreground">Bajas</p>
-                <p className="text-xl font-bold text-ink">{formatInt(summary.movements.separations)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-border p-3">
-              <span className="rounded-lg bg-sitecorp-secondary-orange/10 p-2 text-sitecorp-secondary-orange">
-                <UserCheck className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-xs text-muted-foreground">Reincorporaciones</p>
-                <p className="text-xl font-bold text-ink">
-                  {formatInt(summary.movements.reincorporations)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-xl border border-border p-3">
-              <span className="rounded-lg bg-sitecorp-primary/10 p-2 text-sitecorp-primary">
-                <Briefcase className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-xs text-muted-foreground">Cambios de puesto</p>
-                <p className="text-xl font-bold text-ink">
-                  {formatInt(summary.movements.positionChanges)}
-                </p>
-              </div>
-            </div>
-          </div>
-          {summary.movements.contractChanges > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {formatInt(summary.movements.contractChanges)} cambio(s) de contrato en el período.
-            </p>
-          )}
-        </SiteCorpCard>
-      )}
-
       {/* DISTRIBUCIÓN */}
       {showDistribution && summary.distribution && (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -572,66 +479,6 @@ const EntitySummary = () => {
             <DistributionList slices={summary.distribution.byCategory} tone="orange" />
           </SiteCorpCard>
         </div>
-      )}
-
-      {/* CONFIGURACIÓN / READINESS */}
-      {summary.permissions.configuration && (
-        <SiteCorpCard
-          title="Configuración"
-          description="Estado de los datos necesarios para operar la entidad"
-          className="rounded-2xl"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            {summary.permissions.contractData && summary.contractData && (
-              <ChecklistRow
-                label="Datos contractuales de la entidad"
-                ready={summary.contractData.ready}
-                hint={
-                  summary.contractData.ready
-                    ? undefined
-                    : `${formatInt(summary.contractData.missing)} dato(s) pendiente(s)`
-                }
-              />
-            )}
-            {summary.permissions.representative && summary.representative && (
-              <ChecklistRow
-                label="Representante autorizado"
-                ready={summary.representative.ready}
-                hint={
-                  summary.representative.assigned > 0
-                    ? `${formatInt(summary.representative.assigned)} representante(s) asignado(s)`
-                    : "Sin representante vigente"
-                }
-              />
-            )}
-            {summary.permissions.salary && summary.salary && (
-              <ChecklistRow
-                label="Escala salarial aplicable"
-                ready={summary.salary.ready}
-                hint="Según el régimen de la entidad"
-              />
-            )}
-            {summary.permissions.templates && summary.templates && (
-              <ChecklistRow
-                label="Plantillas documentales"
-                ready={summary.templates.total > 0 && summary.templates.configured === summary.templates.total}
-                hint={`${formatInt(summary.templates.configured)}/${formatInt(
-                  summary.templates.total
-                )} configuradas`}
-              />
-            )}
-          </div>
-          {summary.has(["organization.view", "organization.manage"]) && (
-            <div className="mt-3">
-              <Link
-                to={`/entity/${entityId}/settings`}
-                className="inline-flex items-center gap-1 text-sm font-medium text-sitecorp-primary hover:underline"
-              >
-                Ir a ajustes <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </div>
-          )}
-        </SiteCorpCard>
       )}
 
       {/* ESTADO VACÍO / SIN BLOQUES */}
@@ -696,12 +543,197 @@ const EntitySummary = () => {
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Módulos internos</p>
               <p className="text-sm font-medium text-ink">
-                {ENTITY_INTERNAL_MODULES.length} módulos disponibles
+                {4} módulos disponibles
               </p>
             </div>
           </div>
         </SiteCorpCard>
       )}
+    </>
+  )
+}
+
+// --- Contenido: PESTAÑA REPORTES -------------------------------------------
+
+interface ReportsProps {
+  summary: ReturnType<typeof useEntitySummaryDashboard>
+}
+
+const Reports: React.FC<ReportsProps> = ({ summary }) => {
+  const { age, ageLoading } = summary.reports
+  const { sex, sexLoading } = summary.reports
+  const { skinColor, skinColorLoading } = summary.reports
+  const { education, educationLoading } = summary.reports
+
+  const reports: Array<{
+    key: string
+    title: string
+    description: string
+    data: any
+    total?: number
+    slices?: any[]
+    loading: boolean
+    tone: "primary" | "orange" | "success" | "warning" | "danger" | "blue"
+  }> = [
+    {
+      key: "age",
+      title: "Trabajadores según edad",
+      description: "Distribución de trabajadores activos por tramos de edad",
+      data: age,
+      total: age?.total,
+      slices: age?.byAgeGroup,
+      loading: ageLoading,
+      tone: "primary",
+    },
+    {
+      key: "sex",
+      title: "Trabajadores según sexo",
+      description: "Distribución de trabajadores activos por género",
+      data: sex,
+      total: sex?.total,
+      slices: sex?.bySex,
+      loading: sexLoading,
+      tone: "success",
+    },
+    {
+      key: "skinColor",
+      title: "Trabajadores según color de piel",
+      description: "Distribución de trabajadores activos por color de piel",
+      data: skinColor,
+      total: skinColor?.total,
+      slices: skinColor?.bySkinColor,
+      loading: skinColorLoading,
+      tone: "warning",
+    },
+    {
+      key: "education",
+      title: "Trabajadores según nivel académico",
+      description: "Distribución de trabajadores activos por nivel académico",
+      data: education,
+      total: education?.total,
+      slices: education?.byEducation,
+      loading: educationLoading,
+      tone: "orange",
+    },
+  ]
+
+  return (
+    <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
+      {reports.map((report) => (
+        <DemographicReportCard
+          key={report.key}
+          title={report.title}
+          description={report.description}
+          total={report.total}
+          slices={report.slices}
+          tone={report.tone}
+          loading={report.loading}
+        />
+      ))}
+    </div>
+  )
+}
+
+// --- Página ----------------------------------------------------------------
+
+const EntitySummary = () => {
+  const { entityId } = useParams<{ entityId: string }>()
+  const { currentEntity } = useCurrentEntity()
+  const summary = useEntitySummaryDashboard(entityId)
+
+  const [activeTab, setActiveTab] = React.useState<SummaryTab>("overview")
+
+  if (!entityId) {
+    return (
+      <div className="space-y-6 p-6">
+        <SiteCorpPageHeader title="Resumen" description="No se indicó una entidad" />
+        <SiteCorpAlert type="danger" title="Entidad no encontrada">
+          La ruta no incluye una entidad válida.
+        </SiteCorpAlert>
+      </div>
+    )
+  }
+
+  const entityType = currentEntity
+    ? entityTypeLabels[currentEntity.entity_type] || "Entidad"
+    : "Entidad"
+  const scopeLabel =
+    summary.scope === "descendants" ? "Entidad + descendientes" : "Esta entidad"
+
+  return (
+    <div className="space-y-6 p-6">
+      <SiteCorpPageHeader
+        title={`Resumen — ${currentEntity?.name ?? "Entidad"}`}
+        description={`${entityType}${currentEntity?.code ? ` • ${currentEntity.code}` : ""}`}
+      />
+
+      {/* Selector de ámbito (fuera de las pestañas: afecta a toda la vista) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-xl border border-border bg-card p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => summary.setScope("self")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              summary.scope === "self"
+                ? "bg-sitecorp-primary text-white"
+                : "text-ink hover:bg-muted"
+            )}
+          >
+            Esta entidad
+          </button>
+          {summary.descendantsAvailable && (
+            <button
+              type="button"
+              onClick={() => summary.setScope("descendants")}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                summary.scope === "descendants"
+                  ? "bg-sitecorp-primary text-white"
+                  : "text-ink hover:bg-muted"
+              )}
+            >
+              Entidad + descendientes
+            </button>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          Ámbito mostrado: <strong className="text-ink">{scopeLabel}</strong>
+          {summary.scope === "descendants" && summary.descendantCount > 0
+            ? ` (${formatInt(summary.descendantCount)} entidad(es) descendiente(s))`
+            : ""}
+        </span>
+      </div>
+
+      {/* Pestañas internas del módulo Resumen */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SummaryTab)}>
+        <TabsList className="inline-flex w-full justify-start rounded-xl border border-border bg-card p-1">
+          {TABS.map((tab) => (
+            <TabsTrigger
+              key={tab.key}
+              value={tab.key}
+              className={cn(
+                "flex-1 rounded-lg text-sm data-[state=active]:bg-sitecorp-primary data-[state=active]:text-white"
+              )}
+            >
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-6">
+          <VistaGeneral
+            summary={summary}
+            entityId={entityId}
+            currentEntity={currentEntity}
+            entityType={entityType}
+          />
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6">
+          <Reports summary={summary} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -17,6 +17,13 @@ import {
   fetchVacationsSummary,
   type SummaryScope,
 } from "@/lib/entity-summary"
+import {
+  fetchCatalogRefs,
+  fetchWorkersByAge,
+  fetchWorkersByEducationLevel,
+  fetchWorkersBySex,
+  fetchWorkersBySkinColor,
+} from "@/lib/entity-summary-reports"
 
 /**
  * Datos REALES del dashboard de entidad (Resumen) vía React Query.
@@ -92,15 +99,53 @@ export function useEntitySummaryDashboard(entityId: string | undefined) {
     "workers.manage",
   ])
   const canTemplates = has([
-    "document_templates.view",
-    "document_templates.manage",
-    "contracts.view",
-    "contracts.manage",
-    "contract_addendums.view",
-    "contract_addendums.manage",
-  ])
-
-  const plantillaQuery = useQuery({
+      "document_templates.view",
+      "document_templates.manage",
+      "contracts.view",
+      "contracts.manage",
+      "contract_addendums.view",
+      "contract_addendums.manage",
+    ])
+  
+    // Reports require workers.view or workers.manage
+    const canReports = canWorkers
+  
+    const catalogRefsQuery = useQuery({
+      queryKey: ["entity-summary", entityId, "catalog-refs"],
+      queryFn: () => fetchCatalogRefs(),
+      enabled: scopeReady && canReports,
+      ...REFRESH_OPTIONS,
+    })
+  
+    const ageReportQuery = useQuery({
+      queryKey: ["entity-summary", entityId, scope, "reports", "age", entityIds],
+      queryFn: () => fetchWorkersByAge(entityIds),
+      enabled: scopeReady && canReports,
+      ...REFRESH_OPTIONS,
+    })
+  
+    const sexReportQuery = useQuery({
+      queryKey: ["entity-summary", entityId, scope, "reports", "sex", entityIds],
+      queryFn: () => fetchWorkersBySex(entityIds, catalogRefsQuery.data!),
+      enabled: scopeReady && canReports && !!catalogRefsQuery.data,
+      ...REFRESH_OPTIONS,
+    })
+  
+    const skinColorReportQuery = useQuery({
+      queryKey: ["entity-summary", entityId, scope, "reports", "skin-color", entityIds],
+      queryFn: () => fetchWorkersBySkinColor(entityIds, catalogRefsQuery.data!),
+      enabled: scopeReady && canReports && !!catalogRefsQuery.data,
+      ...REFRESH_OPTIONS,
+    })
+  
+    const educationReportQuery = useQuery({
+      queryKey: ["entity-summary", entityId, scope, "reports", "education", entityIds],
+      queryFn: () => fetchWorkersByEducationLevel(entityIds, catalogRefsQuery.data!),
+      enabled: scopeReady && canReports && !!catalogRefsQuery.data,
+      ...REFRESH_OPTIONS,
+    })
+  
+    const plantillaQuery = useQuery({
     queryKey: ["entity-summary", entityId, scope, "plantilla", entityIds],
     queryFn: () => fetchPlantillaSummary(entityIds),
     enabled: scopeReady && canStaffing,
@@ -244,12 +289,24 @@ export function useEntitySummaryDashboard(entityId: string | undefined) {
     movements: movementsQuery.data ?? null,
     movementsLoading: movementsQuery.isLoading,
     vacations: vacationsQuery.data ?? null,
-    vacationsLoading: vacationsQuery.isLoading,
-    distribution,
-    distributionLoading: plantillaQuery.isLoading || occupancyQuery.isLoading,
-
-    // configuración
-    contractData: contractDataQuery.data ?? null,
+        vacationsLoading: vacationsQuery.isLoading,
+        distribution,
+        distributionLoading: plantillaQuery.isLoading || occupancyQuery.isLoading,
+    
+        // --- NUEVOS REPORTES (pestaña Reportes dentro de Resumen) ---
+        reports: {
+          age: ageReportQuery.data ?? null,
+          ageLoading: ageReportQuery.isLoading,
+          sex: sexReportQuery.data ?? null,
+          sexLoading: sexReportQuery.isLoading,
+          skinColor: skinColorReportQuery.data ?? null,
+          skinColorLoading: skinColorReportQuery.isLoading,
+          education: educationReportQuery.data ?? null,
+          educationLoading: educationReportQuery.isLoading,
+        },
+    
+        // configuración
+        contractData: contractDataQuery.data ?? null,
     contractDataLoading: contractDataQuery.isLoading,
     representative: representativeQuery.data ?? null,
     representativeLoading: representativeQuery.isLoading,
