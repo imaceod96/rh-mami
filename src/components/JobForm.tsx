@@ -5,6 +5,7 @@ import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
+import { SiteCorpCheckbox } from "@/components/ui/sitecorp-checkbox"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -285,11 +286,24 @@ export const JobForm: React.FC<JobFormProps> = ({
       return
     }
     if (!selectedGroup) {
-      setFormError("El grupo salarial es obligatorio")
-      return
-    }
-
-    // Verify the area belongs to this entity
+          setFormError("El grupo salarial es obligatorio")
+          return
+        }
+    
+        // Validación de Condiciones Anormales
+        if (hasAbnormalConditions) {
+          const amount = parseFloat(abnormalConditionsAmount)
+          if (isNaN(amount) || abnormalConditionsAmount.trim() === "") {
+            setFormError("Debe indicar el importe total a pagar para las condiciones anormales")
+            return
+          }
+          if (amount < 0) {
+            setFormError("El importe de condiciones anormales no puede ser negativo")
+            return
+          }
+        }
+    
+        // Verify the area belongs to this entity
     const area = areas.find((a) => a.id === area_id)
     if (!area || area.organization_entity_id !== entityId) {
       setFormError("El área seleccionada no pertenece a esta entidad")
@@ -310,45 +324,53 @@ export const JobForm: React.FC<JobFormProps> = ({
     setSubmitting(true)
 
     try {
-      if (editingJob) {
-        const { error: updateError } = await supabase
-          .from("organization_jobs")
-          .update({
-            name,
-            code,
-            area_id,
-            description,
-            salary_group_id: selectedGroup,
-            hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
-            occupational_category_id: selectedCategory || null,
-            required_profession_or_trade,
-            work_content,
-          })
-          .eq("id", editingJob.id)
-
-        if (updateError) throw updateError
-        onSuccess()
-      } else {
-        const { error: insertError } = await supabase
-          .from("organization_jobs")
-          .insert({
-            organization_entity_id: entityId,
-            name,
-            code,
-            area_id,
-            description,
-            salary_group_id: selectedGroup,
-            hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
-            is_active: true,
-            occupational_category_id: selectedCategory,
-            required_profession_or_trade,
-            work_content,
-          })
-
-        if (insertError) throw insertError
-        onSuccess()
-      }
-    } catch (err) {
+          const abnormalAmount = hasAbnormalConditions
+            ? parseFloat(abnormalConditionsAmount)
+            : null
+    
+          if (editingJob) {
+            const { error: updateError } = await supabase
+              .from("organization_jobs")
+              .update({
+                name,
+                code,
+                area_id,
+                description,
+                salary_group_id: selectedGroup,
+                hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
+                occupational_category_id: selectedCategory || null,
+                required_profession_or_trade,
+                work_content,
+                has_abnormal_conditions: hasAbnormalConditions,
+                abnormal_conditions_amount: abnormalAmount,
+              })
+              .eq("id", editingJob.id)
+    
+            if (updateError) throw updateError
+            onSuccess()
+          } else {
+            const { error: insertError } = await supabase
+              .from("organization_jobs")
+              .insert({
+                organization_entity_id: entityId,
+                name,
+                code,
+                area_id,
+                description,
+                salary_group_id: selectedGroup,
+                hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
+                is_active: true,
+                occupational_category_id: selectedCategory,
+                required_profession_or_trade,
+                work_content,
+                has_abnormal_conditions: hasAbnormalConditions,
+                abnormal_conditions_amount: abnormalAmount,
+              })
+    
+            if (insertError) throw insertError
+            onSuccess()
+          }
+        } catch (err) {
       console.error("Error saving job:", err)
       const message =
         err instanceof Error ? err.message : "Error al guardar el cargo"
