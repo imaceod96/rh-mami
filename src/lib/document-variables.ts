@@ -140,31 +140,30 @@ export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   { key: "addendum.new.total", label: "Total nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Total contractual nuevo según el anexo." },
 
   // ---------------- SC-4-04 (variables unificadas según origen) ----------------
-  { key: "sc404.fecha_desde", label: "SC-4-04 · Fecha desde", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "Inicio del período según el origen: vacaciones.start_date o certificado.start_date." },
-  { key: "sc404.fecha_hasta", label: "SC-4-04 · Fecha hasta", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "Vacaciones: end_date. Certificado médico: vacío (return_date es reincorporación, no fin de licencia)." },
+  { key: "sc404.fecha_desde", label: "SC-4-04 · Fecha desde", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Inicio del período en formato DD/MM/AA. Vacaciones: start_date. Certificado: fecha de salida." },
+  { key: "sc404.fecha_hasta", label: "SC-4-04 · Fecha hasta", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "ÚLTIMO día del período en DD/MM/AA. Vacaciones: end_date. Certificado médico: vacío (return_date es reincorporación)." },
   { key: "sc404.dias", label: "SC-4-04 · Días", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "integer", kind: "SOURCE", description: "Vacaciones: DÍAS NATURALES del período (no el consumo del ledger). Certificado: days explícito." },
-  { key: "sc404.reincorporacion.fecha", label: "SC-4-04 · Fecha de reincorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "Certificado médico: return_date. Vacaciones: vacío mientras el registro no almacene fecha formal de reincorporación." },
-  { key: "sc404.reincorporacion.dia", label: "SC-4-04 · Día de reincorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "integer", kind: "CALCULATED", description: "Día (1–31) derivado de la fecha de reincorporación." },
-  { key: "sc404.reincorporacion.mes", label: "SC-4-04 · Mes de reincorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Mes en español derivado de la fecha de reincorporación." },
-  { key: "sc404.reincorporacion.anio", label: "SC-4-04 · Año de reincorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "integer", kind: "CALCULATED", description: "Año derivado de la fecha de reincorporación." },
+  { key: "sc404.incorporacion_dia", label: "SC-4-04 · Día de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Día (1–31) de la fecha de incorporación. Vacaciones: primer día hábil posterior al período según el horario del Puesto. Certificado: día de return_date." },
+  { key: "sc404.incorporacion_mes", label: "SC-4-04 · Mes de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Mes numérico (1–12) de la fecha de incorporación." },
+  { key: "sc404.incorporacion_anio", label: "SC-4-04 · Año de incorporación", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Año en dos dígitos (AA) de la fecha de incorporación." },
   { key: "certificado.es_licencia_subsidio", label: "Marcador Licencia/Subsidio", category: "SC-4-04", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» cuando el origen es un certificado médico; vacío para vacaciones." },
 
   // ---------------- Certificado médico (origen) ----------------
-  { key: "certificado.fecha_salida", label: "Certificado · Fecha de salida", category: "Certificado médico", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "Fecha de salida del certificado médico." },
-  { key: "certificado.fecha_reincorporacion", label: "Certificado · Fecha de reincorporación", category: "Certificado médico", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "return_date del certificado médico." },
+  { key: "certificado.fecha_salida", label: "Certificado · Fecha de salida", category: "Certificado médico", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Fecha de salida del certificado médico en DD/MM/AA." },
+  { key: "certificado.fecha_reincorporacion", label: "Certificado · Fecha de reincorporación", category: "Certificado médico", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "return_date del certificado médico en DD/MM/AA." },
   { key: "certificado.dias", label: "Certificado · Días", category: "Certificado médico", documentTypes: ["SC_4_04"], dataType: "integer", kind: "SOURCE", description: "Cantidad de días explícita del certificado médico (fuente de verdad)." },
 
   // ---------------- Vacaciones (origen) ----------------
-  { key: "vacaciones.fecha_desde", label: "Vacaciones · Fecha desde", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "start_date del período de vacaciones." },
-  { key: "vacaciones.fecha_hasta", label: "Vacaciones · Fecha hasta", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "end_date del período de vacaciones." },
+  { key: "vacaciones.fecha_desde", label: "Vacaciones · Fecha desde", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "start_date del período de vacaciones en DD/MM/AA." },
+  { key: "vacaciones.fecha_hasta", label: "Vacaciones · Fecha hasta", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "end_date del período de vacaciones en DD/MM/AA." },
   { key: "vacaciones.dias_naturales", label: "Vacaciones · Días naturales", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "integer", kind: "SOURCE", description: "Días naturales del período (hasta − desde + 1), valor persistido." },
   { key: "vacaciones.dias_consumidos", label: "Vacaciones · Días consumidos", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "integer", kind: "SOURCE", description: "Días descontados del saldo (días naturales menos domingos)." },
-  { key: "vacaciones.reincorporacion", label: "Vacaciones · Reincorporación", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "date", kind: "SOURCE", description: "Fecha formal de reincorporación del registro de vacaciones (vacío si no está almacenada)." },
+  { key: "vacaciones.reincorporacion", label: "Vacaciones · Incorporación", category: "Vacaciones", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Primer día hábil posterior al período según el horario del Puesto (DD/MM/AA)." },
 
   // ---------------- Comunes SC-4-04 ----------------
-  { key: "area.name", label: "Área", category: "Cargo y Puesto", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Área del puesto vigente del trabajador (asignación actual → puesto → cargo → área)." },
+  { key: "area.name", label: "Área", category: "Cargo y Puesto", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "Área del puesto de la asignación vigente al período (asignación → puesto → cargo → área)." },
   { key: "entity.code", label: "Código de la entidad", category: "Entidad", documentTypes: ["SC_4_04"], dataType: "text", kind: "SOURCE", description: "organization_entities.code de la entidad real del trabajador." },
-  { key: "documento.fecha_emision", label: "Fecha de emisión del documento", category: "Documento", documentTypes: ["SC_4_04"], dataType: "date", kind: "CALCULATED", description: "Fecha (día de la generación) en que se emite el documento." },
+  { key: "documento.fecha_emision", label: "Fecha de emisión del documento", category: "Documento", documentTypes: ["SC_4_04"], dataType: "text", kind: "CALCULATED", description: "Fecha (día de la generación) en que se emite el documento, en DD/MM/AA." },
 ]
 
 export const documentVariableByKey = (key: string): DocumentVariableDefinition | undefined =>
@@ -195,6 +194,17 @@ export const formatDocumentDate = (isoDate: string | null | undefined): string |
   const [year, month, day] = isoDate.slice(0, 10).split("-")
   if (!year || !month || !day) return null
   return `${day}/${month}/${year}`
+}
+
+/**
+ * Fase 21 (SC-4-04): "2026-10-15" → "15/10/26".
+ * Formato numérico DD/MM/AA (dos dígitos por año) del modelo oficial.
+ */
+export const formatDocumentDateShort = (isoDate: string | null | undefined): string | null => {
+  if (!isoDate) return null
+  const [year, month, day] = isoDate.slice(0, 10).split("-")
+  if (!year || !month || !day) return null
+  return `${day}/${month}/${year.slice(-2)}`
 }
 
 /** "2026-10-15" → "15 de octubre de 2026". */
@@ -364,6 +374,13 @@ const rawValueFor = (
   if (isSc404Data(data)) {
     const isVacation = data.origin.source_type === "VACATION"
     const isMedical = data.origin.source_type === "MEDICAL_CERTIFICATE"
+    // Fecha de incorporación: médico → return_date; vacaciones → primer día hábil
+    // posterior al período según el horario del Puesto (calculada en document-data).
+    const incorporation = data.origin.incorporation_date
+    const incorporationDay = incorporation ? Number(incorporation.slice(8, 10)) : null
+    const incorporationMonth = incorporation ? Number(incorporation.slice(5, 7)) : null
+    const incorporationYear = incorporation ? Number(incorporation.slice(0, 4)) : null
+
     switch (definition.key) {
       case "entity.name": return textOrNull(data.entity.name)
       case "entity.code": return textOrNull(data.entity.code)
@@ -372,32 +389,35 @@ const rawValueFor = (
       case "area.name": return textOrNull(data.area_name)
 
       // Variables unificadas: la misma celda del Word sirve para ambos orígenes.
-      case "sc404.fecha_desde": return textOrNull(data.origin.start_date)
+      // Fechas del período en formato oficial DD/MM/AA (§1 Fase 21).
+      case "sc404.fecha_desde": return formatDocumentDateShort(data.origin.start_date)
       case "sc404.fecha_hasta":
         // §20/§21: return_date es reincorporación; NO se inventa fin de licencia.
-        return isVacation ? textOrNull(data.origin.end_date) : null
+        return isVacation ? formatDocumentDateShort(data.origin.end_date) : null
       case "sc404.dias":
         // §14: vacaciones → días NATURALES; §18: certificado → days explícito.
         return isVacation ? data.origin.natural_days : data.origin.days
-      case "sc404.reincorporacion.fecha":
-        // §16: solo si el registro almacena fecha formal de reincorporación.
-        return isMedical ? textOrNull(data.origin.return_date) : textOrNull(data.origin.reincorporation_date)
-      case "sc404.reincorporacion.dia": return documentSignatureDay(isMedical ? data.origin.return_date : data.origin.reincorporation_date)
-      case "sc404.reincorporacion.mes": return documentSignatureMonth(isMedical ? data.origin.return_date : data.origin.reincorporation_date)
-      case "sc404.reincorporacion.anio": return documentSignatureYear(isMedical ? data.origin.return_date : data.origin.reincorporation_date)
+
+      // Fecha de incorporación: casillas independientes Día / Mes / Año (§7/§8 Fase 21).
+      case "sc404.incorporacion_dia": return incorporationDay !== null ? String(incorporationDay) : null
+      case "sc404.incorporacion_mes": return incorporationMonth !== null ? String(incorporationMonth) : null
+      case "sc404.incorporacion_anio":
+        // Año de dos dígitos (26), como el formulario oficial.
+        return incorporationYear !== null ? String(incorporationYear).slice(-2) : null
+
       case "certificado.es_licencia_subsidio": return isMedical ? "X" : null
 
-      case "certificado.fecha_salida": return isMedical ? textOrNull(data.origin.start_date) : null
-      case "certificado.fecha_reincorporacion": return isMedical ? textOrNull(data.origin.return_date) : null
+      case "certificado.fecha_salida": return isMedical ? formatDocumentDateShort(data.origin.start_date) : null
+      case "certificado.fecha_reincorporacion": return isMedical ? formatDocumentDateShort(data.origin.return_date) : null
       case "certificado.dias": return isMedical ? data.origin.days : null
 
-      case "vacaciones.fecha_desde": return isVacation ? textOrNull(data.origin.start_date) : null
-      case "vacaciones.fecha_hasta": return isVacation ? textOrNull(data.origin.end_date) : null
+      case "vacaciones.fecha_desde": return isVacation ? formatDocumentDateShort(data.origin.start_date) : null
+      case "vacaciones.fecha_hasta": return isVacation ? formatDocumentDateShort(data.origin.end_date) : null
       case "vacaciones.dias_naturales": return isVacation ? data.origin.natural_days : null
       case "vacaciones.dias_consumidos": return isVacation ? data.origin.charged_days : null
-      case "vacaciones.reincorporacion": return isVacation ? textOrNull(data.origin.reincorporation_date) : null
+      case "vacaciones.reincorporacion": return isVacation ? formatDocumentDateShort(incorporation) : null
 
-      case "documento.fecha_emision": return textOrNull(data.issued_at)
+      case "documento.fecha_emision": return formatDocumentDateShort(data.issued_at)
       default: return null
     }
   }
