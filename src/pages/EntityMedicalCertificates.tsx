@@ -27,6 +27,7 @@ import {
 import { getCertificateSignedUrl } from "@/lib/rpc/medical-certificates"
 import MedicalCertificateFormDialog from "@/components/medical-certificates/MedicalCertificateFormDialog"
 import { useToast } from "@/hooks/use-toast"
+import { useSc404Generation } from "@/hooks/use-sc404"
 import {
   CalendarDays,
   FileText,
@@ -58,6 +59,7 @@ const EntityMedicalCertificates = () => {
   const [search, setSearch] = React.useState("")
   const [areaFilter, setAreaFilter] = React.useState("ALL")
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const { generate: generateSc404, generatingId: generatingSc404Id } = useSc404Generation()
 
   const query = useEntityMedicalCertificates(
     entityId,
@@ -272,6 +274,7 @@ const EntityMedicalCertificates = () => {
                         <th className="pb-3 font-medium">Reincorporación</th>
                         <th className="pb-3 font-medium">Días</th>
                         <th className="pb-3 font-medium">Documento</th>
+                        {canManage && <th className="pb-3 font-medium">SC-4-04</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -315,6 +318,19 @@ const EntityMedicalCertificates = () => {
                               <span className="text-muted-foreground">Sin documento</span>
                             )}
                           </td>
+                          {canManage && (
+                            <td className="py-3">
+                              <SiteCorpButton
+                                variant="outline"
+                                size="sm"
+                                onClick={() => generateSc404("MEDICAL_CERTIFICATE", row.id)}
+                                disabled={generatingSc404Id === row.id || !!generatingSc404Id}
+                              >
+                                <FileText className="mr-1 h-3 w-3" />
+                                {generatingSc404Id === row.id ? "Generando…" : "Generar"}
+                              </SiteCorpButton>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

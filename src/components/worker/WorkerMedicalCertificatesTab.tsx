@@ -20,6 +20,7 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { useToast } from "@/hooks/use-toast"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { useWorkerMedicalCertificates } from "@/hooks/use-medical-certificates"
+import { useSc404Generation } from "@/hooks/use-sc404"
 import { getCertificateSignedUrl } from "@/lib/rpc/medical-certificates"
 import MedicalCertificateFormDialog from "@/components/medical-certificates/MedicalCertificateFormDialog"
 import { Upload, FileText, Loader2, RefreshCw } from "lucide-react"
@@ -43,6 +44,7 @@ export default function WorkerMedicalCertificatesTab({
 
   const [selectedYear, setSelectedYear] = React.useState<number>(new Date().getFullYear())
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const { generate: generateSc404, generatingId: generatingSc404Id } = useSc404Generation()
 
   // Reset al cambiar de trabajador (caso de prueba: Worker A → Worker B).
   React.useEffect(() => {
@@ -177,6 +179,7 @@ export default function WorkerMedicalCertificatesTab({
                     <th className="pb-3 font-medium">Reincorporación</th>
                     <th className="pb-3 font-medium">Días</th>
                     <th className="pb-3 font-medium">Documento</th>
+                    {canManageCert && <th className="pb-3 font-medium">SC-4-04</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -205,6 +208,19 @@ export default function WorkerMedicalCertificatesTab({
                           <span className="text-muted-foreground">Sin documento</span>
                         )}
                       </td>
+                      {canManageCert && (
+                        <td className="py-3">
+                          <SiteCorpButton
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generateSc404("MEDICAL_CERTIFICATE", cert.id)}
+                            disabled={generatingSc404Id === cert.id || !!generatingSc404Id}
+                          >
+                            <FileText className="mr-1 h-3 w-3" />
+                            {generatingSc404Id === cert.id ? "Generando…" : "Generar"}
+                          </SiteCorpButton>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

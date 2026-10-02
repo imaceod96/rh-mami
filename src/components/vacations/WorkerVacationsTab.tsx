@@ -9,6 +9,7 @@ import VacationPeriodsList from "@/components/vacations/VacationPeriodsList"
 import VacationMovementsList from "@/components/vacations/VacationMovementsList"
 import RegisterVacationDialog from "@/components/vacations/RegisterVacationDialog"
 import { invalidateVacationData, useWorkerVacation } from "@/hooks/use-vacations"
+import { useSc404Generation } from "@/hooks/use-sc404"
 import { cancelWorkerVacation, type VacationPeriod } from "@/lib/vacations"
 import { CalendarPlus } from "lucide-react"
 
@@ -24,6 +25,7 @@ const WorkerVacationsTab = ({ workerId, entityId, workerName, canManage }: Worke
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
+  const { generate: generateSc404, generatingId: generatingSc404Id } = useSc404Generation()
 
   const query = useWorkerVacation(workerId, true)
   const data = query.data
@@ -74,7 +76,13 @@ const WorkerVacationsTab = ({ workerId, entityId, workerName, canManage }: Worke
         </div>
       )}
 
-      <VacationPeriodsList periods={data.periods} canManage={canManage} onCancel={handleCancel} />
+      <VacationPeriodsList
+        periods={data.periods}
+        canManage={canManage}
+        onCancel={handleCancel}
+        onGenerateSc404={canManage ? (period) => generateSc404("VACATION", period.id) : undefined}
+        generatingSc404Id={generatingSc404Id}
+      />
 
       <VacationMovementsList movements={data.movements} />
 

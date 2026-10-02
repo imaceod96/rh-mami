@@ -11,7 +11,9 @@ import {
 import {
   getAddendumDocumentData,
   getContractDocumentData,
+  getSc404DocumentData,
   type DocumentData,
+  type Sc404SourceType,
 } from "@/lib/document-data"
 import { renderDocx } from "@/lib/docx-render"
 
@@ -31,7 +33,10 @@ import { renderDocx } from "@/lib/docx-render"
 
 export const WORKER_DOCUMENTS_BUCKET = "documents"
 
-export type GenerationDocumentKind = "CONTRACT" | "ADDENDUM"
+export type GenerationDocumentKind = "CONTRACT" | "ADDENDUM" | "VACATION" | "MEDICAL_CERTIFICATE"
+
+const isSc404Kind = (kind: GenerationDocumentKind): kind is Sc404SourceType =>
+  kind === "VACATION" || kind === "MEDICAL_CERTIFICATE"
 
 export type TemplateResolutionStatus = "PINNED" | "RESOLVED" | "NONE" | "AMBIGUOUS"
 
@@ -116,6 +121,7 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   EMPLOYMENT_CONTRACT_DETERMINED: "Contrato de Trabajo por Tiempo Determinado",
   EMPLOYMENT_CONTRACT_INDETERMINED: "Contrato de Trabajo por Tiempo Indeterminado",
   EMPLOYMENT_CONTRACT_ADDENDUM: "Anexo al Contrato de Trabajo",
+  SC_4_04: "Modelo SC-4-04 — Notificación de Vacaciones, Deducciones, Licencias y Subsidios",
 }
 
 /** Dónde puede corregirse cada variable (§66). Sin navegación inteligente. */
@@ -180,6 +186,9 @@ interface SourceContext {
 }
 
 const loadSourceContext = async (kind: GenerationDocumentKind, sourceId: string): Promise<SourceContext> => {
+  if (isSc404Kind(kind)) {
+    return loadSc404SourceContext(kind, sourceId)
+  }
   if (kind === "CONTRACT") {
     const { data, error } = await supabase
       .from("employment_contracts")
@@ -223,6 +232,54 @@ const loadSourceContext = async (kind: GenerationDocumentKind, sourceId: string)
     referenceDate: text(row.signature_date) ?? text(row.effective_date) ?? new Date().toISOString().slice(0, 10),
     documentTypeCode: "EMPLOYMENT_CONTRACT_ADDENDUM",
     pinnedVersionId: text(row.document_template_version_id),
+  }
+}
+
+const loadSc404SourceContext = async (
+  kind: "VACATION" | "MEDICAL_CERTIFICATE",
+  sourceId: string
+): Promise<SourceContext> => {
+  if (kind === "VACATION") {
+    const { data, error } = await supabase
+      .from("worker_vacations")
+      .select("id, worker_id, organization_entity_id, start_date, status")
+      .eq("id", sourceId)
+      .maybeSingle()
+    throwIfError(error)
+    const row = record(data)
+    if (!row.id) throw new Error("Período de vacaciones no encontrado")
+    if (text(row.status) === "CANCELLED") {
+      throw new Error("No se puede generar el documento de un período cancelado")
+    }
+    return {
+      kind,
+      sourceId,
+      workerId: String(row.worker_id),
+      entityId: String(row.organization_entity_id),
+      formalized: true,
+      referenceDate: text(row.start_date) ?? new Date().toISOString().slice(0, 10),
+      documentTypeCode: "SC_4_04",
+      pinnedVersionId: null,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("worker_medical_certificates")
+    .select("id, worker_id, organization_entity_id, start_date")
+    .eq("id", sourceId)
+    .maybeSingle()
+  throwIfError(error)
+  const row = record(data)
+  if (!row.id) throw new Error("Certificado médico no encontrado")
+  return {
+    kind,
+    sourceId,
+    workerId: String(row.worker_id),
+    entityId: String(row.organization_entity_id),
+    formalized: true,
+    referenceDate: text(row.start_date) ?? new Date().toISOString().slice(0, 10),
+    documentTypeCode: "SC_4_04",
+    pinnedVersionId: null,
   }
 }
 
@@ -347,14 +404,26 @@ export const precheckDocumentGeneration = async (
   const context = await loadSourceContext(kind, sourceId)
   const { template, requiredVariables, analysisPresent } = await resolveTemplateVersionForDocument(context)
 
-  const documentData =
-    kind === "CONTRACT"
+  const documentData: DocumentData = isSc404Kind(kind)
+    ? await getSc404DocumentData(kind, sourceId)
+    : kind === "CONTRACT"
       ? await getContractDocumentData(sourceId)
       : await getAddendumDocumentData(sourceId)
 
   const resolved = resolveAllDocumentVariables(documentData)
-  const missing: MissingVariable[] = requiredVariables
-    .filter((key) => !(key in resolved.values))
+  // SC-4-04 (§26): las variables no aplicables al origen se sustituyen por
+  // cadena vacía y NO bloquean. Sólo bloquean los datos nucleares del modelo.
+  const SC404_CRITICAL_KEYS = new Set([
+    "entity.name",
+    "worker.full_name",
+    "worker.identification",
+    "sc404.fecha_desde",
+    "sc404.dias",
+  ])
+  const missingKeyList = isSc404Kind(kind)
+    ? requiredVariables.filter((key) => !(key in resolved.values) && SC404_CRITICAL_KEYS.has(key))
+    : requiredVariables.filter((key) => !(key in resolved.values))
+  const missing: MissingVariable[] = missingKeyList
     .map((key) => ({
       key,
       label: documentVariableByKey(key)?.label ?? key,
@@ -414,7 +483,9 @@ export const buildGeneratedDocumentName = (
   const base =
     precheck.kind === "ADDENDUM"
       ? ["Anexo", "Contrato", workerName]
-      : [
+      : isSc404Kind(precheck.kind)
+        ? ["SC-4-04", workerName]
+        : [
           "Contrato",
           precheck.template.documentTypeCode === "EMPLOYMENT_CONTRACT_DETERMINED"
             ? "Determinado"
@@ -494,9 +565,22 @@ const runGeneration = async (
 
   // 2) Sustituir sobre una COPIA (el paquete de origen no se modifica).
   const knownKeys = DOCUMENT_VARIABLES.map((definition) => definition.key)
+  // SC-4-04 (§26/§85): toda variable conocida del ámbito SC_4_04 parte de ""
+  // y luego se sobrescribe con los valores resueltos: los campos no aplicables
+  // al origen quedan visualmente vacíos (nunca «null» ni marcador residual).
+  const renderValues: Record<string, string> = isSc404Kind(kind)
+    ? {
+        ...Object.fromEntries(
+          DOCUMENT_VARIABLES.filter((definition) => definition.documentTypes.includes("SC_4_04")).map(
+            (definition) => [definition.key, ""]
+          )
+        ),
+        ...precheck.resolvedValues,
+      }
+    : precheck.resolvedValues
   let rendered
   try {
-    rendered = await renderDocx(sourceBytes, precheck.resolvedValues, knownKeys)
+    rendered = await renderDocx(sourceBytes, renderValues, knownKeys)
   } catch (err) {
     return failed(err instanceof Error ? err.message : "No se pudo procesar el documento de la plantilla")
   }
@@ -513,7 +597,9 @@ const runGeneration = async (
   }
 
   // 3) Fijar la versión de plantilla en la fuente antes de reservar la generación (§9).
-  if (precheck.template.status === "RESOLVED") {
+  //    SC-4-04: los orígenes (vacaciones/certificados) no fijan versión; la
+  //    trazabilidad vive en worker_documents.document_template_version_id.
+  if (!isSc404Kind(kind) && precheck.template.status === "RESOLVED") {
     try {
       await pinTemplateVersion(kind, sourceId, versionId)
     } catch (err) {
@@ -524,11 +610,17 @@ const runGeneration = async (
   // 4) Reservar la generación (idempotencia: una sola en curso por fuente).
   let reservation: { worker_document_id: string; generation_number: number; storage_path: string }
   try {
-    const { data, error } = await supabase.rpc("begin_document_generation", {
-      p_employment_contract_id: kind === "CONTRACT" ? sourceId : null,
-      p_contract_addendum_id: kind === "ADDENDUM" ? sourceId : null,
-      p_template_version_id: versionId,
-    })
+    const { data, error } = isSc404Kind(kind)
+      ? await supabase.rpc("begin_sc404_generation", {
+          p_source_type: kind,
+          p_source_id: sourceId,
+          p_template_version_id: versionId,
+        })
+      : await supabase.rpc("begin_document_generation", {
+          p_employment_contract_id: kind === "CONTRACT" ? sourceId : null,
+          p_contract_addendum_id: kind === "ADDENDUM" ? sourceId : null,
+          p_template_version_id: versionId,
+        })
     throwIfError(error)
     const row = record(data)
     reservation = {
@@ -604,12 +696,28 @@ export const generateContractDocument = (contractId: string) =>
 export const generateAddendumDocument = (addendumId: string) =>
   runGeneration("ADDENDUM", addendumId)
 
+/** Prefijo de error controlado emitido por begin_sc404_generation (§48). */
+export const SC404_ALREADY_EXISTS_PREFIX = "SC404_ALREADY_EXISTS|"
+
+export const parseSc404ExistingId = (message: string | undefined | null): string | null => {
+  if (!message) return null
+  return message.startsWith(SC404_ALREADY_EXISTS_PREFIX)
+    ? message.slice(SC404_ALREADY_EXISTS_PREFIX.length)
+    : null
+}
+
+export const generateSc404Document = (sourceType: Sc404SourceType, sourceId: string) =>
+  runGeneration(sourceType, sourceId)
+
+export const precheckSc404Document = (sourceType: Sc404SourceType, sourceId: string) =>
+  precheckDocumentGeneration(sourceType, sourceId)
+
 /* ------------------------------------------------------------------ */
 /* Consulta y descarga                                                 */
 /* ------------------------------------------------------------------ */
 
 export const fetchGeneratedDocuments = async (
-  source: { contractId?: string; addendumId?: string }
+  source: { contractId?: string; addendumId?: string; vacationId?: string; certificateId?: string }
 ): Promise<GeneratedDocumentRow[]> => {
   let query = supabase
     .from("worker_documents")
@@ -620,9 +728,17 @@ export const fetchGeneratedDocuments = async (
     .eq("generation_status", "COMPLETED")
     .order("generation_number", { ascending: true })
 
-  query = source.contractId
-    ? query.eq("employment_contract_id", source.contractId)
-    : query.eq("contract_addendum_id", source.addendumId as string)
+  if (source.contractId) {
+    query = query.eq("employment_contract_id", source.contractId)
+  } else if (source.addendumId) {
+    query = query.eq("contract_addendum_id", source.addendumId)
+  } else if (source.vacationId) {
+    query = query.eq("document_source_type", "VACATION").eq("document_source_id", source.vacationId)
+  } else if (source.certificateId) {
+    query = query
+      .eq("document_source_type", "MEDICAL_CERTIFICATE")
+      .eq("document_source_id", source.certificateId)
+  }
 
   const { data, error } = await query
   throwIfError(error)

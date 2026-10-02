@@ -7,7 +7,7 @@ import {
   formatVacationDays,
   type VacationPeriod,
 } from "@/lib/vacations"
-import { CalendarDays, XCircle } from "lucide-react"
+import { CalendarDays, FileText, XCircle } from "lucide-react"
 
 const statusTone: Record<VacationPeriod["status"], "info" | "success" | "neutral"> = {
   SCHEDULED: "info",
@@ -25,10 +25,15 @@ const VacationPeriodsList = ({
   periods,
   canManage,
   onCancel,
+  onGenerateSc404,
+  generatingSc404Id,
 }: {
   periods: VacationPeriod[]
   canManage: boolean
   onCancel: (period: VacationPeriod) => void
+  /** Genera el modelo SC-4-04 del período (Fase 20, generación explícita). */
+  onGenerateSc404?: (period: VacationPeriod) => void
+  generatingSc404Id?: string | null
 }) => {
   return (
     <SiteCorpCard>
@@ -83,14 +88,29 @@ const VacationPeriodsList = ({
                     {canManage && (
                       <td className="px-3 py-3">
                         {period.status !== "CANCELLED" && (
-                          <SiteCorpButton
-                            size="sm"
-                            variant="outline"
-                            type="button"
-                            onClick={() => onCancel(period)}
-                          >
-                            <XCircle className="mr-1 h-3.5 w-3.5" /> Cancelar
-                          </SiteCorpButton>
+                          <div className="flex flex-wrap gap-2">
+                            {onGenerateSc404 && (
+                              <SiteCorpButton
+                                size="sm"
+                                variant="outline"
+                                type="button"
+                                onClick={() => onGenerateSc404(period)}
+                                disabled={generatingSc404Id === period.id || !!generatingSc404Id}
+                                title="Generar modelo SC-4-04"
+                              >
+                                <FileText className="mr-1 h-3.5 w-3.5" />
+                                {generatingSc404Id === period.id ? "Generando…" : "SC-4-04"}
+                              </SiteCorpButton>
+                            )}
+                            <SiteCorpButton
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              onClick={() => onCancel(period)}
+                            >
+                              <XCircle className="mr-1 h-3.5 w-3.5" /> Cancelar
+                            </SiteCorpButton>
+                          </div>
                         )}
                       </td>
                     )}
@@ -122,7 +142,19 @@ const VacationPeriodsList = ({
                   <p className="mt-1 text-xs text-muted-foreground">{period.cancel_reason}</p>
                 )}
                 {canManage && period.status !== "CANCELLED" && (
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {onGenerateSc404 && (
+                      <SiteCorpButton
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={() => onGenerateSc404(period)}
+                        disabled={generatingSc404Id === period.id || !!generatingSc404Id}
+                      >
+                        <FileText className="mr-1 h-3.5 w-3.5" />
+                        {generatingSc404Id === period.id ? "Generando…" : "SC-4-04"}
+                      </SiteCorpButton>
+                    )}
                     <SiteCorpButton
                       size="sm"
                       variant="outline"
