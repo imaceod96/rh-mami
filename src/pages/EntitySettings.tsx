@@ -37,14 +37,21 @@ const EntitySettings = () => {
         permissions: ["roles.view", "roles.manage"],
       },
       {
-        title: "Escala salarial",
-        description: "Consulta o gestiona la escala salarial empresarial de esta entidad.",
-        icon: Scale,
-        href: `/entity/${currentEntity?.id}/settings/salary`,
-        permissions: ["salary.view", "salary.manage"],
-      },
-      {
-        title: "Configuración de plantilla",
+              title: "Escala salarial",
+              description: "Consulta o gestiona la escala salarial empresarial de esta entidad.",
+              icon: Scale,
+              href: `/entity/${currentEntity?.id}/settings/salary`,
+              permissions: ["salary.view", "salary.manage"],
+            },
+            {
+              title: "Escala de pago de antigüedad",
+              description: "Configura los tramos de pago por antigüedad de esta entidad.",
+              icon: Briefcase,
+              href: `/entity/${currentEntity?.id}/settings/tenure-scale`,
+              permissions: ["tenure_scale.view", "tenure_scale.manage"],
+            },
+            {
+              title: "Configuración de plantilla",
         description:
           "Configura las áreas, cargos y puestos que conforman la estructura de plantilla de la entidad.",
         icon: Network,

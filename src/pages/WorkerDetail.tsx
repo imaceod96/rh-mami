@@ -35,6 +35,7 @@ import WorkerVacationsTab from "@/components/vacations/WorkerVacationsTab"
 import WorkerMedicalCertificatesTab from "@/components/worker/WorkerMedicalCertificatesTab"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import { calculateTenure, calculateAge, ageRange } from "@/lib/tenure"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { WorkerForm } from "@/components/workers/WorkerForm"
 import { WorkerDocumentsTab } from "@/components/workers/WorkerDocumentsTab"
@@ -242,9 +243,13 @@ const WorkerDetail = () => {
   const [licenseCategories, setLicenseCategories] = React.useState<CatalogOption[]>([])
   const [licenseIds, setLicenseIds] = React.useState<string[]>([])
   const [applicableScaleId, setApplicableScaleId] = React.useState<string | null>(null)
-  const [applicableScaleName, setApplicableScaleName] = React.useState<string | null>(null)
-  const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<Record<string, SalaryValue | null>>({})
-  const [loading, setLoading] = React.useState(true)
+    const [applicableScaleName, setApplicableScaleName] = React.useState<string | null>(null)
+    const [salaryValuesByGroup, setSalaryValuesByGroup] = React.useState<Record<string, SalaryValue | null>>({})
+    // Antigüedad del trabajador (calculada desde hire_date)
+    const [tenure, setTenure] = React.useState<{ years: number; months: number; totalMonths: number; humanDescription: string } | null>(null)
+    // Pago por antigüedad aplicable
+    const [tenurePayment, setTenurePayment] = React.useState<{ amount: number; from_months: number; to_months: number | null } | null>(null)
+    const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [canManage, setCanManage] = React.useState(false)
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -438,8 +443,32 @@ const WorkerDetail = () => {
               }))
             }
             setWorker(mappedWorker as WorkerDetail)
-
-      // Fase 11A.3: horario habitual del puesto vigente (o del último puesto si está inactivo)
+            
+                  // Calcular antigüedad desde la fecha REAL de contratación (hire_date).
+                  const t = calculateTenure(mappedWorker.hire_date)
+                  setTenure(t)
+            
+                  // Resolver pago por antigüedad aplicable.
+                  try {
+                    const { data: tenureData } = await supabase.rpc(
+                      "resolve_tenure_payment_for_worker",
+                      { p_entity_id: entityId, p_worker_id: workerId }
+                    )
+                    if (tenureData && Array.isArray(tenureData) && tenureData.length > 0) {
+                      const row = tenureData[0] as any
+                      setTenurePayment({
+                        amount: row.amount,
+                        from_months: row.from_months,
+                        to_months: row.to_months,
+                      })
+                    } else {
+                      setTenurePayment(null)
+                    }
+                  } catch {
+                    setTenurePayment(null)
+                  }
+            
+                  // Fase 11A.3: horario habitual del puesto vigente (o del último puesto si está inactivo)
       const requestedPositionId =
         mappedWorker.assignments?.find((a: any) => a.is_current && !a.end_date)?.position_id ||
         [...(mappedWorker.assignments || [])].sort((a: any, b: any) =>
@@ -1132,11 +1161,29 @@ const WorkerDetail = () => {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Fecha de incorporación</dt>
-                <dd className="text-sm text-ink">{worker.hire_date}</dd>
-              </div>
-
-              {position ? (
+                              <dt className="text-xs text-muted-foreground">Fecha de incorporación</dt>
+                              <dd className="text-sm text-ink">{worker.hire_date}</dd>
+                            </div>
+              
+                            <div>
+                              <dt className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Calendar className="h-3 w-3" /> Antigüedad
+                              </dt>
+                              <dd className="text-sm font-medium text-ink">
+                                {tenure ? tenure.humanDescription : "No disponible"}
+                              </dd>
+                              {tenurePayment && tenurePayment.amount !== null ? (
+                                <dd className="text-xs text-muted-foreground">
+                                  Pago por antigüedad: {tenurePayment.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} CUP
+                                </dd>
+                              ) : tenure ? (
+                                <dd className="text-xs text-muted-foreground italic">
+                                  Pago por antigüedad: No configurado
+                                </dd>
+                              ) : null}
+                            </div>
+              
+                            {position ? (
                 <>
                   <div>
                     <dt className="text-xs text-muted-foreground">
