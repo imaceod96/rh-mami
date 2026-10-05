@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { SiteCorpDialog, SiteCorpDialogContent, SiteCorpDialogHeader, SiteCorpDialogTitle, SiteCorpDialogDescription, SiteCorpDialogFooter } from "@/components/ui/sitecorp-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
