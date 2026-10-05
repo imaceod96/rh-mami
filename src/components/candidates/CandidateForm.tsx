@@ -135,6 +135,16 @@ const RETIRED_REHIRED_OPTIONS = [
   { id: "no", name: "No" },
 ]
 
+// Orden visual exacto exigido para el catálogo de Nivel educacional.
+const EDUCATION_LEVEL_ORDER = [
+  "Primaria",
+  "Secundaria",
+  "Obrero Calificado",
+  "Media",
+  "Técnico Medio",
+  "Superior",
+]
+
 /**
  * Subir o reemplazar documento de verificación para un candidato.
  * Si checkbox desmarcado y ya existe documento, NO lo borra (preservar histórico).
@@ -346,10 +356,11 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           has_pre_employment_check: false,
           has_criminal_record_check: false,
           pre_employment_check_file: null,
-          criminal_record_check_file: null,
-        })
-
-        if (data.province && MUNICIPIOS_BY_PROVINCE_FULL[data.province]) {
+                    criminal_record_check_file: null,
+                    disciplinary_document: null,
+                  })
+          
+                  if (data.province && MUNICIPIOS_BY_PROVINCE_FULL[data.province]) {
           setMunicipalities(MUNICIPIOS_BY_PROVINCE_FULL[data.province].map(name => ({ id: name, name })))
         }
       } catch (err) {
@@ -364,10 +375,23 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
   }, [effectiveEntityId, candidateId, mode])
 
   const handleFormChange = (field: keyof CandidateFormData, value: string | boolean | File | null) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleDrivingLicensesChange = (licenseIds: string[]) => {
+      setFormData(prev => ({ ...prev, [field]: value }))
+    }
+  
+    // Al cambiar el Nivel educacional: si el nuevo nivel no requiere especialidad,
+    // se limpia el valor para que se guarde como NULL.
+    const handleEducationLevelChange = (value: string) => {
+      const levelId = value === "__placeholder__" ? "" : value
+      const level = educationLevels.find(l => l.id === levelId)
+      const needsSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(level?.name || "")
+      setFormData(prev => ({
+        ...prev,
+        education_level_id: levelId,
+        specialty: needsSpecialty ? prev.specialty : "",
+      }))
+    }
+  
+    const handleDrivingLicensesChange = (licenseIds: string[]) => {
     setFormData(prev => ({ ...prev, driving_license_ids: licenseIds }))
   }
 
@@ -463,8 +487,12 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
         municipality: formData.municipality.trim() || null,
         province: formData.province.trim() || null,
         education_level_id: formData.education_level_id || null,
-        specialty: formData.specialty.trim() || null,
-        profession_or_trade: formData.profession_or_trade.trim() || null,
+                specialty: ["Obrero Calificado", "Técnico Medio", "Superior"].includes(
+                  educationLevels.find(l => l.id === formData.education_level_id)?.name || ""
+                )
+                  ? (formData.specialty.trim() || null)
+                  : null,
+                profession_or_trade: formData.profession_or_trade.trim() || null,
         political_affiliation: formData.political_affiliation || null,
         is_retired_or_rehired: formData.is_retired_or_rehired === "yes",
         has_disciplinary_measures: formData.has_disciplinary_measures,
@@ -721,13 +749,14 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Nivel educacional</Label>
-                <SiteCorpSelect value={formData.education_level_id || undefined} onValueChange={(value) => handleFormChange("education_level_id", value === "__placeholder__" ? "" : value)}>
+                <SiteCorpSelect value={formData.education_level_id || undefined} onValueChange={handleEducationLevelChange}>
                   <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
-                  {educationLevels
-                    .filter(level => ["Primaria", "Secundaria", "Obrero Calificado", "Media", "Técnico Medio", "Superior"].includes(level.name))
-                    .map(level => (
-                      <SelectItem key={level.id} value={level.id}>{level.name}</SelectItem>
-                    ))}
+                  {EDUCATION_LEVEL_ORDER
+                                      .map(name => educationLevels.find(level => level.name === name))
+                                      .filter((level): level is EducationLevel => Boolean(level))
+                                      .map(level => (
+                                        <SelectItem key={level.id} value={level.id}>{level.name}</SelectItem>
+                                      ))}
                 </SiteCorpSelect>
               </div>
               {requiresSpecialty && (

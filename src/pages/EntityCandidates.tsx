@@ -165,6 +165,19 @@ const RETIRED_REHIRED_OPTIONS = [
   { id: "no", name: "No" },
 ]
 
+// Orden visual exacto exigido para el catálogo de Nivel educacional.
+const EDUCATION_LEVEL_ORDER = [
+  "Primaria",
+  "Secundaria",
+  "Obrero Calificado",
+  "Media",
+  "Técnico Medio",
+  "Superior",
+]
+
+// Niveles que requieren Especialidad.
+const SPECIALTY_EDUCATION_LEVELS = ["Obrero Calificado", "Técnico Medio", "Superior"]
+
 // Convert dd/mm/aaaa display format to ISO yyyy-mm-dd for storage
 const convertDisplayDateToISO = (value: string): string | null => {
   const trimmed = value.trim()
@@ -348,12 +361,29 @@ const EntityCandidates = () => {
   ])
 
   // Form handlers
-    const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
-      setFormData(prev => ({ ...prev, [field]: value }))
-    }
+      const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
+        setFormData(prev => ({ ...prev, [field]: value }))
+      }
   
-    // Navigation
-    const navigate = useNavigate()
+      // Al cambiar el Nivel educacional: si el nuevo nivel no requiere especialidad,
+      // se limpia el valor para que se guarde como NULL.
+      const handleEducationLevelChange = (value: string) => {
+        const levelId = value === "__placeholder__" ? "" : value
+        const level = educationLevels.find(l => l.id === levelId)
+        const needsSpecialty = SPECIALTY_EDUCATION_LEVELS.includes(level?.name || "")
+        setFormData(prev => ({
+          ...prev,
+          education_level_id: levelId,
+          specialty: needsSpecialty ? prev.specialty : "",
+        }))
+      }
+  
+      const requiresSpecialty = SPECIALTY_EDUCATION_LEVELS.includes(
+        educationLevels.find(l => l.id === formData.education_level_id)?.name || ""
+      )
+  
+      // Navigation
+      const navigate = useNavigate()
 
   // DNI autocomplete for birth date (Cuban DNI format: first 6 digits = aammdd)
     const handleIdentificationChange = (value: string) => {
@@ -509,8 +539,8 @@ const EntityCandidates = () => {
               municipality: formData.municipality.trim() || null,
               province: formData.province.trim() || null,
               education_level_id: formData.education_level_id || null,
-              specialty: formData.specialty.trim() || null,
-              profession_or_trade: formData.profession_or_trade.trim() || null,
+                            specialty: requiresSpecialty ? (formData.specialty.trim() || null) : null,
+                            profession_or_trade: formData.profession_or_trade.trim() || null,
               skin_color_id: formData.skin_color_id || null,
               political_affiliation: formData.political_affiliation || null,
               is_retired_or_rehired: formData.is_retired_or_rehired === "yes",
@@ -1160,29 +1190,58 @@ const EntityCandidates = () => {
                           </div>
                         </div>
 
-            {/* Información profesional (propia de la persona) */}
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Información profesional</h3>
-                          <div className="space-y-1.5">
-                            <Label>Profesión u oficio *</Label>
-                            <SiteCorpInput
-                              type="text"
-                              placeholder="Ej.: Chofer profesional, Albañil, Técnico en redes"
-                              value={formData.profession_or_trade}
-                              onChange={(e) => handleFormChange("profession_or_trade", e.target.value)}
-                              required
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Dato indispensable para el contrato. Es propio de la persona.
-                            </p>
-                          </div>
-                          <DrivingLicenseSelector
-                            categories={licenseCategories}
-                            value={formData.driving_license_ids}
-                            onChange={(licenseIds) => setFormData(prev => ({ ...prev, driving_license_ids: licenseIds }))}
-                            hint="Puede seleccionar varias categorías o ninguna."
-                          />
-                        </div>
+            {/* Formación y profesión (propias de la persona) */}
+                                    <div className="space-y-4">
+                                      <h3 className="text-sm font-semibold text-ink border-b pb-2">Formación y profesión</h3>
+                                      <div className="space-y-1.5">
+                                        <Label>Nivel educacional</Label>
+                                        <SiteCorpSelect
+                                          value={formData.education_level_id || undefined}
+                                          onValueChange={handleEducationLevelChange}
+                                        >
+                                          <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
+                                          {EDUCATION_LEVEL_ORDER
+                                            .map(name => educationLevels.find(level => level.name === name))
+                                            .filter((level): level is EducationLevel => Boolean(level))
+                                            .map(level => (
+                                              <SelectItem key={level.id} value={level.id}>
+                                                {level.name}
+                                              </SelectItem>
+                                            ))}
+                                        </SiteCorpSelect>
+                                      </div>
+                                      {requiresSpecialty && (
+                                        <div className="space-y-1.5">
+                                          <Label>Especialidad *</Label>
+                                          <SiteCorpInput
+                                            type="text"
+                                            placeholder="Especialidad"
+                                            value={formData.specialty}
+                                            onChange={(e) => handleFormChange("specialty", e.target.value)}
+                                            required
+                                          />
+                                        </div>
+                                      )}
+                                      <div className="space-y-1.5">
+                                        <Label>Profesión u oficio *</Label>
+                                        <SiteCorpInput
+                                          type="text"
+                                          placeholder="Ej.: Chofer profesional, Albañil, Técnico en redes"
+                                          value={formData.profession_or_trade}
+                                          onChange={(e) => handleFormChange("profession_or_trade", e.target.value)}
+                                          required
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                          Dato indispensable para el contrato. Es propio de la persona.
+                                        </p>
+                                      </div>
+                                      <DrivingLicenseSelector
+                                        categories={licenseCategories}
+                                        value={formData.driving_license_ids}
+                                        onChange={(licenseIds) => setFormData(prev => ({ ...prev, driving_license_ids: licenseIds }))}
+                                        hint="Puede seleccionar varias categorías o ninguna."
+                                      />
+                                    </div>
 
             {/* Section 3: Contacto y dirección */}
                         <div className="space-y-4">
@@ -1245,44 +1304,6 @@ const EntityCandidates = () => {
                                 ))}
                               </SiteCorpSelect>
                             </div>
-                          </div>
-                        </div>
-
-            {/* Section 4: Formación */}
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Formación</h3>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label>Nivel educacional</Label>
-                              <SiteCorpSelect
-                                value={formData.education_level_id || undefined}
-                                onValueChange={(value) => handleFormChange("education_level_id", value === "__placeholder__" ? "" : value)}
-                              >
-                                <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
-                                {educationLevels
-                                                                  .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico", "Bachiller", "Superior"].includes(level.name))
-                                                                  .map(level => (
-                                                                    <SelectItem key={level.id} value={level.id}>
-                                                                      {level.name}
-                                                                    </SelectItem>
-                                                                  ))}
-                              </SiteCorpSelect>
-                            </div>
-                            {(formData.education_level_id && (() => {
-                                                          const level = educationLevels.find(l => l.id === formData.education_level_id)
-                                                          return level?.name === "Técnico Medio" || level?.name === "Obrero Calificado" || level?.name === "Superior"
-                                                        })()) && (
-                              <div className="space-y-1.5">
-                                <Label>Especialidad *</Label>
-                                <SiteCorpInput
-                                  type="text"
-                                  placeholder="Especialidad"
-                                  value={formData.specialty}
-                                  onChange={(e) => handleFormChange("specialty", e.target.value)}
-                                  required
-                                />
-                              </div>
-                            )}
                           </div>
                         </div>
 
