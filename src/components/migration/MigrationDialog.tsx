@@ -280,7 +280,7 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
                   {previewData.length} filas encontradas, {validationErrors.length} errores
                 </p>
               </div>
-              <Badge variant={validationErrors.length === 0 ? "success" : "destructive"}>
+              <Badge variant={validationErrors.length === 0 ? "default" : "destructive"}>
                 {validationErrors.length === 0 ? 'Todo válido' : `${validationErrors.length} errores`}
               </Badge>
             </div>
