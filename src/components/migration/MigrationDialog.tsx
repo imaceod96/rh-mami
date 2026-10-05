@@ -2,7 +2,7 @@ import * as React from "react"
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { SiteCorpButton } from "@/components/ui/sitecorp-button"
+import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { Label } from "@/components/ui/label"
@@ -180,17 +180,17 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
   }
 
   return (
-    <SiteCorpDialog open={open} onOpenChange={handleOpenChange}>
-      <SiteCorpDialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-        <SiteCorpDialogHeader>
-          <SiteCorpDialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5" />
-            Migración de Trabajadores
-          </SiteCorpDialogTitle>
-          <SiteCorpDialogDescription>
-            Importa trabajadores existentes desde un archivo Excel. Selecciona el tipo de migración y revisa los datos antes de confirmar.
-          </SiteCorpDialogDescription>
-        </SiteCorpDialogHeader>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Migración de Trabajadores
+            </DialogTitle>
+            <DialogDescription>
+              Importa trabajadores existentes desde un archivo Excel. Selecciona el tipo de migración y revisa los datos antes de confirmar.
+            </DialogDescription>
+          </DialogHeader>
 
         {error && (
           <SiteCorpAlert type="danger" className="mx-6">

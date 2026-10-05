@@ -2,7 +2,7 @@ import * as React from "react"
 import { useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { SiteCorpButton } from "@/components/ui/sitecorp-button"
+import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { Label } from "@/components/ui/label"
@@ -368,7 +368,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           </div>
         )}
 
-        <SiteCorpDialogFooter className="gap-2">
+        <DialogFooter className="gap-2">
           {step !== 'upload' && (
             <SiteCorpButton
               variant="outline"
@@ -402,8 +402,8 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
               Cerrar
             </SiteCorpButton>
           )}
-        </SiteCorpDialogFooter>
-      </SiteCorpDialogContent>
-    </SiteCorpDialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
