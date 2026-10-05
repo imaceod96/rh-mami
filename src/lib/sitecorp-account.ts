@@ -42,11 +42,17 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
     permissions: ["workers.view", "workers.manage"],
   },
   {
-    key: "contract-alerts",
-    label: "Vencimientos",
-    path: (id) => `/entity/${id}/contracts/alerts`,
-    permissions: ["contract_alerts.view", "workers.view", "workers.manage"],
-  },
+      key: "prenomina",
+      label: "Prenómina",
+      path: (id) => `/entity/${id}/payroll-preparation`,
+      permissions: ["prenomina.view", "prenomina.manage"],
+    },
+    {
+      key: "contract-alerts",
+      label: "Vencimientos",
+      path: (id) => `/entity/${id}/contracts/alerts`,
+      permissions: ["contract_alerts.view", "workers.view", "workers.manage"],
+    },
   {
     key: "hiring",
     label: "Contratación",

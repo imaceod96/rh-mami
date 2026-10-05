@@ -84,6 +84,9 @@ export const ENTITY_PERMISSION_LABELS: Record<string, string> = {
   "document_templates.manage": "Administrar plantillas documentales (.doc / .docx)",
 
   "contract_alerts.view": "Ver alertas de contratos",
+  
+    "prenomina.view": "Ver prenómina",
+    "prenomina.manage": "Gestionar prenómina",
 
   "vacations.view": "Ver vacaciones (saldos, períodos e historial)",
   "vacations.manage": "Gestionar vacaciones (registrar, cancelar y ajustar)",
@@ -116,6 +119,7 @@ export const ENTITY_PERMISSION_GROUPS: EntityPermissionGroup[] = [
     codes: ["document_templates.view", "document_templates.manage"],
   },
   { title: "ALERTAS DE CONTRATOS", codes: ["contract_alerts.view"] },
+    { title: "PRENÓMINA", codes: ["prenomina.view", "prenomina.manage"] },
   { title: "VACACIONES", codes: ["vacations.view", "vacations.manage"] },
   { title: "INFORMES", codes: ["reports.view"] },
 ]

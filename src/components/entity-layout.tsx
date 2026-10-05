@@ -16,9 +16,10 @@ import {
   Building,
   Factory,
   CalendarClock,
-  Palmtree,
-  HeartPulse,
-} from "lucide-react"
+    Palmtree,
+    HeartPulse,
+    Calculator,
+  } from "lucide-react"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { ENTITY_INTERNAL_MODULES, hasSiteCorpAccount } from "@/lib/sitecorp-account"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
@@ -35,7 +36,8 @@ const moduleIcons: Record<string, React.ReactNode> = {
   summary: <LayoutDashboard className="h-5 w-5" />,
   candidates: <Users className="h-5 w-5" />,
   staffing: <Briefcase className="h-5 w-5" />,
-  "contract-alerts": <CalendarClock className="h-5 w-5" />,
+    prenomina: <Calculator className="h-5 w-5" />,
+    "contract-alerts": <CalendarClock className="h-5 w-5" />,
   hiring: <Mail className="h-5 w-5" />,
   vacations: <Palmtree className="h-5 w-5" />,
   "medical-certificates": <HeartPulse className="h-5 w-5" />,

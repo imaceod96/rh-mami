@@ -28,6 +28,7 @@ import TenantRoles from "./pages/TenantRoles"
 import AdminSettingsSalaryScale from "./pages/AdminSettingsSalaryScale"
 import EntitySummary from "./pages/EntitySummary"
 import EntityCandidates from "./pages/EntityCandidates"
+import EntityPrenomina from "./pages/EntityPrenomina"
 import CandidateDetail from "./pages/CandidateDetail"
 import CandidateEdit from "./pages/CandidateEdit"
 import EntityStaffing from "./pages/EntityStaffing"
@@ -144,6 +145,7 @@ const AppRoutes = () => {
           <Route path="/entity/:entityId/summary" element={<EntitySummary />} />
           <Route path="/entity/:entityId/panel" element={<EntityPanelRedirect />} />
           <Route path="/entity/:entityId/candidates" element={<EntityCandidates />} />
+                    <Route path="/entity/:entityId/payroll-preparation" element={<EntityPrenomina />} />
           <Route path="/entity/:entityId/candidates/:candidateId" element={<CandidateDetail />} />
           <Route path="/entity/:entityId/candidates/:candidateId/edit" element={<CandidateEdit />} />
           <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
