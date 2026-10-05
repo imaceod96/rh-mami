@@ -40,6 +40,46 @@ import {
 } from "@/lib/catalogs"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 
+/**
+ * Subir documento de verificación y crear el registro en worker_documents.
+ */
+async function uploadWorkerDocument(
+  workerId: string,
+  documentTypeId: string,
+  file: File
+): Promise<void> {
+  const user = await supabase.auth.getUser()
+  if (!user.data.user) throw new Error("Usuario no autenticado")
+
+  const fileExt = file.name.split(".").pop() || "pdf"
+  const fileName = `worker_${workerId}_${documentTypeId}_${Date.now()}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from("documents")
+    .upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+    })
+
+  if (uploadError) throw uploadError
+
+  const { error: dbError } = await supabase
+    .from("worker_documents")
+    .insert({
+      worker_id: workerId,
+      document_type_id: documentTypeId,
+      file_name: file.name,
+      storage_path: fileName,
+      mime_type: file.type,
+      file_size: file.size,
+      description: documentTypeId === "PRE_EMPLOYMENT_CHECK" ? "Chequeo Preempleo" : "Antecedentes Penales",
+      source: "MANUAL",
+      uploaded_by: user.data.user.id,
+    })
+
+  if (dbError) throw dbError
+}
+
 export interface WorkerPositionOption {
   id: string
   name: string
@@ -128,6 +168,10 @@ interface WorkerFormState {
   phone: string
   email: string
   hire_date: string
+  has_pre_employment_check: boolean
+  has_criminal_record_check: boolean
+  pre_employment_check_file: File | null
+  criminal_record_check_file: File | null
 }
 
 const emptyForm: WorkerFormState = {
@@ -148,6 +192,10 @@ const emptyForm: WorkerFormState = {
   phone: "",
   email: "",
   hire_date: "",
+  has_pre_employment_check: false,
+  has_criminal_record_check: false,
+  pre_employment_check_file: null,
+  criminal_record_check_file: null,
 }
 
 const formatSalary = (value: SalaryValue) =>
@@ -184,8 +232,34 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           phone: editingWorker.phone || "",
           email: editingWorker.email || "",
           hire_date: editingWorker.hire_date || "",
+          has_pre_employment_check: false,
+          has_criminal_record_check: false,
+          pre_employment_check_file: null,
+          criminal_record_check_file: null,
         }
-      : emptyForm
+      : {
+          first_name: "",
+          first_surname: "",
+          second_surname: "",
+          identification: "",
+          birth_date: "",
+          gender_id: "",
+          marital_status_id: "",
+          education_level_id: "",
+          specialty: "",
+          profession_or_trade: "",
+          skin_color_id: "",
+          address: "",
+          province: "",
+          municipality: "",
+          phone: "",
+          email: "",
+          hire_date: "",
+          has_pre_employment_check: false,
+          has_criminal_record_check: false,
+          pre_employment_check_file: null,
+          criminal_record_check_file: null,
+        }
   )
   const [positionId, setPositionId] = React.useState<string>("")
   const [genders, setGenders] = React.useState<Catalog[]>([])
@@ -323,6 +397,11 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   const setField = (field: keyof WorkerFormState, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }))
 
+  const requiresSpecialty = React.useMemo(() => {
+    const selected = educationLevels.find(l => l.id === form.education_level_id)
+    return ["Obrero Calificado", "Técnico Medio", "Superior"].includes(selected?.name || "")
+  }, [form.education_level_id, educationLevels])
+
   const handleIdentificationChange = (value: string) => {
     const cleaned = value.replace(/\D/g, "").substring(0, 11)
     setForm(prev => {
@@ -368,6 +447,11 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     }
     if (!form.municipality.trim()) {
       setFormError("El municipio es obligatorio")
+      return
+    }
+    if (requiresSpecialty && !form.specialty.trim()) {
+      const selected = educationLevels.find(l => l.id === form.education_level_id)
+      setFormError(`La especialidad es obligatoria para ${selected?.name}`)
       return
     }
     if (!form.hire_date) {
@@ -468,26 +552,26 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
 
         onSuccess()
       } else {
-        const { error: rpcError } = await supabase.rpc("create_worker_with_position", {
+        const { data: rpcData, error: rpcError } = await supabase.rpc("create_worker_with_position", {
           p_entity_id: entityId,
           p_worker: {
-            first_name: form.first_name.trim(),
-            first_surname: form.first_surname.trim(),
-            second_surname: form.second_surname.trim(),
-            identification: form.identification.trim(),
-            birth_date: form.birth_date,
-            gender_id: form.gender_id,
-            marital_status_id: form.marital_status_id,
-            education_level_id: form.education_level_id,
-            specialty: form.specialty.trim(),
-            profession_or_trade: form.profession_or_trade.trim(),
-            skin_color_id: form.skin_color_id,
-            address: form.address.trim(),
-            province: form.province,
-            municipality: form.municipality,
-            phone: form.phone.trim(),
-            email: form.email.trim(),
-          },
+                      first_name: form.first_name.trim(),
+                      first_surname: form.first_surname.trim(),
+                      second_surname: form.second_surname.trim(),
+                      identification: form.identification.trim(),
+                      birth_date: form.birth_date,
+                      gender_id: form.gender_id,
+                      marital_status_id: form.marital_status_id,
+                      education_level_id: form.education_level_id,
+                      specialty: form.specialty.trim(),
+                      profession_or_trade: form.profession_or_trade.trim(),
+                      skin_color_id: form.skin_color_id,
+                      address: form.address.trim(),
+                      province: form.province,
+                      municipality: form.municipality,
+                      phone: form.phone.trim(),
+                      email: form.email.trim(),
+                    },
           p_position_id: positionId,
           p_hire_date: form.hire_date,
           p_contract_type_id: contractTypeId || null,
@@ -503,6 +587,19 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
         })
 
         if (rpcError) throw rpcError
+
+        const workerId = rpcData?.worker_id
+        if (!workerId) throw new Error("No se pudo obtener el ID del trabajador creado")
+
+        // Subir documentos de verificación (Chequeo Preempleo y Antecedentes Penales)
+                // y vincularlos al trabajador recién creado.
+                if (form.has_pre_employment_check && form.pre_employment_check_file) {
+                  await uploadWorkerDocument(workerId, "PRE_EMPLOYMENT_CHECK", form.pre_employment_check_file)
+                }
+                if (form.has_criminal_record_check && form.criminal_record_check_file) {
+                  await uploadWorkerDocument(workerId, "CRIMINAL_RECORD", form.criminal_record_check_file)
+                }
+
         invalidateContractAlertData(queryClient)
         onSuccess()
       }
@@ -618,13 +715,18 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           </SiteCorpSelect>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="worker-specialty">Especialidad</Label>
-          <SiteCorpInput
-            id="worker-specialty"
-            value={form.specialty}
-            onChange={(e) => setField("specialty", e.target.value)}
-            placeholder="Opcional"
-          />
+          <Label htmlFor="worker-specialty">
+            Especialidad
+            {requiresSpecialty && <span className="text-sitecorp-danger"> *</span>}
+          </Label>
+          {(requiresSpecialty || form.specialty) && (
+            <SiteCorpInput
+              id="worker-specialty"
+              value={form.specialty}
+              onChange={(e) => setField("specialty", e.target.value)}
+              placeholder={requiresSpecialty ? "Obligatorio para este nivel educacional" : "Opcional"}
+            />
+          )}
         </div>
       </div>
 
@@ -714,15 +816,92 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
         </div>
 
         <div className="mt-4 space-y-2">
-          <Label>Licencias de conducción</Label>
-          <DrivingLicenseSelector
-            categories={licenseCategories}
-            value={licenseIds}
-            onChange={setLicenseIds}
-            disabled={submitting}
-          />
-        </div>
-      </div>
+                  <Label>Licencias de conducción</Label>
+                  <DrivingLicenseSelector
+                    categories={licenseCategories}
+                    value={licenseIds}
+                    onChange={setLicenseIds}
+                    disabled={submitting}
+                  />
+                </div>
+        
+                {/* Verificaciones de seguridad (Chequeo Preempleo y Antecedentes Penales) */}
+                <div className="mt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-ink border-b pb-2">Verificaciones de seguridad</h3>
+        
+                  {/* Chequeo Preempleo */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={form.has_pre_employment_check}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, has_pre_employment_check: e.target.checked }))
+                          }
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-ink">Chequeo Preempleo</span>
+                      </label>
+                    </div>
+                    {form.has_pre_employment_check && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">Documento de Chequeo Preempleo</label>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null
+                            setForm((prev) => ({ ...prev, pre_employment_check_file: file }))
+                          }}
+                          className="block w-full text-sm text-muted-foreground"
+                        />
+                        {form.pre_employment_check_file && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {form.pre_employment_check_file.name}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+        
+                  {/* Antecedentes Penales */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={form.has_criminal_record_check}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, has_criminal_record_check: e.target.checked }))
+                          }
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-ink">Antecedentes Penales</span>
+                      </label>
+                    </div>
+                    {form.has_criminal_record_check && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">Documento de Antecedentes Penales</label>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null
+                            setForm((prev) => ({ ...prev, criminal_record_check_file: file }))
+                          }}
+                          className="block w-full text-sm text-muted-foreground"
+                        />
+                        {form.criminal_record_check_file && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {form.criminal_record_check_file.name}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
 
       {/* Datos laborales */}
       <div className="border-t border-border pt-4">

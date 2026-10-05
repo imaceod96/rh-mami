@@ -132,6 +132,90 @@ const RETIRED_REHIRED_OPTIONS = [
   { id: "no", name: "No" },
 ]
 
+/**
+ * Subir o reemplazar documento de verificación para un candidato.
+ * Si checkbox desmarcado y ya existe documento, NO lo borra (preservar histórico).
+ * Si checkbox marcado con archivo nuevo, sube y crea/actualiza el registro.
+ * Si checkbox marcado sin archivo nuevo, mantiene el existente.
+ */
+async function uploadOrReplaceDocumentForCandidate(
+  candidateId: string,
+  entityId: string,
+  documentTypeId: string,
+  hasDocument: boolean,
+  file: File | null
+): Promise<void> {
+  if (!hasDocument) {
+    // No borrar documentos históricos al desmarcar el checkbox.
+    return
+  }
+
+  if (!file) {
+    // Mantener el documento existente si no hay nuevo archivo.
+    return
+  }
+
+  const user = await supabase.auth.getUser()
+  if (!user.data.user) throw new Error("Usuario no autenticado")
+
+  const fileExt = file.name.split(".").pop() || "pdf"
+  const fileName = `candidate_${candidateId}_${documentTypeId}_${Date.now()}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from("documents")
+    .upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+    })
+
+  if (uploadError) throw uploadError
+
+  // Buscar si ya existe un documento de este tipo para este candidato
+  const { data: existing } = await supabase
+    .from("candidate_documents")
+    .select("id, storage_path")
+    .eq("candidate_id", candidateId)
+    .eq("document_type_id", documentTypeId)
+    .single()
+
+  if (existing) {
+    // Eliminar el archivo físico anterior si existe
+    if (existing.storage_path) {
+      await supabase.storage.from("documents").remove([existing.storage_path])
+    }
+
+    const { error: dbError } = await supabase
+      .from("candidate_documents")
+      .update({
+        original_file_name: file.name,
+        storage_path: fileName,
+        mime_type: file.type,
+        file_size: file.size,
+        description: documentTypeId === "PRE_EMPLOYMENT_CHECK" ? "Chequeo Preempleo" : "Antecedentes Penales",
+        uploaded_by: user.data.user.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+
+    if (dbError) throw dbError
+  } else {
+    const { error: dbError } = await supabase
+      .from("candidate_documents")
+      .insert({
+        candidate_id: candidateId,
+        document_type_id: documentTypeId,
+        original_file_name: file.name,
+        storage_path: fileName,
+        mime_type: file.type,
+        file_size: file.size,
+        description: documentTypeId === "PRE_EMPLOYMENT_CHECK" ? "Chequeo Preempleo" : "Antecedentes Penales",
+        uploaded_by: user.data.user.id,
+      })
+
+    if (dbError) throw dbError
+  }
+}
+
 interface CandidateFormProps {
   candidateId?: string
   entityId?: string
@@ -256,6 +340,10 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           has_disciplinary_measures: data.has_disciplinary_measures || false,
           skin_color_id: data.skin_color_id || "",
           driving_license_ids: licenseIds,
+          has_pre_employment_check: false,
+          has_criminal_record_check: false,
+          pre_employment_check_file: null,
+          criminal_record_check_file: null,
         })
 
         if (data.province && MUNICIPIOS_BY_PROVINCE_FULL[data.province]) {
@@ -272,7 +360,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     fetchCandidate()
   }, [effectiveEntityId, candidateId, mode])
 
-  const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
+  const handleFormChange = (field: keyof CandidateFormData, value: string | boolean | File | null) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -391,9 +479,13 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
 
       // Licencias de conducción: reemplazo exacto y atómico (RPC transaccional),
       // de forma que el resultado en base de datos coincida con la selección.
-      await saveCandidateDrivingLicenseIds(candidateId!, formData.driving_license_ids)
-
-      setFormSuccess(true)
+            await saveCandidateDrivingLicenseIds(candidateId!, formData.driving_license_ids)
+      
+            // Subir / actualizar documentos de verificación (Chequeo Preempleo y Antecedentes Penales)
+            await uploadOrReplaceDocumentForCandidate(candidateId!, effectiveEntityId!, "PRE_EMPLOYMENT_CHECK", formData.has_pre_employment_check, formData.pre_employment_check_file)
+            await uploadOrReplaceDocumentForCandidate(candidateId!, effectiveEntityId!, "CRIMINAL_RECORD", formData.has_criminal_record_check, formData.criminal_record_check_file)
+      
+            setFormSuccess(true)
 
       // Refresh candidate data
       const { data } = await supabase
@@ -673,41 +765,116 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
         </SiteCorpCard>
 
         {/* Section 6: Medidas disciplinarias */}
-        <SiteCorpCard>
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-ink border-b pb-2">Medidas disciplinarias</h3>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.has_disciplinary_measures}
-                  onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
-              </label>
+                <SiteCorpCard>
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-ink border-b pb-2">Medidas disciplinarias</h3>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.has_disciplinary_measures}
+                          onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
+                      </label>
+                    </div>
+                  </div>
+                </SiteCorpCard>
+        
+                {/* Section 7: Chequeo Preempleo y Antecedentes Penales */}
+                <SiteCorpCard>
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-ink border-b pb-2">Verificaciones de seguridad</h3>
+                    
+                    {/* Chequeo Preempleo */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 mb-2">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.has_pre_employment_check}
+                            onChange={(e) => handleFormChange("has_pre_employment_check", e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="text-sm font-medium text-ink">Chequeo Preempleo</span>
+                        </label>
+                      </div>
+                      {formData.has_pre_employment_check && (
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium mb-1">Documento de Chequeo Preempleo</label>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              handleFormChange("pre_employment_check_file", file)
+                            }}
+                            className="block w-full text-sm text-muted-foreground"
+                          />
+                          {formData.pre_employment_check_file && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {formData.pre_employment_check_file.name}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Antecedentes Penales */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 mb-2">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.has_criminal_record_check}
+                            onChange={(e) => handleFormChange("has_criminal_record_check", e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="text-sm font-medium text-ink">Antecedentes Penales</span>
+                        </label>
+                      </div>
+                      {formData.has_criminal_record_check && (
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium mb-1">Documento de Antecedentes Penales</label>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              handleFormChange("criminal_record_check_file", file)
+                            }}
+                            className="block w-full text-sm text-muted-foreground"
+                          />
+                          {formData.criminal_record_check_file && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {formData.criminal_record_check_file.name}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </SiteCorpCard>
+        
+                {/* Form error */}
+                {formError && (
+                  <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
+                )}
+        
+                {/* Form footer */}
+                <div className="flex justify-end gap-2">
+                  <SiteCorpButton type="button" variant="outline" onClick={handleCancel} disabled={formSubmitting}>
+                    Cancelar
+                  </SiteCorpButton>
+                  <SiteCorpButton type="submit" disabled={formSubmitting}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {formSubmitting ? "Guardando..." : "Guardar cambios"}
+                  </SiteCorpButton>
+                </div>
+              </form>
             </div>
-          </div>
-        </SiteCorpCard>
-
-        {/* Form error */}
-        {formError && (
-          <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
-        )}
-
-        {/* Form footer */}
-        <div className="flex justify-end gap-2">
-          <SiteCorpButton type="button" variant="outline" onClick={handleCancel} disabled={formSubmitting}>
-            Cancelar
-          </SiteCorpButton>
-          <SiteCorpButton type="submit" disabled={formSubmitting}>
-            <Save className="mr-2 h-4 w-4" />
-            {formSubmitting ? "Guardando..." : "Guardar cambios"}
-          </SiteCorpButton>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-export default CandidateForm
+          )
+        }
+        
+        export default CandidateForm
