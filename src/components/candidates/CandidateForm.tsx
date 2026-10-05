@@ -92,6 +92,8 @@ export interface CandidateFormData {
   has_criminal_record_check: boolean
   pre_employment_check_file: File | null
   criminal_record_check_file: File | null
+  // Medidas disciplinarias
+  disciplinary_document: File | null
 }
 
 export const emptyFormData: CandidateFormData = {
@@ -119,6 +121,7 @@ export const emptyFormData: CandidateFormData = {
   has_criminal_record_check: false,
   pre_employment_check_file: null,
   criminal_record_check_file: null,
+  disciplinary_document: null,
 }
 
 const POLITICAL_AFFILIATIONS = [

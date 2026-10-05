@@ -1318,6 +1318,53 @@ const EntityCandidates = () => {
                           <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
                         )}
 
+            {/* Disciplinary measures dialog */}
+            <Dialog open={disciplinaryDialogOpen} onOpenChange={(open) => {
+              if (!open) setDisciplinaryDialogOpen(false)
+            }}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Subir documento disciplinario</DialogTitle>
+                </DialogHeader>
+                <DialogContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Seleccione el documento disciplinario (PDF, JPG, PNG)
+                  </p>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setDisciplinaryDocument(e.target.files[0])
+                      }
+                    }}
+                    className="SiteCorpInput block w-full"
+                  />
+                  {disciplinaryDocument && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Archivo seleccionado: {disciplinaryDocument.name}
+                    </p>
+                  )}
+                </DialogContent>
+                <DialogFooter>
+                  <SiteCorpButton
+                    type="button"
+                    variant="outline"
+                    onClick={handleFormCancel}
+                  >
+                    Cancelar
+                  </SiteCorpButton>
+                  <SiteCorpButton
+                    type="button"
+                    onClick={handleDisciplinaryUpload}
+                    disabled={disciplinaryUploading || !disciplinaryDocument}
+                  >
+                    {disciplinaryUploading ? "Subiendo..." : "Subir documento"}
+                  </SiteCorpButton>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             {/* Form footer */}
             <DialogFooter className="gap-2">
               <SiteCorpButton
