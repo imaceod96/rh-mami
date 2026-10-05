@@ -80,6 +80,8 @@ interface PositionRow {
   job: {
     id: string
     name: string
+    is_cuadro: boolean
+    is_principal_specialist: boolean
     area: { id: string; name: string } | null
     salary_group: { id: string; salary_scale_id: string; sequence_number: number } | null
   } | null
@@ -209,7 +211,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
           `id, name, code, is_active, authorized_quantity,
            work_location, daily_hours, weekly_hours, monthly_hours, break_minutes, schedule_notes,
            job:organization_jobs(
-             id, name, code, is_active, area_id,
+             id, name, code, is_active, area_id, is_cuadro, is_principal_specialist,
              area:organization_areas(id, name),
              salary_group:salary_groups(id, salary_scale_id, sequence_number)
            )`
@@ -492,11 +494,12 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setError("La fecha de incorporación es obligatoria.")
       return
     }
-    if (!contractTypeId) {
+    const specialDocumentRole = selected?.job?.is_cuadro || selected?.job?.is_principal_specialist
+    if (!specialDocumentRole && !contractTypeId) {
       setError("Selecciona un tipo de contrato.")
       return
     }
-    if (!signatureDate) {
+    if (!specialDocumentRole && !signatureDate) {
       setError("La fecha de firma del contrato es obligatoria.")
       return
     }
@@ -532,7 +535,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setError(formatReadinessMessage(readiness))
       return
     }
-    if (templateBlocked) {
+    if (!specialDocumentRole && templateBlocked) {
       setError(missingContractTemplateMessage(selectedType?.name ?? null))
       return
     }
@@ -553,7 +556,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         p_candidate_id: selectedCandidate.id,
         p_position_id: positionId,
         p_hire_date: hireDate,
-        p_contract_type_id: contractTypeId,
+        p_contract_type_id: specialDocumentRole ? null : contractTypeId,
         p_contract_start_date: effectiveContractStart,
         p_contract_end_date: isDetermined ? contractEndDate || null : null,
         p_notes: notes.trim() || null,
@@ -572,8 +575,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
 
       // §13/§14/§62: el documento contractual se genera automáticamente tras
       // formalizar la contratación. No hay paso manual de «Generar contrato».
+      // Para cargos Cuadro / Especialista Principal no se genera contrato ni
+      // documento alguno (§24/§25/§30): el alta del trabajador concluye aquí.
       let documentWarning: string | null = null
-      if (contractId) {
+      if (contractId && !specialDocumentRole) {
         setProcessStage("Generando documento contractual…")
         try {
           const doc = await ensureContractDocumentGenerated(contractId)
@@ -604,11 +609,19 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         return
       }
 
-      showSuccess(
-        isReincorporation
-          ? "Reincorporación completada correctamente. El contrato y su documento fueron generados."
-          : "Contratación completada correctamente. El contrato y su documento fueron generados."
-      )
+      if (specialDocumentRole) {
+        showSuccess(
+          isReincorporation
+            ? "Reincorporación completada. Este cargo no genera contrato (Cuadro/Especialista Principal)."
+            : "Contratación completada. Este cargo no genera contrato (Cuadro/Especialista Principal)."
+        )
+      } else {
+        showSuccess(
+          isReincorporation
+            ? "Reincorporación completada correctamente. El contrato y su documento fueron generados."
+            : "Contratación completada correctamente. El contrato y su documento fueron generados."
+        )
+      }
       onOpenChange(false)
       if (workerId) onSuccess(workerId)
     } catch (err) {

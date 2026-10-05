@@ -74,7 +74,6 @@ export const AreaForm: React.FC<AreaFormProps> = ({
   
       const form = e.target as HTMLFormElement
       const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim()
-      const code = (form.elements.namedItem("code") as HTMLInputElement).value.trim()
       const description = (form.elements.namedItem("description") as HTMLTextAreaElement).value.trim() || null
       const parent_area_id = (form.elements.namedItem("parent_area_id") as HTMLSelectElement).value || null
       const hierarchy_order = parseInt(
@@ -84,21 +83,6 @@ export const AreaForm: React.FC<AreaFormProps> = ({
 
     if (!name) {
       setFormError("El nombre es obligatorio")
-      return
-    }
-    if (!code) {
-      setFormError("El código es obligatorio")
-      return
-    }
-
-    // Check for duplicate code within the entity
-    const duplicate = areas.find(
-      (a) =>
-        a.code.toLowerCase() === code.toLowerCase() &&
-        a.id !== editingArea?.id
-    )
-    if (duplicate) {
-      setFormError("Ya existe un área con ese código en esta entidad")
       return
     }
 
@@ -119,7 +103,6 @@ export const AreaForm: React.FC<AreaFormProps> = ({
           .from("organization_areas")
           .update({
             name,
-            code,
             description,
             parent_area_id: parent_area_id || null,
             hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
@@ -134,7 +117,6 @@ export const AreaForm: React.FC<AreaFormProps> = ({
           .insert({
             organization_entity_id: entityId,
             name,
-            code,
             description,
             parent_area_id: parent_area_id || null,
             hierarchy_order: isNaN(hierarchy_order) ? 0 : hierarchy_order,
@@ -174,13 +156,28 @@ export const AreaForm: React.FC<AreaFormProps> = ({
 
       <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="area-code">Código *</Label>
-                <SiteCorpInput
-                  name="code"
-                  defaultValue={editingArea?.code || ""}
-                  placeholder="Ej.: RRHH"
-                  required
-                />
+                <Label htmlFor="area-code">Código</Label>
+                {editingArea ? (
+                  <SiteCorpInput
+                    name="code"
+                    value={editingArea.code || ""}
+                    readOnly
+                    className="bg-muted/50"
+                  />
+                ) : (
+                  <SiteCorpInput
+                    name="code"
+                    value=""
+                    readOnly
+                    placeholder="Se generará automáticamente"
+                    className="bg-muted/50"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {editingArea
+                    ? "Código generado automáticamente a partir del nombre. Es de solo lectura."
+                    : "El código se genera automáticamente al guardar, a partir del nombre del área."}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="area-order">Orden</Label>

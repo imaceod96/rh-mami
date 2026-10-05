@@ -46,6 +46,10 @@ export const JobForm: React.FC<JobFormProps> = ({
   const [areas, setAreas] = React.useState<OrganizationArea[]>([])
   const [groups, setGroups] = React.useState<SalaryGroupWithCurrent[]>([])
   const [categories, setCategories] = React.useState<OccupationalCategory[]>([])
+  const [preparationLevels, setPreparationLevels] = React.useState<{ id: string; name: string; code: string }[]>([])
+  const [selectedPreparationLevels, setSelectedPreparationLevels] = React.useState<string[]>([])
+  const [isCuadro, setIsCuadro] = React.useState(false)
+  const [isPrincipalSpecialist, setIsPrincipalSpecialist] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
@@ -89,6 +93,15 @@ export const JobForm: React.FC<JobFormProps> = ({
       // Catálogo GLOBAL de categorías ocupacionales (nunca hardcodeado en React)
       stage = "categorias"
       setCategories(await fetchOccupationalCategories())
+
+      // Catálogo GLOBAL de niveles de preparación
+      const { data: prepData, error: prepError } = await supabase
+        .from("preparation_levels")
+        .select("id, name, code")
+        .eq("is_active", true)
+        .order("sort_order")
+      if (prepError) throw prepError
+      setPreparationLevels((prepData as { id: string; name: string; code: string }[]) || [])
 
       stage = "escala"
 
@@ -190,18 +203,39 @@ export const JobForm: React.FC<JobFormProps> = ({
       // Cargo nuevo: clasificación y retribución parten vacías
       setSelectedGroup("")
       setSelectedCategory("")
+      setSelectedPreparationLevels([])
+      setIsCuadro(false)
+      setIsPrincipalSpecialist(false)
       setSalaryVigente(null)
       return
     }
 
     setSelectedGroup(editingJob.salary_group_id)
         setSelectedCategory(editingJob.occupational_category_id || "")
+        setSelectedPreparationLevels([])
+        setIsCuadro(!!editingJob.is_cuadro)
+        setIsPrincipalSpecialist(!!editingJob.is_principal_specialist)
         setHasAbnormalConditions(editingJob.has_abnormal_conditions || false)
         setAbnormalConditionsAmount(
           editingJob.has_abnormal_conditions && editingJob.abnormal_conditions_amount != null
             ? String(editingJob.abnormal_conditions_amount)
             : ""
         )
+
+        // Load existing preparation levels for this job
+        if (editingJob.id) {
+          supabase
+            .from("organization_job_preparation_levels")
+            .select("preparation_level_id")
+            .eq("organization_job_id", editingJob.id)
+            .then(({ data: jobPrepData, error: jobPrepError }) => {
+              if (!jobPrepError && jobPrepData) {
+                setSelectedPreparationLevels(
+                  (jobPrepData as { preparation_level_id: string }[]).map(r => r.preparation_level_id)
+                )
+              }
+            })
+        }
     
         // Load the current salary value for the editing job's group
         if (editingJob.salary_group_id) {
@@ -255,7 +289,6 @@ export const JobForm: React.FC<JobFormProps> = ({
   
       const form = e.target as HTMLFormElement
       const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim()
-      const code = (form.elements.namedItem("code") as HTMLInputElement).value.trim()
       const area_id = (form.elements.namedItem("area_id") as HTMLSelectElement).value
       const description = (form.elements.namedItem("description") as HTMLTextAreaElement).value.trim() || null
       const required_profession_or_trade =
@@ -269,10 +302,6 @@ export const JobForm: React.FC<JobFormProps> = ({
 
     if (!name) {
       setFormError("El nombre es obligatorio")
-      return
-    }
-    if (!code) {
-      setFormError("El código es obligatorio")
       return
     }
     if (!area_id) {
@@ -310,17 +339,6 @@ export const JobForm: React.FC<JobFormProps> = ({
       return
     }
 
-    // Check for duplicate code within the entity
-    const duplicate = areas.find(
-      (a) =>
-        a.code.toLowerCase() === code.toLowerCase() &&
-        a.id !== editingJob?.id
-    )
-    if (duplicate) {
-      setFormError("Ya existe un cargo con ese código en esta entidad")
-      return
-    }
-
     setSubmitting(true)
 
     try {
@@ -333,7 +351,6 @@ export const JobForm: React.FC<JobFormProps> = ({
               .from("organization_jobs")
               .update({
                 name,
-                code,
                 area_id,
                 description,
                 salary_group_id: selectedGroup,
@@ -343,18 +360,26 @@ export const JobForm: React.FC<JobFormProps> = ({
                 work_content,
                 has_abnormal_conditions: hasAbnormalConditions,
                 abnormal_conditions_amount: abnormalAmount,
+                is_cuadro: isCuadro,
+                is_principal_specialist: isPrincipalSpecialist,
               })
               .eq("id", editingJob.id)
     
             if (updateError) throw updateError
+            await supabase.from("organization_job_preparation_levels").delete().eq("organization_job_id", editingJob.id)
+            if (selectedPreparationLevels.length > 0) {
+              const { error: prepError } = await supabase
+                .from("organization_job_preparation_levels")
+                .insert(selectedPreparationLevels.map(preparation_level_id => ({ organization_job_id: editingJob.id, preparation_level_id })))
+              if (prepError) throw prepError
+            }
             onSuccess()
           } else {
-            const { error: insertError } = await supabase
+            const { data: insertedJob, error: insertError } = await supabase
               .from("organization_jobs")
               .insert({
                 organization_entity_id: entityId,
                 name,
-                code,
                 area_id,
                 description,
                 salary_group_id: selectedGroup,
@@ -365,18 +390,26 @@ export const JobForm: React.FC<JobFormProps> = ({
                 work_content,
                 has_abnormal_conditions: hasAbnormalConditions,
                 abnormal_conditions_amount: abnormalAmount,
+                is_cuadro: isCuadro,
+                is_principal_specialist: isPrincipalSpecialist,
               })
+              .select("id")
+              .single()
     
             if (insertError) throw insertError
+            if (insertedJob && selectedPreparationLevels.length > 0) {
+              const { error: prepError } = await supabase
+                .from("organization_job_preparation_levels")
+                .insert(selectedPreparationLevels.map(preparation_level_id => ({ organization_job_id: insertedJob.id, preparation_level_id })))
+              if (prepError) throw prepError
+            }
             onSuccess()
           }
         } catch (err) {
       console.error("Error saving job:", err)
       const message =
         err instanceof Error ? err.message : "Error al guardar el cargo"
-      if (message.includes("organization_jobs_organization_entity_id_code_unique")) {
-        setFormError("Ya existe un cargo con ese código en esta entidad")
-      } else if (message.includes("categoría ocupacional")) {
+      if (message.includes("categoría ocupacional")) {
         setFormError("La categoría ocupacional es obligatoria para los cargos nuevos.")
       } else {
         setFormError(message)
@@ -424,14 +457,30 @@ export const JobForm: React.FC<JobFormProps> = ({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="job-code">Código *</Label>
-            <SiteCorpInput
-              id="job-code"
-              name="code"
-              defaultValue={editingJob?.code || ""}
-              placeholder="Ej.: ESP-RRHH"
-              required
-            />
+            <Label htmlFor="job-code">Código</Label>
+            {editingJob ? (
+              <SiteCorpInput
+                id="job-code"
+                name="code"
+                value={editingJob.code || ""}
+                readOnly
+                className="bg-muted/50"
+              />
+            ) : (
+              <SiteCorpInput
+                id="job-code"
+                name="code"
+                value=""
+                readOnly
+                placeholder="Se generará automáticamente"
+                className="bg-muted/50"
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              {editingJob
+                ? "Código generado automáticamente a partir del área y el nombre. Es de solo lectura."
+                : "El código se genera automáticamente al guardar, combinando el código del área y el nombre del cargo."}
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="job-order">Orden</Label>
@@ -506,6 +555,44 @@ export const JobForm: React.FC<JobFormProps> = ({
           </SiteCorpSelect>
           <p className="text-xs text-muted-foreground">
             Catálogo global de SiteCorp (Operario, Administrativo, Servicios, Técnico).
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="job-preparation-levels">Nivel de Preparación</Label>
+          <div className="flex flex-wrap gap-2">
+            {preparationLevels.map((level) => {
+              const checked = selectedPreparationLevels.includes(level.id)
+              return (
+                <label
+                  key={level.id}
+                  className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+                    checked
+                      ? "border-sitecorp-primary bg-sitecorp-primary/10 text-sitecorp-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-sitecorp-primary focus:ring-sitecorp-primary"
+                    checked={checked}
+                    onChange={(e) => {
+                      const id = level.id
+                      setSelectedPreparationLevels(
+                        e.target.checked
+                          ? [...selectedPreparationLevels, id]
+                          : selectedPreparationLevels.filter((l) => l !== id)
+                      )
+                    }}
+                  />
+                  <span>{level.name}</span>
+                  <span className="text-xs opacity-70">({level.code})</span>
+                </label>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Puede seleccionar una o varias opciones. Describe la preparación que admite/requiere el cargo.
           </p>
         </div>
 
@@ -637,8 +724,43 @@ export const JobForm: React.FC<JobFormProps> = ({
                   </div>
                 )}
               </div>
-        
-              {/* CONTENIDO DE TRABAJO */}
+                            
+                            {/* DOCUMENTACIÓN DEL CARGO */}
+                            <div className="space-y-4 border-t border-border pt-4">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Documentación del cargo
+                              </p>
+              
+                              <div className="space-y-2">
+                                <SiteCorpCheckbox
+                                  label="Cuadro"
+                                  checked={isCuadro}
+                                  onCheckedChange={(checked) => {
+                                    setIsCuadro(!!checked)
+                                    if (checked) setIsPrincipalSpecialist(false)
+                                  }}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Si está marcado, el motor documental no generará contrato alguno para este cargo.
+                                </p>
+                              </div>
+              
+                              <div className="space-y-2">
+                                <SiteCorpCheckbox
+                                  label="Especialista Principal"
+                                  checked={isPrincipalSpecialist}
+                                  onCheckedChange={(checked) => {
+                                    setIsPrincipalSpecialist(!!checked)
+                                    if (checked) setIsCuadro(false)
+                                  }}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Si está marcado, el motor documental espera una Resolución en lugar de contrato.
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* CONTENIDO DE TRABAJO */}
       <div className="space-y-4 border-t border-border pt-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Contenido de trabajo
