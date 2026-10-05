@@ -257,8 +257,11 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
   const [formError, setFormError] = React.useState<string | null>(null)
   const [formSuccess, setFormSuccess] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [hasManagePermission, setHasManagePermission] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+    const [hasManagePermission, setHasManagePermission] = React.useState(false)
+    // Documentos de verificación existentes, reconstruidos desde candidate_documents.
+    const [existingPreEmploymentDoc, setExistingPreEmploymentDoc] = React.useState<{ original_file_name: string } | null>(null)
+    const [existingCriminalRecordDoc, setExistingCriminalRecordDoc] = React.useState<{ original_file_name: string } | null>(null)
 
   // Fetch reference data
   React.useEffect(() => {
@@ -329,10 +332,24 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
         setCandidate(data)
 
         // Licencias de conducción de la persona (relación 0..N)
-        const licenseIds = await fetchCandidateDrivingLicenseIds(candidateId)
-
-        // Pre-populate form
-        setFormData({
+                const licenseIds = await fetchCandidateDrivingLicenseIds(candidateId)
+        
+                // Documentos de verificación existentes (Chequeo Preempleo / Antecedentes Penales).
+                // El estado de los checkboxes se reconstruye desde los documentos reales para no
+                // depender de un booleano independiente que pueda quedar desincronizado.
+                const { data: verificationDocs } = await supabase
+                  .from("candidate_documents")
+                  .select("id, document_type_id, original_file_name")
+                  .eq("candidate_id", candidateId)
+                  .in("document_type_id", ["PRE_EMPLOYMENT_CHECK", "CRIMINAL_RECORD"])
+        
+                const preDoc = verificationDocs?.find(d => d.document_type_id === "PRE_EMPLOYMENT_CHECK") || null
+                const crimDoc = verificationDocs?.find(d => d.document_type_id === "CRIMINAL_RECORD") || null
+                setExistingPreEmploymentDoc(preDoc)
+                setExistingCriminalRecordDoc(crimDoc)
+        
+                // Pre-populate form
+                setFormData({
           first_name: data.first_name,
           first_surname: data.first_surname,
           second_surname: data.second_surname || "",
@@ -353,8 +370,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           has_disciplinary_measures: data.has_disciplinary_measures || false,
           skin_color_id: data.skin_color_id || "",
           driving_license_ids: licenseIds,
-          has_pre_employment_check: false,
-          has_criminal_record_check: false,
+                    has_pre_employment_check: !!preDoc,
+                    has_criminal_record_check: !!crimDoc,
           pre_employment_check_file: null,
                     criminal_record_check_file: null,
                     disciplinary_document: null,
@@ -453,15 +470,26 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     }
 
     if (formData.education_level_id) {
-      const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
-      const requiresSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(educationLevel?.name || "")
-      if (requiresSpecialty && !formData.specialty.trim()) {
-        setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
-        return
-      }
-    }
-
-    if (formData.email.trim()) {
+          const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
+          const requiresSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(educationLevel?.name || "")
+          if (requiresSpecialty && !formData.specialty.trim()) {
+            setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
+            return
+          }
+        }
+    
+        // Chequeo Preempleo / Antecedentes Penales: el documento es obligatorio mientras
+        // el checkbox esté activado y todavía no exista un documento registrado.
+        if (formData.has_pre_employment_check && !formData.pre_employment_check_file && !existingPreEmploymentDoc) {
+          setFormError("Debe seleccionar el documento de Chequeo Preempleo")
+          return
+        }
+        if (formData.has_criminal_record_check && !formData.criminal_record_check_file && !existingCriminalRecordDoc) {
+          setFormError("Debe seleccionar el documento de Antecedentes Penales")
+          return
+        }
+    
+        if (formData.email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(formData.email.trim())) {
         setFormError("El formato del email no es válido")
@@ -796,100 +824,91 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           </div>
         </SiteCorpCard>
 
-        {/* Section 6: Medidas disciplinarias */}
-                <SiteCorpCard>
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-ink border-b pb-2">Medidas disciplinarias</h3>
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.has_disciplinary_measures}
-                          onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
-                      </label>
-                    </div>
-                  </div>
-                </SiteCorpCard>
+        {/* Section 6: Verificaciones y medidas disciplinarias */}
+                        <SiteCorpCard>
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-ink border-b pb-2">Verificaciones y medidas disciplinarias</h3>
         
-                {/* Section 7: Chequeo Preempleo y Antecedentes Penales */}
-                <SiteCorpCard>
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-ink border-b pb-2">Verificaciones de seguridad</h3>
-                    
-                    {/* Chequeo Preempleo */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 mb-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={formData.has_pre_employment_check}
-                            onChange={(e) => handleFormChange("has_pre_employment_check", e.target.checked)}
-                            className="rounded border-gray-300"
-                          />
-                          <span className="text-sm font-medium text-ink">Chequeo Preempleo</span>
-                        </label>
-                      </div>
-                      {formData.has_pre_employment_check && (
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium mb-1">Documento de Chequeo Preempleo</label>
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] || null
-                              handleFormChange("pre_employment_check_file", file)
-                            }}
-                            className="block w-full text-sm text-muted-foreground"
-                          />
-                          {formData.pre_employment_check_file && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {formData.pre_employment_check_file.name}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Antecedentes Penales */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 mb-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={formData.has_criminal_record_check}
-                            onChange={(e) => handleFormChange("has_criminal_record_check", e.target.checked)}
-                            className="rounded border-gray-300"
-                          />
-                          <span className="text-sm font-medium text-ink">Antecedentes Penales</span>
-                        </label>
-                      </div>
-                      {formData.has_criminal_record_check && (
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium mb-1">Documento de Antecedentes Penales</label>
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] || null
-                              handleFormChange("criminal_record_check_file", file)
-                            }}
-                            className="block w-full text-sm text-muted-foreground"
-                          />
-                          {formData.criminal_record_check_file && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {formData.criminal_record_check_file.name}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </SiteCorpCard>
+                            {/* Chequeo Preempleo */}
+                            <div className="space-y-3">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={formData.has_pre_employment_check}
+                                  onChange={(e) => handleFormChange("has_pre_employment_check", e.target.checked)}
+                                  className="rounded border-gray-300"
+                                />
+                                <span className="text-sm font-medium text-ink">Chequeo Preempleo</span>
+                              </label>
+                              {formData.has_pre_employment_check && (
+                                <div className="space-y-2 pl-6">
+                                  <label className="block text-sm font-medium">Documento de Chequeo Preempleo</label>
+                                  {existingPreEmploymentDoc && !formData.pre_employment_check_file && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Documento actual: {existingPreEmploymentDoc.original_file_name}
+                                    </p>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleFormChange("pre_employment_check_file", e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-muted-foreground"
+                                  />
+                                  {formData.pre_employment_check_file && (
+                                    <p className="text-xs text-muted-foreground">{formData.pre_employment_check_file.name}</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
         
-                {/* Form error */}
+                            {/* Antecedentes Penales */}
+                            <div className="space-y-3">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={formData.has_criminal_record_check}
+                                  onChange={(e) => handleFormChange("has_criminal_record_check", e.target.checked)}
+                                  className="rounded border-gray-300"
+                                />
+                                <span className="text-sm font-medium text-ink">Antecedentes Penales</span>
+                              </label>
+                              {formData.has_criminal_record_check && (
+                                <div className="space-y-2 pl-6">
+                                  <label className="block text-sm font-medium">Documento de Antecedentes Penales</label>
+                                  {existingCriminalRecordDoc && !formData.criminal_record_check_file && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Documento actual: {existingCriminalRecordDoc.original_file_name}
+                                    </p>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleFormChange("criminal_record_check_file", e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-muted-foreground"
+                                  />
+                                  {formData.criminal_record_check_file && (
+                                    <p className="text-xs text-muted-foreground">{formData.criminal_record_check_file.name}</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+        
+                            {/* Medida disciplinaria */}
+                            <div className="border-t pt-4">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={formData.has_disciplinary_measures}
+                                  onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
+                                  className="rounded border-gray-300"
+                                />
+                                <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
+                              </label>
+                            </div>
+                          </div>
+                        </SiteCorpCard>
+                
+                        {/* Form error */}
                 {formError && (
                   <SiteCorpAlert type="danger">{formError}</SiteCorpAlert>
                 )}

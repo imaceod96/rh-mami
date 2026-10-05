@@ -101,9 +101,13 @@ interface CandidateFormData {
   skin_color_id: string
   driving_license_ids: string[]
   political_affiliation: string
-  is_retired_or_rehired: string
-  has_disciplinary_measures: boolean
-}
+    is_retired_or_rehired: string
+    has_disciplinary_measures: boolean
+    has_pre_employment_check: boolean
+    has_criminal_record_check: boolean
+    pre_employment_check_file: File | null
+    criminal_record_check_file: File | null
+  }
 
 const emptyFormData: CandidateFormData = {
   first_name: "",
@@ -124,9 +128,13 @@ const emptyFormData: CandidateFormData = {
   skin_color_id: "",
   driving_license_ids: [],
   political_affiliation: "",
-  is_retired_or_rehired: "",
-  has_disciplinary_measures: false,
-}
+    is_retired_or_rehired: "",
+    has_disciplinary_measures: false,
+    has_pre_employment_check: false,
+    has_criminal_record_check: false,
+    pre_employment_check_file: null,
+    criminal_record_check_file: null,
+  }
 
 const CUBA_PROVINCES = [
   "Pinar del Río", "Artemisa", "La Habana", "Mayabeque", "Matanzas",
@@ -361,9 +369,9 @@ const EntityCandidates = () => {
   ])
 
   // Form handlers
-      const handleFormChange = (field: keyof CandidateFormData, value: string | boolean) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
-      }
+      const handleFormChange = (field: keyof CandidateFormData, value: string | boolean | File | null) => {
+            setFormData(prev => ({ ...prev, [field]: value }))
+          }
   
       // Al cambiar el Nivel educacional: si el nuevo nivel no requiere especialidad,
       // se limpia el valor para que se guarde como NULL.
@@ -432,11 +440,43 @@ const EntityCandidates = () => {
         setFormSuccess(true)
         setTimeout(() => setFormSuccess(false), 3000)
       } finally {
-        setDisciplinaryUploading(false)
-      }
-    }
-
-  const handleFormSubmit = async (e: React.FormEvent) => {
+              setDisciplinaryUploading(false)
+            }
+          }
+      
+        // Sube un documento de verificación del candidato (Chequeo Preempleo / Antecedentes
+        // Penales) al Storage privado y lo registra en candidate_documents. Se invoca DESPUÉS
+        // de crear el candidato, cuando ya existe candidate_id (nunca un documento huérfano).
+        const uploadCandidateVerificationDocument = async (
+          candidateId: string,
+          documentTypeId: string,
+          file: File,
+          description: string
+        ) => {
+          const fileExt = file.name.split(".").pop() || "pdf"
+          const storagePath = `candidates/${candidateId}/${documentTypeId}_${Date.now()}.${fileExt}`
+      
+          const { error: uploadError } = await supabase.storage
+            .from("documents")
+            .upload(storagePath, file)
+          if (uploadError) throw uploadError
+      
+          const { error: docError } = await supabase
+            .from("candidate_documents")
+            .insert({
+              candidate_id: candidateId,
+              document_type_id: documentTypeId,
+              original_file_name: file.name,
+              storage_path: storagePath,
+              mime_type: file.type,
+              file_size: file.size,
+              description,
+              uploaded_by: (await supabase.auth.getUser()).data.user?.id,
+            })
+          if (docError) throw docError
+        }
+      
+        const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     // Validation
@@ -480,12 +520,23 @@ const EntityCandidates = () => {
           const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
           const requiresSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(educationLevel?.name || "")
           if (requiresSpecialty && !formData.specialty.trim()) {
-            setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
-            return
-          }
-        }
-
-    // Validar formato de email si se proporciona
+                      setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
+                      return
+                    }
+                  }
+          
+              // Chequeo Preempleo / Antecedentes Penales: el documento es obligatorio mientras
+              // el checkbox esté activado para un nuevo registro.
+              if (formData.has_pre_employment_check && !formData.pre_employment_check_file) {
+                setFormError("Debe seleccionar el documento de Chequeo Preempleo")
+                return
+              }
+              if (formData.has_criminal_record_check && !formData.criminal_record_check_file) {
+                setFormError("Debe seleccionar el documento de Antecedentes Penales")
+                return
+              }
+          
+              // Validar formato de email si se proporciona
     if (formData.email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(formData.email.trim())) {
@@ -589,12 +640,41 @@ const EntityCandidates = () => {
             
                             if (docError) throw docError
                           } catch (docError) {
-                            console.error("Error saving disciplinary document reference:", docError)
-                            // Don't throw, the candidate was created successfully
-                          }
-                        }
-      
-            // Reset form and close
+                                                      console.error("Error saving disciplinary document reference:", docError)
+                                                      // Don't throw, the candidate was created successfully
+                                                    }
+                                                  }
+                                
+                                      // Chequeo Preempleo / Antecedentes Penales: se suben tras crear el candidato,
+                                      // cuando candidate_id ya existe, y se registran en candidate_documents.
+                                      if (candidateData?.id) {
+                                        if (formData.has_pre_employment_check && formData.pre_employment_check_file) {
+                                          try {
+                                            await uploadCandidateVerificationDocument(
+                                              candidateData.id,
+                                              "PRE_EMPLOYMENT_CHECK",
+                                              formData.pre_employment_check_file,
+                                              "Chequeo Preempleo"
+                                            )
+                                          } catch (verificationError) {
+                                            console.error("Error saving pre-employment check document:", verificationError)
+                                          }
+                                        }
+                                        if (formData.has_criminal_record_check && formData.criminal_record_check_file) {
+                                          try {
+                                            await uploadCandidateVerificationDocument(
+                                              candidateData.id,
+                                              "CRIMINAL_RECORD",
+                                              formData.criminal_record_check_file,
+                                              "Antecedentes Penales"
+                                            )
+                                          } catch (verificationError) {
+                                            console.error("Error saving criminal record document:", verificationError)
+                                          }
+                                        }
+                                      }
+                                
+                                      // Reset form and close
             setFormData(emptyFormData)
             setDisciplinaryDocument(null)
                         setDisciplinaryDocumentName(null)
@@ -1307,32 +1387,88 @@ const EntityCandidates = () => {
                           </div>
                         </div>
 
-            {/* Section 5: Medidas disciplinarias */}
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-ink border-b pb-2">Medidas disciplinarias</h3>
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.has_disciplinary_measures}
-                                onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
-                            </label>
-                          </div>
-                          {formData.has_disciplinary_measures && (
-                            <SiteCorpButton
-                              type="button"
-                              variant="outline"
-                              onClick={() => setDisciplinaryDialogOpen(true)}
-                              className="mt-2"
-                            >
-                              <Upload className="mr-2 h-4 w-4" />
-                              Subir documento disciplinario
-                            </SiteCorpButton>
-                          )}
-                        </div>
+            {/* Section 5: Verificaciones y medidas disciplinarias */}
+                                    <div className="space-y-4">
+                                      <h3 className="text-sm font-semibold text-ink border-b pb-2">Verificaciones y medidas disciplinarias</h3>
+            
+                                      {/* Chequeo Preempleo */}
+                                      <div className="space-y-2">
+                                        <label className="flex items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={formData.has_pre_employment_check}
+                                            onChange={(e) => handleFormChange("has_pre_employment_check", e.target.checked)}
+                                            className="rounded border-gray-300"
+                                          />
+                                          <span className="text-sm font-medium text-ink">Chequeo Preempleo</span>
+                                        </label>
+                                        {formData.has_pre_employment_check && (
+                                          <div className="space-y-2 pl-6">
+                                            <Label>Documento de Chequeo Preempleo *</Label>
+                                            <input
+                                              type="file"
+                                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                              onChange={(e) => handleFormChange("pre_employment_check_file", e.target.files?.[0] || null)}
+                                              className="block w-full text-sm text-muted-foreground"
+                                            />
+                                            {formData.pre_employment_check_file && (
+                                              <p className="text-xs text-muted-foreground">{formData.pre_employment_check_file.name}</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+            
+                                      {/* Antecedentes Penales */}
+                                      <div className="space-y-2">
+                                        <label className="flex items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={formData.has_criminal_record_check}
+                                            onChange={(e) => handleFormChange("has_criminal_record_check", e.target.checked)}
+                                            className="rounded border-gray-300"
+                                          />
+                                          <span className="text-sm font-medium text-ink">Antecedentes Penales</span>
+                                        </label>
+                                        {formData.has_criminal_record_check && (
+                                          <div className="space-y-2 pl-6">
+                                            <Label>Documento de Antecedentes Penales *</Label>
+                                            <input
+                                              type="file"
+                                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                              onChange={(e) => handleFormChange("criminal_record_check_file", e.target.files?.[0] || null)}
+                                              className="block w-full text-sm text-muted-foreground"
+                                            />
+                                            {formData.criminal_record_check_file && (
+                                              <p className="text-xs text-muted-foreground">{formData.criminal_record_check_file.name}</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+            
+                                      {/* Medida disciplinaria */}
+                                      <div className="space-y-2 border-t pt-4">
+                                        <label className="flex items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={formData.has_disciplinary_measures}
+                                            onChange={(e) => handleFormChange("has_disciplinary_measures", e.target.checked)}
+                                            className="rounded border-gray-300"
+                                          />
+                                          <span className="text-sm text-ink">Sí, tiene medidas disciplinarias</span>
+                                        </label>
+                                        {formData.has_disciplinary_measures && (
+                                          <SiteCorpButton
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => setDisciplinaryDialogOpen(true)}
+                                            className="mt-2"
+                                          >
+                                            <Upload className="mr-2 h-4 w-4" />
+                                            Subir documento disciplinario
+                                          </SiteCorpButton>
+                                        )}
+                                      </div>
+                                    </div>
             
                         {/* Form error */}
                         {formError && (
