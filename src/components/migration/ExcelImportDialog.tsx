@@ -319,7 +319,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                         </td>
                         <td className="px-4 py-3">
                           {row.isValid ? (
-                            <Badge variant="success" className="text-xs">Válido</Badge>
+                            <Badge variant="default" className="text-xs">Válido</Badge>
                           ) : (
                             <Badge variant="destructive" className="text-xs">Inválido</Badge>
                           )}

@@ -326,7 +326,7 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
                           {validationErrors.some(e => e.includes(row.worker.identification)) ? (
                             <Badge variant="destructive" className="text-xs">Error</Badge>
                           ) : (
-                            <Badge variant="success" className="text-xs">Válido</Badge>
+                            <Badge variant="default" className="text-xs">Válido</Badge>
                           )}
                         </td>
                       </tr>
@@ -383,7 +383,7 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
           </div>
         )}
 
-        <SiteCorpDialogFooter className="gap-2">
+        <DialogFooter className="gap-2">
           {step !== 'upload' && (
             <SiteCorpButton
               variant="outline"
@@ -417,8 +417,8 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
               Cerrar
             </SiteCorpButton>
           )}
-        </SiteCorpDialogFooter>
-      </SiteCorpDialogContent>
-    </SiteCorpDialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
