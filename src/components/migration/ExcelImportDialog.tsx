@@ -267,7 +267,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                   {importResult.total} filas analizadas, {importResult.valid} válidas, {importResult.invalid} inválidas
                 </p>
               </div>
-              <Badge variant={importResult.invalid === 0 ? "success" : "destructive"}>
+              <Badge variant={importResult.invalid === 0 ? "default" : "destructive"}>
                 {importResult.invalid === 0 ? 'Todo válido' : `${importResult.invalid} errores`}
               </Badge>
             </div>
