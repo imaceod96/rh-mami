@@ -448,7 +448,7 @@ const EntityCandidates = () => {
     // Validar especialidad para niveles que la requieren
         if (formData.education_level_id) {
           const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
-          const requiresSpecialty = ["Técnico", "Obrero"].includes(educationLevel?.name || "")
+          const requiresSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(educationLevel?.name || "")
           if (requiresSpecialty && !formData.specialty.trim()) {
             setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
             return
@@ -737,7 +737,7 @@ const EntityCandidates = () => {
                                           Todos
                                         </SelectItem>
                                         {educationLevels
-                                                                      .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico", "Bachiller", "Superior"].includes(level.name))
+                                                                      .filter(level => ["Primaria", "Secundaria", "Obrero Calificado", "Media", "Técnico Medio", "Superior"].includes(level.name))
                                                                       .map(level => (
                                                                         <SelectItem
                                                                           key={level.id}
@@ -1270,7 +1270,7 @@ const EntityCandidates = () => {
                             </div>
                             {(formData.education_level_id && (() => {
                                                           const level = educationLevels.find(l => l.id === formData.education_level_id)
-                                                          return level?.name === "Técnico" || level?.name === "Obrero"
+                                                          return level?.name === "Técnico Medio" || level?.name === "Obrero Calificado" || level?.name === "Superior"
                                                         })()) && (
                               <div className="space-y-1.5">
                                 <Label>Especialidad *</Label>

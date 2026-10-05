@@ -87,6 +87,11 @@ export interface CandidateFormData {
   has_disciplinary_measures: boolean
   skin_color_id: string
   driving_license_ids: string[]
+  // Chequeo Preempleo y Antecedentes Penales
+  has_pre_employment_check: boolean
+  has_criminal_record_check: boolean
+  pre_employment_check_file: File | null
+  criminal_record_check_file: File | null
 }
 
 export const emptyFormData: CandidateFormData = {
@@ -110,6 +115,10 @@ export const emptyFormData: CandidateFormData = {
   has_disciplinary_measures: false,
   skin_color_id: "",
   driving_license_ids: [],
+  has_pre_employment_check: false,
+  has_criminal_record_check: false,
+  pre_employment_check_file: null,
+  criminal_record_check_file: null,
 }
 
 const POLITICAL_AFFILIATIONS = [
@@ -330,7 +339,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
 
     if (formData.education_level_id) {
       const educationLevel = educationLevels.find(level => level.id === formData.education_level_id)
-      const requiresSpecialty = ["Técnico", "Obrero"].includes(educationLevel?.name || "")
+      const requiresSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(educationLevel?.name || "")
       if (requiresSpecialty && !formData.specialty.trim()) {
         setFormError(`La especialidad es obligatoria para ${educationLevel?.name}`)
         return
@@ -461,7 +470,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     )
   }
 
-  const requiresSpecialty = ["Técnico", "Obrero"].includes(
+  const requiresSpecialty = ["Obrero Calificado", "Técnico Medio", "Superior"].includes(
     educationLevels.find(l => l.id === formData.education_level_id)?.name || ""
   )
 
@@ -620,7 +629,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
                 <SiteCorpSelect value={formData.education_level_id || undefined} onValueChange={(value) => handleFormChange("education_level_id", value === "__placeholder__" ? "" : value)}>
                   <SelectItem value="__placeholder__">Seleccionar...</SelectItem>
                   {educationLevels
-                    .filter(level => ["Primaria", "Secundaria", "Obrero", "Técnico", "Bachiller", "Superior"].includes(level.name))
+                    .filter(level => ["Primaria", "Secundaria", "Obrero Calificado", "Media", "Técnico Medio", "Superior"].includes(level.name))
                     .map(level => (
                       <SelectItem key={level.id} value={level.id}>{level.name}</SelectItem>
                     ))}
