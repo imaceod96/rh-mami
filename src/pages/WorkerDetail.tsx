@@ -908,6 +908,18 @@ const WorkerDetail = () => {
     [position, currentAssignment, job, group, salary]
   )
 
+  const incompleteFields = React.useMemo(() => {
+    if (!worker) return [] as string[]
+    const fields: string[] = []
+    if (!worker.birth_date) fields.push("fecha de nacimiento")
+    if (!worker.gender_id) fields.push("sexo")
+    if (!worker.marital_status_id) fields.push("estado civil")
+    if (!worker.skin_color_id) fields.push("color de piel")
+    if (!worker.address) fields.push("dirección")
+    if (!worker.employment_start_date) fields.push("fecha de incorporación")
+    return fields
+  }, [worker])
+
   if (loading) {
     return (
       <div className="space-y-6 p-6">
@@ -941,6 +953,18 @@ const WorkerDetail = () => {
           </SiteCorpButton>
         }
       />
+
+      {incompleteFields.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Información incompleta</p>
+            <p className="text-sm text-amber-800">
+              Faltan estos datos: {incompleteFields.join(", ")}. Completa la ficha desde «Editar».
+            </p>
+          </div>
+        </div>
+      )}
 
       <Tabs defaultValue="resumen" className="w-full">
         <TabsList

@@ -1,10 +1,16 @@
 import { supabase } from "@/lib/supabase"
+import { ciToBirthDate } from "@/utils/ci"
 
+// Plantilla simplificada de Carga inicial. No incluye "Fecha nacimiento"
+// (se deriva de la identificación) ni "Código Puesto" (la carga inicial no
+// asigna puestos; la vinculación se hace después desde Trabajadores).
 export const MIGRATION_HEADERS = [
-  "Identificación", "Nombre", "Primer apellido", "Segundo apellido", "Fecha nacimiento", "Sexo",
-  "Estado civil", "Color de piel", "Teléfono", "Correo", "Dirección", "Provincia", "Municipio",
-  "Fecha de incorporación", "Nivel educacional", "Especialidad", "Profesión u oficio", "Tiene licencia",
-  "Categorías licencia", "Código Puesto", "Saldo inicial vacaciones", "Fecha corte vacaciones",
+  "Identificación", "Nombre", "Primer apellido", "Segundo apellido",
+  "Sexo", "Color de piel", "Estado civil", "Dirección",
+  "Fecha de incorporación", "Saldo inicial vacaciones", "Fecha corte vacaciones",
+  "Teléfono", "Correo", "Provincia", "Municipio",
+  "Nivel educacional", "Especialidad", "Profesión u oficio",
+  "Tiene licencia", "Categorías licencia",
 ] as const
 
 export interface MigrationRow {
@@ -105,12 +111,13 @@ export async function buildWorkerMigrationTemplate(): Promise<Blob> {
   instructions.addRows([
     ["Campo", "Instrucciones"],
     ["Identificación", "Obligatoria. Se conserva como texto; no elimine ceros ni cambie su formato."],
+    ["Fecha de nacimiento", "No se solicita: SiteCorp la deriva automáticamente de la identificación cuando es posible. Si no puede derivarse, el trabajador queda con información pendiente de completar."],
     ["Fechas", "Use DD/MM/YYYY o una fecha real de Excel. La fecha de incorporación es histórica."],
     ["Sexo / Estado civil / Color / Nivel", "Use el nombre del catálogo existente en la entidad/aplicación."],
     ["Tiene licencia", "Sí/No. Indique además las categorías separadas por coma cuando corresponda."],
-    ["Código Puesto", "Opcional. Código existente y activo; vacío crea el trabajador pendiente de vinculación."],
+    ["Puesto", "La carga inicial no asigna puestos: los trabajadores quedan pendientes de vinculación y se asignan después desde Trabajadores."],
     ["Saldo y corte de vacaciones", "Ambos son opcionales. Un saldo vacío queda desconocido; no se asume cero."],
-    ["Importación", "Complete la hoja Trabajadores. Revise Preview y resuelva todos los errores antes de confirmar."],
+    ["Flujo", "Complete la hoja Trabajadores, pulse Validar para revisar el Preview y luego Iniciar carga para crear los trabajadores."],
   ])
   instructions.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } }
   instructions.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF174A67" } }
@@ -196,6 +203,9 @@ export async function mapMigrationRows(rows: MigrationRow[]): Promise<MigrationR
   const licenseMap = catalogMaps(licenses.data || [])
   return rows.map((row) => ({
     ...row,
+    // Reutiliza la lógica existente de SiteCorp (ciToBirthDate) para derivar la
+    // fecha de nacimiento de la identificación. Nunca inventa una fecha.
+    birth_date: row.birth_date || ciToBirthDate(row.identification) || "",
     gender_id: mapCatalogValue(row.gender_id, genderMap),
     marital_status_id: mapCatalogValue(row.marital_status_id, maritalMap),
     skin_color_id: mapCatalogValue(row.skin_color_id, skinMap),
@@ -225,30 +235,48 @@ export async function validateWorkerMigration(entityId: string, rows: MigrationR
   const result = (backend.data || []) as MigrationPreviewRow[]
   return result.map((item, index) => {
     const row = rows[index]
-    const messages = [...item.messages]
+    const errors: string[] = []
+    const warnings: string[] = []
     const addCatalogError = (key: "gender_id" | "marital_status_id" | "skin_color_id" | "education_level_id", label: string) => {
       const value = row[key]
-      if (value && !catalogs[key].has(value)) messages.push(`${label} no existe en el catálogo.`)
+      if (value && !catalogs[key].has(value)) errors.push(`${label} no existe en el catálogo.`)
     }
     addCatalogError("gender_id", "Sexo")
     addCatalogError("marital_status_id", "Estado civil")
     addCatalogError("skin_color_id", "Color de piel")
     addCatalogError("education_level_id", "Nivel educacional")
     if (row.driving_license_category_ids.some((id) => !catalogs.driving_license_category_ids.has(id))) {
-      messages.push("Una o más categorías de licencia no existen en el catálogo.")
+      errors.push("Una o más categorías de licencia no existen en el catálogo.")
     }
     for (const [date, label] of [[row.birth_date, "Fecha de nacimiento"], [row.employment_start_date, "Fecha de incorporación"], [row.vacation_cutoff_date, "Fecha de corte de vacaciones"]]) {
-      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) messages.push(`${label} inválida.`)
+      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push(`${label} inválida.`)
     }
     if (row.initial_vacation_balance) {
       const amount = Number(row.initial_vacation_balance)
-      if (!Number.isFinite(amount) || amount < 0 || amount > 24) messages.push("Saldo inicial de vacaciones inválido; debe estar entre 0 y 24 días.")
+      if (!Number.isFinite(amount) || amount < 0 || amount > 24) errors.push("Saldo inicial de vacaciones inválido; debe estar entre 0 y 24 días.")
     }
-    return {
-      ...item,
-      status: messages.some((message) => !item.messages.includes(message)) || item.status === "ERROR" ? "ERROR" : item.status,
-      messages,
+
+    // Información que puede completarse posteriormente. No bloquea la carga.
+    const incomplete: string[] = []
+    if (!row.birth_date) incomplete.push("fecha de nacimiento")
+    if (!row.gender_id) incomplete.push("sexo")
+    if (!row.marital_status_id) incomplete.push("estado civil")
+    if (!row.skin_color_id) incomplete.push("color de piel")
+    if (!row.address) incomplete.push("dirección")
+    if (incomplete.length) {
+      warnings.push(`Información incompleta: falta ${incomplete.join(", ")}. Podrá completarse después desde Trabajadores.`)
     }
+
+    const messages = [...item.messages, ...errors, ...warnings]
+    // El aviso de "pendiente de vinculación" del backend es el estado normal de
+    // la carga inicial: no degrada la fila a advertencia por sí mismo.
+    const status: MigrationPreviewRow["status"] =
+      item.status === "ERROR" || errors.length > 0
+        ? "ERROR"
+        : warnings.length > 0
+          ? "WARNING"
+          : "VALID"
+    return { ...item, status, messages }
   })
 }
 
