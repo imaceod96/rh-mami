@@ -63,7 +63,7 @@ const EntitySettings = () => {
               description: "Descarga la plantilla Excel, valida filas y carga trabajadores históricos.",
               icon: FileSpreadsheet,
               href: `/entity/${currentEntity?.id}/settings/initial-import`,
-              permissions: ["workers.initial_import", "workers.manage"],
+              permissions: ["workers.manage"],
             },
             {
               title: "Datos contractuales",

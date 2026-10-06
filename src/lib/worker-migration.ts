@@ -238,7 +238,7 @@ export async function validateWorkerMigration(entityId: string, rows: MigrationR
       messages.push("Una o más categorías de licencia no existen en el catálogo.")
     }
     for (const [date, label] of [[row.birth_date, "Fecha de nacimiento"], [row.employment_start_date, "Fecha de incorporación"], [row.vacation_cutoff_date, "Fecha de corte de vacaciones"]]) {
-      if (date && !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) messages.push(`${label} inválida.`)
+      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) messages.push(`${label} inválida.`)
     }
     if (row.initial_vacation_balance) {
       const amount = Number(row.initial_vacation_balance)
@@ -268,11 +268,11 @@ export async function createMigratedWorker(entityId: string, row: MigrationRow) 
   return data as { worker_id: string; code: string; assignment_id: string | null; contract_id: string | null }
 }
 
-export async function linkMigratedWorker(workerId: string, positionId: string, startDate: string) {
+export async function linkMigratedWorker(workerId: string, positionId: string) {
   const { data, error } = await supabase.rpc("link_worker_to_position", {
     p_worker_id: workerId,
     p_position_id: positionId,
-    p_start_date: startDate,
+    p_start_date: null,
   })
   if (error) throw error
   return data as { assignment_id: string; position_id: string; position_name: string; start_date: string }

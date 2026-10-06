@@ -33,7 +33,8 @@ interface BatchHistory {
 const EntitySettingsInitialImport = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const { permissions, loading: permissionLoading } = useEntityPermissions(entityId)
-  const allowed = permissions.includes("workers.initial_import") || permissions.includes("workers.manage")
+  const canManageWorkers = permissions.includes("workers.manage")
+  const allowed = permissions.includes("workers.initial_import") || canManageWorkers
   const [file, setFile] = React.useState<File | null>(null)
   const [rows, setRows] = React.useState<MigrationRow[]>([])
   const [preview, setPreview] = React.useState<MigrationPreviewRow[]>([])
@@ -87,7 +88,7 @@ const EntitySettingsInitialImport = () => {
   }
 
   const handleValidate = async () => {
-    if (!file || !entityId) return
+    if (!file || !entityId || !allowed) return
     setBusy(true)
     setError("")
     setNotice("")
@@ -112,7 +113,7 @@ const EntitySettingsInitialImport = () => {
   const canImport = preview.length > 0 && errorCount === 0 && !busy
 
   const handleImport = async () => {
-    if (!entityId || !canImport) return
+    if (!entityId || !allowed || !canImport) return
     setBusy(true)
     setError("")
     try {
@@ -144,7 +145,7 @@ const EntitySettingsInitialImport = () => {
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sky-800"><FileSpreadsheet className="h-5 w-5" /></div>
             <h2 className="text-lg font-semibold text-slate-900">1. Descarga la plantilla</h2>
             <p className="mt-1 text-sm text-slate-700">Incluye las columnas compatibles con los datos actuales, instrucciones y hojas de trabajo para carga inicial.</p>
-            <Button className="mt-4" onClick={handleDownload} disabled={busy}><Download className="mr-2 h-4 w-4" />Descargar plantilla Excel</Button>
+            {allowed && <Button className="mt-4" onClick={handleDownload} disabled={busy}><Download className="mr-2 h-4 w-4" />Descargar plantilla Excel</Button>}
           </div>
           <div className="rounded-2xl border border-dashed border-slate-300 p-5">
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800"><Upload className="h-5 w-5" /></div>
@@ -155,9 +156,9 @@ const EntitySettingsInitialImport = () => {
               <SiteCorpInput id="initial-import-file" type="file" accept=".xlsx" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] || null); setPreview([]); setRows([]); setError("") }} />
               {file && <p className="text-sm font-medium text-slate-700">{file.name}</p>}
             </div>
-            <Button variant="outline" className="mt-4" onClick={handleValidate} disabled={!file || busy}>
+            {allowed && <Button variant="outline" className="mt-4" onClick={handleValidate} disabled={!file || busy}>
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Validar
-            </Button>
+            </Button>}
           </div>
         </div>
       </SiteCorpCard>

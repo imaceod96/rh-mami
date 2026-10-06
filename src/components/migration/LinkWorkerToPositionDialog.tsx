@@ -9,9 +9,9 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SelectItem } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 
-interface Props { workerId: string; employmentStartDate: string; positions: WorkerPositionOption[]; onSuccess: () => void; onCancel: () => void }
+interface Props { workerId: string; positions: WorkerPositionOption[]; onSuccess: () => void; onCancel: () => void }
 
-export function LinkWorkerToPositionDialog({ workerId, employmentStartDate, positions, onSuccess, onCancel }: Props) {
+export function LinkWorkerToPositionDialog({ workerId, positions, onSuccess, onCancel }: Props) {
   const { entityId } = useParams<{ entityId: string }>()
   const [positionId, setPositionId] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -40,7 +40,7 @@ export function LinkWorkerToPositionDialog({ workerId, employmentStartDate, posi
     setBusy(true)
     setError("")
     try {
-      await linkMigratedWorker(workerId, positionId, employmentStartDate || new Date().toISOString().slice(0, 10))
+      await linkMigratedWorker(workerId, positionId)
       onSuccess()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se pudo vincular al puesto.")

@@ -160,7 +160,7 @@ const EntityStaffing = () => {
   }
 
   const currentAssignment = (w: WorkerRow) =>
-    (w.assignments || []).find(a => a.is_current && !a.end_date) || null
+    (w.assignments || []).find(a => a.is_current && !a.end_date && a.position?.is_active) || null
 
   const loadData = React.useCallback(async () => {
     if (!entityId) {
@@ -782,7 +782,7 @@ const EntityStaffing = () => {
 
                         {canManage && (
                           <div className="flex items-center gap-1">
-                            {w.employment_status === "active" && !assignment && (
+                            {w.employment_status === "active" && (!assignment || !position) && (
                               <SiteCorpButton variant="outline" size="sm" onClick={() => setLinkWorkerId(w.id)}>Vincular a plantilla</SiteCorpButton>
                             )}
                             <button
@@ -948,7 +948,6 @@ const EntityStaffing = () => {
           <DialogHeader><DialogTitle>Vincular a plantilla</DialogTitle><DialogDescription>La fecha histórica de incorporación no cambia. Esta acción crea únicamente un Assignment.</DialogDescription></DialogHeader>
           {linkWorkerId && <LinkWorkerToPositionDialog
             workerId={linkWorkerId}
-            employmentStartDate={workers.find((worker) => worker.id === linkWorkerId)?.employment_start_date || workers.find((worker) => worker.id === linkWorkerId)?.hire_date || ""}
             positions={positionOptions}
             onCancel={() => setLinkWorkerId(null)}
             onSuccess={async () => { await loadData(); setLinkWorkerId(null); showNotice("success", "Trabajador vinculado a la plantilla. Fecha de incorporación preservada.") }}
