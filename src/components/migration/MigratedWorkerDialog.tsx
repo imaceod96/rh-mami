@@ -72,6 +72,10 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
     setBusy(true)
     setError("")
     try {
+      const startDate = form.employment_start_date.trim()
+      if (!startDate) throw new Error("Indica la fecha en la que el trabajador comenzó a trabajar en la entidad.")
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error("La fecha de incorporación no es válida.")
+      if (startDate > new Date().toISOString().slice(0, 10)) throw new Error("La fecha de incorporación no puede ser futura.")
       const balance = form.initial_vacation_balance.trim().replace(/\s/g, "").replace(",", ".")
       if (balance && !/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(balance)) throw new Error("El saldo inicial de vacaciones no es válido.")
       const row: MigrationRow = {
@@ -110,7 +114,12 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
       {field("Segundo apellido", "second_surname")}{field("Fecha de nacimiento", "birth_date", "date")}{catalog("Sexo", "gender_id")}
       {catalog("Estado civil", "marital_status_id")}{catalog("Color de piel", "skin_color_id")}{field("Teléfono", "phone")}
       {field("Correo", "email", "email")}{field("Dirección", "address")}{field("Provincia", "province")}
-      {field("Municipio", "municipality")}{field("Fecha de incorporación", "employment_start_date", "date", true)}
+      {field("Municipio", "municipality")}
+      <div className="space-y-1.5" key="employment_start_date">
+        <Label htmlFor="migration-employment_start_date">Fecha de incorporación *</Label>
+        <SiteCorpInput id="migration-employment_start_date" type="date" value={form.employment_start_date} required onChange={(event) => set("employment_start_date", event.target.value)} />
+        <p className="text-xs text-slate-500">Fecha en la que el trabajador comenzó a trabajar en la entidad.</p>
+      </div>
       {catalog("Nivel educacional", "education_level_id")}{field("Especialidad", "specialty")}{field("Profesión u oficio", "profession_or_trade")}
     </div>
     <p className="-mt-1 text-xs text-slate-600">La fecha de nacimiento se deriva del carné de identidad cuando es posible; puede completarla manualmente si no se deriva.</p>

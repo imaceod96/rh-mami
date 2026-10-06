@@ -216,12 +216,28 @@ const EntitySettingsInitialImport = () => {
               <Label htmlFor="initial-import-file">Archivo Excel</Label>
               <SiteCorpInput id="initial-import-file" type="file" accept=".xlsx" disabled={busy} onChange={(event) => onSelectFile(event.target.files?.[0] || null)} />
               {file && <p className="text-sm font-medium text-slate-700">{file.name}</p>}
-              {file && !isValidated && <p className="text-xs text-amber-700">Pulse Validar para analizar este archivo.</p>}
+                {file && !isValidated && <p className="text-xs text-amber-700">Archivo seleccionado. Validación pendiente.</p>}
+              </div>
+              {allowed && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Button variant="outline" onClick={handleValidate} disabled={!file || busy}>
+                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Validar
+                  </Button>
+                  <Button onClick={() => setConfirmOpen(true)} disabled={!canImport}>
+                    <ClipboardCheck className="mr-2 h-4 w-4" />Iniciar migración
+                  </Button>
+                </div>
+              )}
+              {allowed && (
+                <p className={`mt-2 text-xs ${canImport ? "text-emerald-700" : errorCount > 0 ? "text-red-700" : "text-amber-700"}`}>
+                  {errorCount > 0
+                    ? "Corrige los errores detectados antes de iniciar la migración."
+                    : hasPreview
+                      ? `Se crearán ${importableRows} trabajadores.`
+                      : "Valida el archivo antes de iniciar la migración."}
+                </p>
+              )}
             </div>
-            {allowed && <Button variant="outline" className="mt-4" onClick={handleValidate} disabled={!file || busy}>
-              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Validar
-            </Button>}
-          </div>
         </div>
       </SiteCorpCard>
 
@@ -233,21 +249,13 @@ const EntitySettingsInitialImport = () => {
           <Summary label="Errores" value={errorCount} tone="error" />
         </div>
         <SiteCorpCard className="rounded-2xl">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Preview de migración</h2>
-              <p className="text-sm text-slate-600">Validar no modifica datos. Iniciar migración crea los trabajadores reales (sin vinculación a puestos).</p>
-            </div>
-            <Button onClick={() => setConfirmOpen(true)} disabled={!canImport}>
-              <ClipboardCheck className="mr-2 h-4 w-4" />Iniciar migración
-            </Button>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Preview de migración</h2>
+            <p className="text-sm text-slate-600">Validar no modifica datos. Iniciar migración crea los trabajadores reales (sin vinculación a puestos).</p>
           </div>
           {errorCount > 0
             ? <SiteCorpAlert type="danger">Corrige los errores antes de iniciar la migración. El lote no se ejecutará.</SiteCorpAlert>
-            : <div className="space-y-1">
-                <SiteCorpAlert type="info">Se crearán {importableRows} trabajadores.</SiteCorpAlert>
-                {incompleteCount > 0 && <SiteCorpAlert type="warning">{incompleteCount} trabajadores tienen información pendiente de completar.</SiteCorpAlert>}
-              </div>}
+            : incompleteCount > 0 && <SiteCorpAlert type="warning">{incompleteCount} trabajadores tienen información pendiente de completar.</SiteCorpAlert>}
           <div className="mt-4 overflow-x-auto rounded-xl border">
             <Table>
               <TableHeader><TableRow><TableHead>Fila</TableHead><TableHead>Identificación</TableHead><TableHead>Trabajador</TableHead><TableHead>Nacimiento</TableHead><TableHead>Incorporación</TableHead><TableHead>Estado y detalle</TableHead></TableRow></TableHeader>
