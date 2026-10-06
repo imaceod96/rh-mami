@@ -143,16 +143,30 @@ export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow
   const ExcelJS = mod?.default ?? mod
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(await file.arrayBuffer())
-  const sheet = workbook.getWorksheet("Trabajadores")
-  if (!sheet) throw new Error("El archivo debe incluir la hoja «Trabajadores».")
-  const headerIndex = new Map<string, number>()
-  sheet.getRow(1).eachCell((cell: any, column: number) => headerIndex.set(excelText(cell.value).toLowerCase(), column))
+  const sheet = workbook.getWorksheet("Trabajadores") || workbook.worksheets[0]
+  if (!sheet) throw new Error("El archivo no contiene ninguna hoja de trabajo.")
+  const indexHeaders = (rowNumber: number) => {
+    const map = new Map<string, number>()
+    sheet.getRow(rowNumber).eachCell((cell: any, column: number) => map.set(excelText(cell.value).toLowerCase(), column))
+    return map
+  }
+  // Busca la fila de encabezados en las primeras filas (por si hay títulos previos).
+  let headerRow = 1
+  let headerIndex = indexHeaders(1)
+  for (let candidate = 1; candidate <= Math.min(5, sheet.rowCount); candidate += 1) {
+    const map = indexHeaders(candidate)
+    if (map.has("identificación")) {
+      headerRow = candidate
+      headerIndex = map
+      break
+    }
+  }
   const required = ["identificación", "nombre", "primer apellido", "fecha de incorporación"]
   const missing = required.filter((header) => !headerIndex.has(header))
   if (missing.length) throw new Error(`Faltan columnas requeridas: ${missing.join(", ")}.`)
   const get = (row: any, header: string) => row.getCell(headerIndex.get(header.toLowerCase()) || 0).value
   const rows: MigrationRow[] = []
-  for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber += 1) {
+  for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber)
     const nonEmpty = row.values?.some((value: unknown) => excelText(value) !== "")
     if (!nonEmpty) continue

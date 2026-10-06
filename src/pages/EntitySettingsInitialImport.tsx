@@ -137,7 +137,9 @@ const EntitySettingsInitialImport = () => {
   const errorCount = preview.filter((row) => row.status === "ERROR").length
   const importableRows = preview.length - errorCount
   const incompleteCount = warningCount
-  const canImport = isValidated && preview.length > 0 && errorCount === 0 && !busy
+  // El Preview solo existe tras una validación vigente (se limpia al cambiar de archivo).
+  const hasPreview = preview.length > 0
+  const canImport = hasPreview && errorCount === 0 && !busy
 
   // INICIAR MIGRACIÓN: crea Workers reales. Nunca crea Assignments ni documentos.
   const handleStartMigration = async () => {
@@ -223,7 +225,7 @@ const EntitySettingsInitialImport = () => {
         </div>
       </SiteCorpCard>
 
-      {isValidated && preview.length > 0 && <>
+      {hasPreview && <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Summary label="Total" value={preview.length} tone="neutral" />
           <Summary label="Válidos" value={validCount} tone="valid" />
@@ -250,7 +252,7 @@ const EntitySettingsInitialImport = () => {
             <Table>
               <TableHeader><TableRow><TableHead>Fila</TableHead><TableHead>Identificación</TableHead><TableHead>Trabajador</TableHead><TableHead>Nacimiento</TableHead><TableHead>Incorporación</TableHead><TableHead>Estado y detalle</TableHead></TableRow></TableHeader>
               <TableBody>{preview.map((item, index) => {
-                const row = rows[index]
+                const row = (rows[index] || {}) as MigrationRow
                 const status = item.status
                 return <TableRow key={index}>
                   <TableCell>{index + 2}</TableCell>

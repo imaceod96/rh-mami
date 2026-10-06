@@ -96,7 +96,11 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
     <SiteCorpInput id={`migration-${key}`} type={type} value={form[key]} onChange={(event) => (onChange ? onChange(event.target.value) : set(key, event.target.value))} required={required} />
   </div>
   const catalog = (label: string, key: "gender_id" | "marital_status_id" | "skin_color_id" | "education_level_id") => <div className="space-y-1.5" key={key}>
-    <Label>{label}</Label><SiteCorpSelect value={form[key]} onValueChange={(value) => set(key, value)}><SelectItem value="">Sin especificar</SelectItem>{(catalogs[key] || []).map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SiteCorpSelect>
+    <Label>{label}</Label>
+    <SiteCorpSelect value={form[key] || undefined} onValueChange={(value) => set(key, value === "__placeholder__" ? "" : value)}>
+      <SelectItem value="__placeholder__">Sin especificar</SelectItem>
+      {(catalogs[key] || []).filter((item) => item.id && item.id.trim() !== "").map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+    </SiteCorpSelect>
   </div>
 
   return <form className="space-y-5" onSubmit={submit}>
