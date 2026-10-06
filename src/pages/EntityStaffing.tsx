@@ -13,6 +13,9 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SelectItem } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
+import { MigratedWorkerDialog } from "@/components/migration/MigratedWorkerDialog"
+import { LinkWorkerToPositionDialog } from "@/components/migration/LinkWorkerToPositionDialog"
 import {
   ArrowLeft,
   Users,
@@ -25,6 +28,7 @@ import {
   Briefcase,
   Download,
   Loader2,
+  UserPlus,
 } from "lucide-react"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import {
@@ -96,6 +100,7 @@ interface WorkerRow {
   second_surname: string | null
   identification: string
   hire_date: string
+  employment_start_date?: string | null
   employment_status: string
   assignments: {
     id: string
@@ -142,8 +147,11 @@ const EntityStaffing = () => {
   const [jobFilter, setJobFilter] = React.useState("all")
   const [positionFilter, setPositionFilter] = React.useState("all")
   const [statusFilter, setStatusFilter] = React.useState<WorkerStatusFilter>("active")
+  const [assignmentFilter, setAssignmentFilter] = React.useState("all")
 
   const [workerDialogOpen, setWorkerDialogOpen] = React.useState(false)
+  const [migrationDialogOpen, setMigrationDialogOpen] = React.useState(false)
+  const [linkWorkerId, setLinkWorkerId] = React.useState<string | null>(null)
   const [editingWorker, setEditingWorker] = React.useState<WorkerEditingData | null>(null)
 
   const showNotice = (type: "success" | "danger" | "info", message: string) => {
@@ -152,7 +160,7 @@ const EntityStaffing = () => {
   }
 
   const currentAssignment = (w: WorkerRow) =>
-    (w.assignments || []).find(a => a.is_current && !a.end_date && a.position) || null
+    (w.assignments || []).find(a => a.is_current && !a.end_date) || null
 
   const loadData = React.useCallback(async () => {
     if (!entityId) {
@@ -310,17 +318,22 @@ const EntityStaffing = () => {
 
   // Conteo de asignaciones activas por puesto (para calcular vacantes reales)
     const assignmentsPerPosition = React.useMemo(() => {
-    const counts = new Map<string, number>()
-    activeWorkers.forEach(w => {
-      const a = currentAssignment(w)
-      if (a) {
-        counts.set(a.position_id, (counts.get(a.position_id) || 0) + 1)
-      }
-    })
-    return counts
-  }, [activeWorkers])
-
-  // Número de trabajadores con asignación activa
+      const counts = new Map<string, number>()
+      activeWorkers.forEach(w => {
+        const a = currentAssignment(w)
+        if (a) {
+          counts.set(a.position_id, (counts.get(a.position_id) || 0) + 1)
+        }
+      })
+      return counts
+    }, [activeWorkers])
+  
+    const pendingWorkers = React.useMemo(
+      () => activeWorkers.filter((worker) => currentAssignment(worker) === null),
+      [activeWorkers]
+    )
+  
+    // Número de trabajadores con asignación activa
   const occupiedCount = React.useMemo(
     () => activeWorkers.filter(w => currentAssignment(w) !== null).length,
     [activeWorkers]
@@ -398,6 +411,9 @@ const EntityStaffing = () => {
     const search = workerSearch.trim().toLowerCase()
     let list = workers
 
+    if (assignmentFilter === "linked") list = list.filter((worker) => currentAssignment(worker) !== null)
+    else if (assignmentFilter === "pending") list = list.filter((worker) => worker.employment_status === "active" && currentAssignment(worker) === null)
+
     const aFilter = areaFilter !== "all" ? areaFilter : null
     const jFilter = jobFilter !== "all" ? jobFilter : null
     const pFilter = positionFilter !== "all" ? positionFilter : null
@@ -432,7 +448,7 @@ const EntityStaffing = () => {
     return list.sort((a, b) =>
       fullName(a).localeCompare(fullName(b))
     )
-  }, [workers, workerSearch, areaFilter, jobFilter, positionFilter, statusFilter])
+  }, [workers, workerSearch, areaFilter, jobFilter, positionFilter, statusFilter, assignmentFilter])
 
   // ---------- Handlers ----------
 
@@ -555,6 +571,11 @@ const EntityStaffing = () => {
               )}
               {exporting ? "Generando Excel..." : "Descargar Excel"}
             </SiteCorpButton>
+            {canManage && (
+              <SiteCorpButton variant="outline" onClick={() => setMigrationDialogOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" /> Migrar trabajador
+              </SiteCorpButton>
+            )}
             {canManage && activePositions.length > 0 && (
               <SiteCorpButton onClick={openCreateWorkerDialog} disabled={vacantCount === 0}>
                 <Plus className="mr-2 h-4 w-4" /> Nuevo trabajador
@@ -583,19 +604,19 @@ const EntityStaffing = () => {
         ))}
       </div>
 
-      {/* Sin puestos configurados */}
+      {/* Si no hay puestos aún, sigue siendo posible revisar y migrar trabajadores. */}
       {activePositions.length === 0 ? (
         <SiteCorpCard>
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
             <Network className="mb-4 h-12 w-12 text-muted-foreground" />
-            <h4 className="mb-1 text-base font-semibold text-ink">No hay puestos configurados.</h4>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Configura primero la estructura de plantilla de esta entidad.
-            </p>
-            <SiteCorpButton onClick={() => navigate(`/entity/${entityId}/settings/staffing`)}>
-              <Settings className="mr-2 h-4 w-4" /> Configurar plantilla
-            </SiteCorpButton>
+            <h4 className="mb-1 text-base font-semibold text-ink">Todavía no hay puestos configurados.</h4>
+            <p className="mb-4 text-sm text-muted-foreground">Los trabajadores migrados sin puesto quedarán pendientes de vinculación.</p>
+            <div className="flex gap-2">
+              {canManage && <SiteCorpButton onClick={() => setMigrationDialogOpen(true)}><UserPlus className="mr-2 h-4 w-4" />Migrar trabajador</SiteCorpButton>}
+              <SiteCorpButton variant="outline" onClick={() => navigate(`/entity/${entityId}/settings/staffing`)}><Settings className="mr-2 h-4 w-4" />Configurar plantilla</SiteCorpButton>
+            </div>
           </div>
+          {pendingWorkers.length > 0 && <div className="mt-5 space-y-2">{pendingWorkers.map((worker) => <div key={worker.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3"><Link to={`/entity/${entityId}/staffing/workers/${worker.id}`} className="font-medium text-sitecorp-primary">{fullName(worker)}</Link><Badge variant="outline">Pendiente de vinculación</Badge></div>)}</div>}
         </SiteCorpCard>
       ) : (
         <SiteCorpCard>
@@ -677,6 +698,11 @@ const EntityStaffing = () => {
                   <SelectItem value="inactive">Inactivos</SelectItem>
                   <SelectItem value="all">Todos</SelectItem>
                 </SiteCorpSelect>
+                <SiteCorpSelect value={assignmentFilter} onValueChange={setAssignmentFilter}>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="linked">Vinculados</SelectItem>
+                  <SelectItem value="pending">Pendientes de vinculación</SelectItem>
+                </SiteCorpSelect>
               </div>
 
               {filteredWorkers.length === 0 ? (
@@ -744,15 +770,21 @@ const EntityStaffing = () => {
                             )}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            Alta: {w.hire_date}
+                            Alta: {w.employment_start_date || w.hire_date}
                           </span>
                           <SiteCorpStatusBadge status={w.employment_status === "active" ? "success" : "neutral"}>
                             {w.employment_status === "active" ? "Activo" : "Inactivo"}
                           </SiteCorpStatusBadge>
+                                          {w.employment_status === "active" && (!assignment || !position) && (
+                            <Badge variant="outline" className="border-amber-500 text-amber-800">Pendiente de vinculación</Badge>
+                          )}
                         </div>
 
                         {canManage && (
                           <div className="flex items-center gap-1">
+                            {w.employment_status === "active" && !assignment && (
+                              <SiteCorpButton variant="outline" size="sm" onClick={() => setLinkWorkerId(w.id)}>Vincular a plantilla</SiteCorpButton>
+                            )}
                             <button
                               type="button"
                               onClick={() => openEditWorkerDialog(w)}
@@ -894,6 +926,35 @@ const EntityStaffing = () => {
           </Tabs>
         </SiteCorpCard>
       )}
+
+      <Dialog open={migrationDialogOpen} onOpenChange={setMigrationDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader><DialogTitle>Migrar trabajador</DialogTitle><DialogDescription>Crea un Worker histórico directamente. El puesto es opcional; no se generan contratos ni documentos.</DialogDescription></DialogHeader>
+          <MigratedWorkerDialog
+            positions={positionOptions}
+            onCancel={() => setMigrationDialogOpen(false)}
+            onSuccess={async (workerId, pending) => {
+              await loadData()
+              setMigrationDialogOpen(false)
+              showNotice("success", pending ? "Trabajador migrado. Pendiente de vinculación." : "Trabajador migrado con asignación inicial.")
+              if (pending) setAssignmentFilter("pending")
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!linkWorkerId} onOpenChange={(open) => { if (!open) setLinkWorkerId(null) }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader><DialogTitle>Vincular a plantilla</DialogTitle><DialogDescription>La fecha histórica de incorporación no cambia. Esta acción crea únicamente un Assignment.</DialogDescription></DialogHeader>
+          {linkWorkerId && <LinkWorkerToPositionDialog
+            workerId={linkWorkerId}
+            employmentStartDate={workers.find((worker) => worker.id === linkWorkerId)?.employment_start_date || workers.find((worker) => worker.id === linkWorkerId)?.hire_date || ""}
+            positions={positionOptions}
+            onCancel={() => setLinkWorkerId(null)}
+            onSuccess={async () => { await loadData(); setLinkWorkerId(null); showNotice("success", "Trabajador vinculado a la plantilla. Fecha de incorporación preservada.") }}
+          />}
+        </DialogContent>
+      </Dialog>
 
       {/* Nuevo / Editar Trabajador */}
       <Dialog

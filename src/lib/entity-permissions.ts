@@ -55,6 +55,7 @@ export const ENTITY_PERMISSION_LABELS: Record<string, string> = {
 
   "workers.view": "Ver trabajadores",
   "workers.manage": "Gestionar trabajadores",
+  "workers.initial_import": "Carga inicial y migración de trabajadores",
 
   "hiring.view": "Ver contratación",
   "hiring.manage": "Gestionar contratación",
@@ -100,7 +101,7 @@ export const ENTITY_PERMISSION_GROUPS: EntityPermissionGroup[] = [
   { title: "ROLES Y PERMISOS", codes: ["roles.view", "roles.manage"] },
   { title: "CANDIDATOS", codes: ["candidates.view", "candidates.manage"] },
   { title: "CONFIGURACIÓN DE PLANTILLA", codes: ["staffing.view", "staffing.manage"] },
-  { title: "TRABAJADORES", codes: ["workers.view", "workers.manage"] },
+  { title: "TRABAJADORES", codes: ["workers.view", "workers.manage", "workers.initial_import"] },
   { title: "CONTRATACIÓN", codes: ["hiring.view", "hiring.manage"] },
   { title: "COMPENSACIÓN", codes: ["salary.view", "salary.manage", "tenure_scale.view", "tenure_scale.manage"] },
   { title: "CONTRATOS", codes: ["contracts.view", "contracts.manage"] },

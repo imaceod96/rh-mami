@@ -828,10 +828,30 @@ BEGIN
         LIMIT 1
     ) band ON true
     WHERE e.period_id = v_period.id
-      AND e.worker_id = w.id;
+      AND e.worker_id = w.id
+      AND EXISTS (
+          SELECT 1 FROM public.worker_position_assignments current_assignment
+          JOIN public.organization_positions valid_position ON valid_position.id = current_assignment.position_id
+          WHERE current_assignment.worker_id = w.id
+            AND current_assignment.is_current = true
+            AND current_assignment.end_date IS NULL
+            AND valid_position.is_active = true
+            AND valid_position.organization_entity_id = w.organization_entity_id
+      );
 
-    -- Solo trabajadores con Puesto actual: un trabajador pendiente de
-    -- vinculación no participa en la prenómina (sin salario/jornada ficticios).
+    DELETE FROM public.prenomina_worker_entries e
+    WHERE e.period_id = v_period.id
+      AND NOT EXISTS (
+          SELECT 1 FROM public.worker_position_assignments current_assignment
+          JOIN public.organization_positions valid_position ON valid_position.id = current_assignment.position_id
+          WHERE current_assignment.worker_id = e.worker_id
+            AND current_assignment.is_current = true
+            AND current_assignment.end_date IS NULL
+            AND valid_position.is_active = true
+            AND valid_position.organization_entity_id = e.organization_entity_id
+      );
+
+    -- Solo trabajadores con Puesto actual válido: los pendientes no participan en Prenómina.
     INSERT INTO public.prenomina_worker_entries (
         period_id, organization_entity_id, worker_id,
         worker_name_snapshot, identification_snapshot,

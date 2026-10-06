@@ -64,9 +64,6 @@ import {
 import { JobForm } from "@/components/JobForm"
 import { AreaForm } from "@/components/AreaForm"
 import { PositionForm, type PositionJobOption, type PositionEditingData } from "@/components/PositionForm"
-import { MigrationDialog } from "@/components/migration/MigrationDialog"
-import { ExcelImportDialog } from "@/components/migration/ExcelImportDialog"
-
 interface OrganizationArea {
   id: string
   organization_entity_id: string
@@ -246,8 +243,6 @@ const EntitySettingsStaffing = () => {
   const [positionDialogOpen, setPositionDialogOpen] = React.useState(false)
   const [editingPosition, setEditingPosition] = React.useState<PositionEditingData | null>(null)
   const [activeTab, setActiveTab] = React.useState("areas")
-    const [migrationDialogOpen, setMigrationDialogOpen] = React.useState(false)
-    const [excelImportDialogOpen, setExcelImportDialogOpen] = React.useState(false)
 
   const showNotice = (type: "success" | "danger", message: string) => {
     setNotice({ type, message })
@@ -904,17 +899,9 @@ const EntitySettingsStaffing = () => {
               title="Configuración de plantilla"
               description="Define la estructura organizativa y los puestos autorizados de esta entidad."
               actions={
-                <>
-                  <SiteCorpButton onClick={() => setMigrationDialogOpen(true)}>
-                    <Upload className="mr-2 h-4 w-4" /> Migrar trabajadores
-                  </SiteCorpButton>
-                  <SiteCorpButton variant="outline" onClick={() => setExcelImportDialogOpen(true)}>
-                    <FileText className="mr-2 h-4 w-4" /> Importar desde Excel
-                  </SiteCorpButton>
-                  <SiteCorpButton variant="outline" onClick={() => navigate(`/entity/${entityId}/settings`)}>
-                    <ArrowLeft className="mr-2 h-4 w-4" /> Volver a ajustes
-                  </SiteCorpButton>
-                </>
+                <SiteCorpButton variant="outline" onClick={() => navigate(`/entity/${entityId}/settings`)}>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Volver a ajustes
+                </SiteCorpButton>
               }
             />
 
@@ -1457,29 +1444,6 @@ const EntitySettingsStaffing = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Migration Dialog */}
-      <MigrationDialog
-        entityId={entityId!}
-        open={migrationDialogOpen}
-        onOpenChange={setMigrationDialogOpen}
-        onSuccess={() => {
-          setMigrationDialogOpen(false)
-          loadData()
-          showNotice("success", "Migración completada")
-        }}
-      />
-
-      {/* Excel Import Dialog */}
-      <ExcelImportDialog
-        entityId={entityId!}
-        open={excelImportDialogOpen}
-        onOpenChange={setExcelImportDialogOpen}
-        onSuccess={() => {
-          setExcelImportDialogOpen(false)
-          loadData()
-          showNotice("success", "Importación completada")
-        }}
-      />
 
     </div>
   )

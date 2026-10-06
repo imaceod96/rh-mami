@@ -4,7 +4,7 @@ import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
-import { Users, Shield, Scale, FileText, Network, ClipboardList, FileType2, Briefcase } from "lucide-react"
+import { Users, Shield, Scale, FileText, Network, ClipboardList, FileType2, Briefcase, FileSpreadsheet } from "lucide-react"
 
 interface SettingsItem {
   title: string
@@ -52,14 +52,21 @@ const EntitySettings = () => {
             },
             {
               title: "Configuración de plantilla",
-        description:
-          "Configura las áreas, cargos y puestos que conforman la estructura de plantilla de la entidad.",
-        icon: Network,
-        href: `/entity/${currentEntity?.id}/settings/staffing`,
-        permissions: ["staffing.view", "staffing.manage"],
-      },
-      {
-        title: "Datos contractuales",
+              description:
+                "Configura las áreas, cargos y puestos que conforman la estructura de plantilla de la entidad.",
+              icon: Network,
+              href: `/entity/${currentEntity?.id}/settings/staffing`,
+              permissions: ["staffing.view", "staffing.manage"],
+            },
+            {
+              title: "Carga inicial de trabajadores",
+              description: "Descarga la plantilla Excel, valida filas y carga trabajadores históricos.",
+              icon: FileSpreadsheet,
+              href: `/entity/${currentEntity?.id}/settings/initial-import`,
+              permissions: ["workers.initial_import", "workers.manage"],
+            },
+            {
+              title: "Datos contractuales",
         description:
           "Datos contractuales de la entidad y representantes autorizados para la formalización de contratos.",
         icon: ClipboardList,
