@@ -11,6 +11,7 @@ import { SalaryProvider } from "@/contexts/SalaryContext"
 import { PlatformAdminLayout } from "@/components/platform-admin-layout"
 import EntityRouteWrapper from "@/components/entity-route-wrapper"
 import { TenantLayout } from "@/components/tenant-layout"
+import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import Login from "./pages/Login"
 import Index from "./pages/Index"
 import Organization from "./pages/Organization"
@@ -97,10 +98,8 @@ class AppErrorBoundary extends React.Component<
 // Loading screen component
 const LoadingScreen = () => (
   <div className="min-h-screen flex items-center justify-center bg-sitecorp-background">
-    <div className="text-center">
-      <div className="inline-flex h-16 w-16 items-center justify-center rounded-xl bg-sitecorp-primary mb-4 animate-pulse">
-        <span className="text-2xl font-bold text-white">SC</span>
-      </div>
+    <div className="flex flex-col items-center text-center">
+      <SiteCorpBrand variant="isotype" size="lg" className="mb-4 animate-pulse" />
       <p className="text-sm text-muted-foreground">Cargando SiteCorp...</p>
     </div>
   </div>

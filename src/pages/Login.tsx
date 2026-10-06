@@ -6,6 +6,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
+import { SiteCorpBrand } from "@/components/sitecorp-brand"
 
 const Login = () => {
   const navigate = useNavigate()
@@ -41,12 +42,9 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-sitecorp-background p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-xl bg-sitecorp-primary mb-4">
-            <span className="text-2xl font-bold text-white">SC</span>
-          </div>
-          <h1 className="text-2xl font-bold text-ink">SiteCorp</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <SiteCorpBrand variant="full" size="lg" className="mb-4" />
+          <p className="text-sm text-muted-foreground">
             Gestión de RRHH
           </p>
         </div>

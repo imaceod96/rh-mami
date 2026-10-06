@@ -3,6 +3,7 @@ import { Outlet, Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { cn } from "@/lib/utils"
+import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import {
   LayoutDashboard,
   Building2,
@@ -53,9 +54,7 @@ const TenantLayout = React.forwardRef<
         {/* Logo / Brand */}
         <div className="flex h-16 items-center border-b border-border px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sitecorp-primary">
-              <span className="text-lg font-bold text-white">SC</span>
-            </div>
+            <SiteCorpBrand variant="isotype" size="sm" />
             <div>
               <h2 className="text-base font-semibold text-ink">SiteCorp</h2>
               <p className="text-xs text-muted-foreground">{currentTenant?.name || "Tenant"}</p>
