@@ -18,6 +18,14 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        // Inter: interfaz general y cuerpo de texto.
+        sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        // Montserrat: títulos y encabezados.
+        heading: ["Montserrat", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        // JetBrains Mono: contenido técnico/código.
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
