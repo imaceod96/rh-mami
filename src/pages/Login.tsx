@@ -42,11 +42,12 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-sitecorp-background p-4">
       <div className="w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <SiteCorpBrand variant="full" size="lg" className="mb-4" />
-          <p className="text-sm text-muted-foreground">
-            Gestión de RRHH
-          </p>
+        <div className="mb-6 flex justify-center">
+          <SiteCorpBrand
+            variant="full"
+            size="lg"
+            className="w-full max-w-[420px] h-auto sm:h-auto"
+          />
         </div>
 
         <SiteCorpCard>
