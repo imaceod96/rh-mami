@@ -247,6 +247,16 @@ const EntityPrenomina = () => {
     [entries]
   )
 
+  const grandTenure = React.useMemo(
+    () => entries.reduce((acc, e) => acc + Number(e.tenure_payment || 0), 0),
+    [entries]
+  )
+
+  const tenureIssues = React.useMemo(
+    () => entries.filter((e) => e.tenure_status !== "OK").length,
+    [entries]
+  )
+
   if (permissionsLoading || loading) {
     return <SiteCorpLoading />
   }
@@ -390,6 +400,15 @@ const EntityPrenomina = () => {
               </p>
             ) : (
               <>
+                {tenureIssues > 0 && (
+                  <SiteCorpAlert type="warning">
+                    {tenureIssues} trabajador(es) con antigüedad pendiente: sin fecha de
+                    incorporación o sin tramo de la escala de antigüedad. Corrige la ficha del
+                    trabajador o configura la Escala de pago de antigüedad; la prenómina no podrá
+                    cerrarse hasta resolverlo.
+                  </SiteCorpAlert>
+                )}
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -401,6 +420,7 @@ const EntityPrenomina = () => {
                       <TableHead>Días trabajados</TableHead>
                       <TableHead>Horas calculadas</TableHead>
                       <TableHead>Pago salario escala</TableHead>
+                      <TableHead>Antigüedad</TableHead>
                       <TableHead>Nocturnidad</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead className="text-right">Detalle</TableHead>
@@ -423,6 +443,25 @@ const EntityPrenomina = () => {
                         <TableCell>{entry.worked_days}</TableCell>
                         <TableCell>{entry.worked_hours}</TableCell>
                         <TableCell>{formatMoney(entry.scale_salary_payment)}</TableCell>
+                        <TableCell>
+                          {entry.tenure_status === "NO_START_DATE" ? (
+                            <span className="text-xs font-medium text-sitecorp-danger">
+                              Sin fecha de incorporación
+                            </span>
+                          ) : entry.tenure_status === "NO_BAND" ? (
+                            <span className="text-xs font-medium text-sitecorp-danger">
+                              Sin tramo de antigüedad configurado
+                            </span>
+                          ) : (
+                            <span
+                              title={`${entry.tenure_band_label || ""} · ${
+                                entry.tenure_years ?? 0
+                              } año(s)`}
+                            >
+                              {formatMoney(entry.tenure_payment)}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell>{formatMoney(entry.total_night_payment)}</TableCell>
                         <TableCell className="font-medium text-ink">{formatMoney(entry.total_payment)}</TableCell>
                         <TableCell className="text-right">
@@ -441,7 +480,13 @@ const EntityPrenomina = () => {
                   </TableBody>
                 </Table>
 
-                <div className="flex justify-end border-t pt-4">
+                <div className="flex flex-wrap items-center justify-end gap-4 border-t pt-4">
+                  <div className="rounded-xl border border-border px-5 py-3">
+                    <span className="text-sm text-muted-foreground">Total antigüedad: </span>
+                    <span className="text-base font-semibold text-ink">
+                      {formatMoney(grandTenure)} {entries[0]?.salary_currency || "CUP"}
+                    </span>
+                  </div>
                   <div className="rounded-xl border-2 border-sitecorp-primary/30 bg-sitecorp-primary/5 px-5 py-3">
                     <span className="text-sm text-muted-foreground">TOTAL PRENÓMINA: </span>
                     <span className="text-lg font-semibold text-ink">

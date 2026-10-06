@@ -60,6 +60,18 @@ export interface PrenominaWorkerEntry {
   worked_hours: number
   hourly_scale_rate: number
   scale_salary_payment: number
+  // Antigüedad (Fase 2)
+  employment_start_date_snapshot: string | null
+  tenure_reference_date: string | null
+  tenure_years: number | null
+  tenure_months: number | null
+  tenure_total_months: number | null
+  tenure_band_id: string | null
+  tenure_band_label: string | null
+  tenure_base_amount: number | null
+  tenure_hourly_rate: number
+  tenure_payment: number
+  tenure_status: string
   night_payment_19_23: number
   night_payment_23_07: number
   total_night_payment: number
@@ -183,6 +195,8 @@ export interface EntryPreview {
   hourlyRate: number
   workedHours: number
   scaleSalaryPayment: number
+  tenureHourlyRate: number
+  tenurePayment: number
   nightPayment19_23: number
   nightPayment23_07: number
   totalNightPayment: number
@@ -191,6 +205,7 @@ export interface EntryPreview {
 
 export function computeEntryPreview(
   salaryScaleAmount: number | null,
+  tenureBaseAmount: number | null,
   workdayHours: number | null,
   workedDays: number,
   nights: NightPreview[]
@@ -199,8 +214,14 @@ export function computeEntryPreview(
     salaryScaleAmount && salaryScaleAmount > 0
       ? Math.round((salaryScaleAmount / MONTHLY_SALARY_HOURS_DIVISOR) * 1e6) / 1e6
       : 0
+  // Antigüedad: mismo divisor y MISMAS horas trabajadas que el salario escala.
+  const tenureHourlyRate =
+    tenureBaseAmount && tenureBaseAmount > 0
+      ? Math.round((tenureBaseAmount / MONTHLY_SALARY_HOURS_DIVISOR) * 1e6) / 1e6
+      : 0
   const workedHours = Math.round((workedDays || 0) * (workdayHours || 0) * 1e4) / 1e4
   const scaleSalaryPayment = Math.round(workedHours * hourlyRate * 100) / 100
+  const tenurePayment = Math.round(workedHours * tenureHourlyRate * 100) / 100
   const nightPayment19_23 = Math.round(nights.reduce((acc, n) => acc + n.payment19_23, 0) * 100) / 100
   const nightPayment23_07 = Math.round(nights.reduce((acc, n) => acc + n.payment23_07, 0) * 100) / 100
   const totalNightPayment = Math.round((nightPayment19_23 + nightPayment23_07) * 100) / 100
@@ -208,11 +229,35 @@ export function computeEntryPreview(
     hourlyRate,
     workedHours,
     scaleSalaryPayment,
+    tenureHourlyRate,
+    tenurePayment,
     nightPayment19_23,
     nightPayment23_07,
     totalNightPayment,
-    totalPayment: Math.round((scaleSalaryPayment + totalNightPayment) * 100) / 100,
+    totalPayment: Math.round((scaleSalaryPayment + tenurePayment + totalNightPayment) * 100) / 100,
   }
+}
+
+/** Etiqueta legible de la antigüedad del período: "X años, Y meses". */
+export const formatTenureLabel = (
+  years: number | null,
+  months: number | null
+): string => {
+  if (years === null || years === undefined) return "—"
+  const y = Number(years)
+  const m = Number(months || 0)
+  const yLabel = `${y} año${y === 1 ? "" : "s"}`
+  if (m <= 0) return yLabel
+  return `${yLabel}, ${m} mes${m === 1 ? "" : "es"}`
+}
+
+/** dd/mm/aaaa a partir de una fecha ISO. */
+export const formatDateDMY = (value: string | null | undefined): string => {
+  if (!value) return "—"
+  const iso = String(value).slice(0, 10)
+  const [y, m, d] = iso.split("-")
+  if (!y || !m || !d) return "—"
+  return `${d}/${m}/${y}`
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +311,12 @@ const normalizeEntry = (row: any): PrenominaWorkerEntry => ({
   worked_hours: Number(row.worked_hours || 0),
   hourly_scale_rate: Number(row.hourly_scale_rate || 0),
   scale_salary_payment: Number(row.scale_salary_payment || 0),
+  tenure_years: toNumberOrNull(row.tenure_years),
+  tenure_months: toNumberOrNull(row.tenure_months),
+  tenure_total_months: toNumberOrNull(row.tenure_total_months),
+  tenure_base_amount: toNumberOrNull(row.tenure_base_amount),
+  tenure_hourly_rate: Number(row.tenure_hourly_rate || 0),
+  tenure_payment: Number(row.tenure_payment || 0),
   night_payment_19_23: Number(row.night_payment_19_23 || 0),
   night_payment_23_07: Number(row.night_payment_23_07 || 0),
   total_night_payment: Number(row.total_night_payment || 0),
@@ -398,16 +449,24 @@ export const PRENOMINA_EXPORT_HEADERS = [
   "Días Trabajados",
   "Horas Trabajadas",
   "Pago Salario Escala",
+  "Fecha de Incorporación",
+  "Antigüedad",
+  "Tramo de Antigüedad",
+  "Importe Base Antigüedad",
+  "Tarifa Antigüedad/Hora",
+  "Pago Antigüedad",
   "Nocturnidad 19–23",
   "Nocturnidad 23–07",
   "Total Nocturnidad",
   "Total Trabajador",
 ] as const
 
-const COLUMN_WIDTHS = [6, 32, 18, 22, 26, 26, 14, 14, 14, 14, 14, 18, 16, 16, 16, 16]
+const COLUMN_WIDTHS = [
+  6, 32, 18, 22, 26, 26, 14, 14, 14, 14, 14, 18, 20, 18, 20, 20, 18, 16, 16, 16, 16, 16,
+]
 
 /** Números monetarios/numerados: índices (1-based) de columnas numéricas del Excel. */
-const NUMERIC_COLUMNS = [8, 9, 10, 11, 12, 13, 14, 15, 16]
+const NUMERIC_COLUMNS = [8, 9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22]
 
 export function buildPrenominaFileName(entityName: string, year: number, month: number): string {
   const safeName =
@@ -470,6 +529,7 @@ export async function buildPrenominaWorkbookBlob(
     headerRow.alignment = { vertical: "middle" }
 
   let totalScale = 0
+  let totalTenure = 0
   let total19 = 0
   let total23 = 0
   let totalNight = 0
@@ -479,6 +539,14 @@ export async function buildPrenominaWorkbookBlob(
     const nights = nightsByEntry[entry.id] || []
     const p19 = nights.reduce((acc, n) => acc + Number(n.payment_19_23 || 0), 0)
     const p23 = nights.reduce((acc, n) => acc + Number(n.payment_23_07 || 0), 0)
+    const tenureLabel =
+      entry.tenure_status === "NO_START_DATE"
+        ? "Sin fecha de incorporación"
+        : formatTenureLabel(entry.tenure_years, entry.tenure_months)
+    const bandLabel =
+      entry.tenure_status === "NO_BAND"
+        ? "Sin tramo de antigüedad configurado"
+        : entry.tenure_band_label || "—"
     const row = sheet.addRow([
       index + 1,
       entry.worker_name_snapshot,
@@ -492,6 +560,12 @@ export async function buildPrenominaWorkbookBlob(
       entry.worked_days,
       entry.worked_hours,
       entry.scale_salary_payment,
+      formatDateDMY(entry.employment_start_date_snapshot),
+      tenureLabel,
+      bandLabel,
+      entry.tenure_base_amount,
+      entry.tenure_hourly_rate,
+      entry.tenure_payment,
       p19,
       p23,
       entry.total_night_payment,
@@ -508,6 +582,7 @@ export async function buildPrenominaWorkbookBlob(
     })
 
     totalScale += Number(entry.scale_salary_payment || 0)
+    totalTenure += Number(entry.tenure_payment || 0)
     total19 += p19
     total23 += p23
     totalNight += Number(entry.total_night_payment || 0)
@@ -528,6 +603,12 @@ export async function buildPrenominaWorkbookBlob(
     "",
     "",
     Math.round(totalScale * 100) / 100,
+    "",
+    "",
+    "",
+    "",
+    "",
+    Math.round(totalTenure * 100) / 100,
     Math.round(total19 * 100) / 100,
     Math.round(total23 * 100) / 100,
     Math.round(totalNight * 100) / 100,

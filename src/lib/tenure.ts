@@ -21,19 +21,28 @@ export interface TenureResult {
 }
 
 /**
- * Calcula la antigüedad desde una fecha de inicio hasta hoy.
+ * Calcula la antigüedad desde una fecha de inicio hasta una fecha de referencia.
  *
- * @param startDate Fecha de contratación (formato YYYY-MM-DD o Date).
+ * @param startDate Fecha de incorporación (formato YYYY-MM-DD o Date).
+ * @param referenceDate Fecha de evaluación (por defecto, hoy). Prenómina usa el
+ *   último día del mes del período, no la fecha actual.
  * @returns Resultado con años, meses y descripción humana.
  */
-export function calculateTenure(startDate: string | Date | null | undefined): TenureResult | null {
+export function calculateTenure(
+  startDate: string | Date | null | undefined,
+  referenceDate?: string | Date | null
+): TenureResult | null {
   if (!startDate) return null
 
   const start = typeof startDate === "string" ? new Date(startDate) : startDate
   if (isNaN(start.getTime())) return null
 
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const reference = referenceDate
+    ? (typeof referenceDate === "string" ? new Date(referenceDate) : referenceDate)
+    : new Date()
+  if (isNaN(reference.getTime())) return null
+
+  const today = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate())
   const from = new Date(start.getFullYear(), start.getMonth(), start.getDate())
 
   if (from > today) return null
@@ -44,6 +53,15 @@ export function calculateTenure(startDate: string | Date | null | undefined): Te
   if (months < 0) {
     years--
     months += 12
+  }
+
+  // Ajuste por día del mes: 20/12/2021 → 30/11/2026 todavía no cumple 5 años.
+  if (today.getDate() < from.getDate()) {
+    months--
+    if (months < 0) {
+      years--
+      months += 12
+    }
   }
 
   const totalMonths = years * 12 + months

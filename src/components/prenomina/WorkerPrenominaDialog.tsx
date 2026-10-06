@@ -16,10 +16,12 @@ import {
   type PrenominaNightEntry,
   computeEntryPreview,
   computeNightPreview,
+  formatDateDMY,
   formatDecimalInput,
   formatHours,
   formatMoney,
   formatMoneyWithCurrency,
+  formatTenureLabel,
   parseDecimalInput,
   parseIntegerInput,
 } from "@/lib/prenomina"
@@ -83,10 +85,15 @@ const WorkerPrenominaDialog = ({
   const nightPreviews = rows.map((r) => computeNightPreview(r.start, r.end, parseIntegerInput(r.nights)))
   const preview = computeEntryPreview(
     entry.salary_scale_amount,
+    entry.tenure_base_amount,
     entry.workday_hours,
     workedDaysValue,
     nightPreviews
   )
+
+  // Antigüedad: dato derivado, solo lectura (se corrige en la ficha / escala).
+  const tenureMissingStart = entry.tenure_status === "NO_START_DATE"
+  const tenureMissingBand = entry.tenure_status === "NO_BAND"
 
   const updateRow = (index: number, patch: Partial<NightRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)))
@@ -180,6 +187,78 @@ const WorkerPrenominaDialog = ({
                 {formatMoneyWithCurrency(preview.hourlyRate, currency)}
               </span>
             </div>
+          </div>
+
+          {/* Antigüedad (dato derivado, solo lectura) */}
+          <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-ink">Antigüedad</h4>
+              <span className="rounded-full bg-sitecorp-primary/10 px-2 py-0.5 text-[11px] font-medium text-sitecorp-primary">
+                Solo lectura
+              </span>
+            </div>
+
+            {tenureMissingStart ? (
+              <SiteCorpAlert type="danger">
+                Sin fecha de incorporación: no se puede calcular la antigüedad. Corrige la Fecha de
+                incorporación en la ficha del trabajador.
+              </SiteCorpAlert>
+            ) : (
+              <>
+                {tenureMissingBand && (
+                  <SiteCorpAlert type="warning">
+                    Sin tramo de antigüedad configurado para la antigüedad calculada. Configura la
+                    Escala de pago de antigüedad de la entidad.
+                  </SiteCorpAlert>
+                )}
+                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">Fecha de incorporación: </span>
+                    <span className="font-medium text-ink">
+                      {formatDateDMY(entry.employment_start_date_snapshot)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Antigüedad al cierre del período: </span>
+                    <span className="font-medium text-ink">
+                      {formatTenureLabel(entry.tenure_years, entry.tenure_months)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tramo aplicado: </span>
+                    <span className="font-medium text-ink">{entry.tenure_band_label || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Importe del tramo: </span>
+                    <span className="font-medium text-ink">
+                      {entry.tenure_base_amount !== null
+                        ? formatMoneyWithCurrency(entry.tenure_base_amount, currency)
+                        : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tarifa antigüedad/hora: </span>
+                    <span className="font-medium text-ink">
+                      {formatMoneyWithCurrency(preview.tenureHourlyRate, currency)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Horas trabajadas: </span>
+                    <span className="font-medium text-ink">{formatHours(preview.workedHours)} h</span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-muted-foreground">Pago por antigüedad: </span>
+                    <span className="font-semibold text-ink">
+                      {formatMoneyWithCurrency(preview.tenurePayment, currency)}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Evaluada al último día del mes del período. Para corregirla, edita la Fecha de
+                  incorporación o la Escala de antigüedad en su módulo.
+                </p>
+              </>
+            )}
           </div>
 
           {/* Días trabajados */}
@@ -286,7 +365,13 @@ const WorkerPrenominaDialog = ({
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border p-3 text-sm">
+              <span className="text-muted-foreground">Pago antigüedad: </span>
+              <span className="font-medium text-ink">
+                {formatMoneyWithCurrency(preview.tenurePayment, currency)}
+              </span>
+            </div>
             <div className="rounded-xl border border-border p-3 text-sm">
               <span className="text-muted-foreground">Total nocturnidad: </span>
               <span className="font-medium text-ink">

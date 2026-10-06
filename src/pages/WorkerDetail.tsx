@@ -144,6 +144,7 @@ interface WorkerDetail {
   phone: string | null
   email: string | null
   hire_date: string
+  employment_start_date: string | null
   employment_status: string
   created_at: string
   updated_at: string
@@ -444,15 +445,22 @@ const WorkerDetail = () => {
             }
             setWorker(mappedWorker as WorkerDetail)
             
-                  // Calcular antigüedad desde la fecha REAL de contratación (hire_date).
-                  const t = calculateTenure(mappedWorker.hire_date)
+                  // Antigüedad desde la fecha canónica de incorporación laboral
+                  // (employment_start_date; fallback histórico a hire_date).
+                  const t = calculateTenure(
+                    mappedWorker.employment_start_date || mappedWorker.hire_date
+                  )
                   setTenure(t)
             
                   // Resolver pago por antigüedad aplicable.
                   try {
                     const { data: tenureData } = await supabase.rpc(
                       "resolve_tenure_payment_for_worker",
-                      { p_entity_id: entityId, p_worker_id: workerId }
+                      {
+                        p_entity_id: entityId,
+                        p_worker_id: workerId,
+                        p_reference_date: new Date().toISOString().slice(0, 10),
+                      }
                     )
                     if (tenureData && Array.isArray(tenureData) && tenureData.length > 0) {
                       const row = tenureData[0] as any
