@@ -184,15 +184,15 @@ const EntitySettingsInitialImport = () => {
       {notice && <SiteCorpAlert type="success">{notice}</SiteCorpAlert>}
 
       {summary && (
-        <SiteCorpCard className="rounded-2xl border-emerald-200 bg-emerald-50/60">
+        <SiteCorpCard className="rounded-2xl border-sitecorp-success/30 bg-sitecorp-success/5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-emerald-900">Migración completada</h2>
-              <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-sm text-emerald-900 sm:grid-cols-4">
-                <div><dt className="text-emerald-700">Trabajadores creados</dt><dd className="text-xl font-semibold">{summary.created}</dd></div>
-                <div><dt className="text-emerald-700">Con información completa</dt><dd className="text-xl font-semibold">{summary.complete}</dd></div>
-                <div><dt className="text-emerald-700">Con información pendiente</dt><dd className="text-xl font-semibold">{summary.incomplete}</dd></div>
-                <div><dt className="text-emerald-700">Pendientes de vinculación</dt><dd className="text-xl font-semibold">{summary.pending}</dd></div>
+              <h2 className="text-lg font-semibold text-sitecorp-success">Migración completada</h2>
+              <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-sm text-ink sm:grid-cols-4">
+                <div><dt className="text-sitecorp-success">Trabajadores creados</dt><dd className="text-xl font-semibold">{summary.created}</dd></div>
+                <div><dt className="text-sitecorp-success">Con información completa</dt><dd className="text-xl font-semibold">{summary.complete}</dd></div>
+                <div><dt className="text-sitecorp-success">Con información pendiente</dt><dd className="text-xl font-semibold">{summary.incomplete}</dd></div>
+                <div><dt className="text-sitecorp-success">Pendientes de vinculación</dt><dd className="text-xl font-semibold">{summary.pending}</dd></div>
               </dl>
             </div>
             <Button onClick={() => navigate(`/entity/${entityId}/staffing`)}>Ir a Trabajadores</Button>
@@ -202,21 +202,21 @@ const EntitySettingsInitialImport = () => {
 
       <SiteCorpCard className="rounded-2xl">
         <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-          <div className="rounded-2xl bg-sky-50 p-5">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sky-800"><FileSpreadsheet className="h-5 w-5" /></div>
+          <div className="rounded-2xl bg-sitecorp-primary/5 p-5">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sitecorp-primary"><FileSpreadsheet className="h-5 w-5" /></div>
             <h2 className="text-lg font-semibold text-slate-900">1. Descarga la plantilla</h2>
             <p className="mt-1 text-sm text-slate-700">Plantilla simplificada. La fecha de nacimiento no se solicita: se deriva de la identificación cuando es posible.</p>
             {allowed && <Button className="mt-4" onClick={handleDownload} disabled={busy}><Download className="mr-2 h-4 w-4" />Descargar plantilla Excel</Button>}
           </div>
           <div className="rounded-2xl border border-dashed border-slate-300 p-5">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800"><Upload className="h-5 w-5" /></div>
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-sitecorp-success/10 text-sitecorp-success"><Upload className="h-5 w-5" /></div>
             <h2 className="text-lg font-semibold text-slate-900">2. Cargar y validar archivo</h2>
             <p className="mt-1 text-sm text-slate-600">Archivo .xlsx, máximo 10 MB. Validar solo analiza el archivo: no crea trabajadores.</p>
             <div className="mt-4 space-y-2">
               <Label htmlFor="initial-import-file">Archivo Excel</Label>
               <SiteCorpInput id="initial-import-file" type="file" accept=".xlsx" disabled={busy} onChange={(event) => onSelectFile(event.target.files?.[0] || null)} />
               {file && <p className="text-sm font-medium text-slate-700">{file.name}</p>}
-                {file && !isValidated && <p className="text-xs text-amber-700">Archivo seleccionado. Validación pendiente.</p>}
+                {file && !isValidated && <p className="text-xs text-sitecorp-warning">Archivo seleccionado. Validación pendiente.</p>}
               </div>
               {allowed && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -229,7 +229,7 @@ const EntitySettingsInitialImport = () => {
                 </div>
               )}
               {allowed && (
-                <p className={`mt-2 text-xs ${canImport ? "text-emerald-700" : errorCount > 0 ? "text-red-700" : "text-amber-700"}`}>
+                <p className={`mt-2 text-xs ${canImport ? "text-sitecorp-success" : errorCount > 0 ? "text-sitecorp-danger" : "text-sitecorp-warning"}`}>
                   {errorCount > 0
                     ? "Corrige los errores detectados antes de iniciar la migración."
                     : hasPreview
@@ -266,10 +266,10 @@ const EntitySettingsInitialImport = () => {
                   <TableCell>{index + 2}</TableCell>
                   <TableCell className="font-mono text-xs">{row.identification}</TableCell>
                   <TableCell>{row.first_name} {row.first_surname} {row.second_surname}</TableCell>
-                  <TableCell>{row.birth_date || <span className="text-amber-700">Pendiente</span>}</TableCell>
+                  <TableCell>{row.birth_date || <span className="text-sitecorp-warning">Pendiente</span>}</TableCell>
                   <TableCell>{row.employment_start_date}</TableCell>
                   <TableCell><div className="flex min-w-56 items-start gap-2">
-                    {status === "VALID" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /> : status === "WARNING" ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />}
+                    {status === "VALID" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-sitecorp-success" /> : status === "WARNING" ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-sitecorp-warning" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-sitecorp-danger" />}
                     <div><Badge variant={status === "ERROR" ? "destructive" : "secondary"}>{status === "VALID" ? "VÁLIDO" : status === "WARNING" ? "ADVERTENCIA" : "ERROR"}</Badge><p className="mt-1 text-xs text-slate-700">{item.messages.join(" · ") || "Se creará como pendiente de vinculación a plantilla."}</p></div>
                   </div></TableCell>
                 </TableRow>
@@ -326,7 +326,7 @@ const EntitySettingsInitialImport = () => {
 }
 
 function Summary({ label, value, tone }: { label: string; value: number; tone: "neutral" | "valid" | "warning" | "error" }) {
-  const colors = { neutral: "text-slate-900", valid: "text-emerald-800", warning: "text-amber-800", error: "text-red-800" }
+  const colors = { neutral: "text-ink", valid: "text-sitecorp-success", warning: "text-sitecorp-warning", error: "text-sitecorp-danger" }
   return <div className="rounded-2xl border bg-white p-4"><p className={`text-2xl font-semibold ${colors[tone]}`}>{value}</p><p className="text-sm text-slate-600">{label}</p></div>
 }
 

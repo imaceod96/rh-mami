@@ -79,6 +79,10 @@ export default {
         "sitecorp-warning": "hsl(var(--sitecorp-warning))",
         "sitecorp-danger": "hsl(var(--sitecorp-danger))",
         "sitecorp-ink": "hsl(var(--sitecorp-ink))",
+        // Alias semántico de texto principal (equivalente a sitecorp-ink).
+        // Se usa en el código como `text-ink`; faltaba en el tema y por eso
+        // la clase no generaba color.
+        ink: "hsl(var(--sitecorp-ink))",
       },
       borderRadius: {
         lg: "var(--radius)",

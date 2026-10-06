@@ -955,11 +955,11 @@ const WorkerDetail = () => {
       />
 
       {incompleteFields.length > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+        <div className="flex items-start gap-3 rounded-xl border border-sitecorp-warning/40 bg-sitecorp-warning/10 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sitecorp-warning" />
           <div>
-            <p className="text-sm font-semibold text-amber-900">Información incompleta</p>
-            <p className="text-sm text-amber-800">
+            <p className="text-sm font-semibold text-sitecorp-warning">Información incompleta</p>
+            <p className="text-sm text-ink">
               Faltan estos datos: {incompleteFields.join(", ")}. Completa la ficha desde «Editar».
             </p>
           </div>
@@ -1445,7 +1445,7 @@ const WorkerDetail = () => {
                   ? 'border-sitecorp-danger/30 bg-sitecorp-danger/5'
                   : contractAlertTone === 'warning'
                     ? 'border-sitecorp-warning/30 bg-sitecorp-warning/5'
-                    : 'border-blue-500/30 bg-blue-500/5'
+                    : 'border-sitecorp-primary/30 bg-sitecorp-primary/5'
               )}
             >
               <div className="flex flex-wrap items-center gap-2">

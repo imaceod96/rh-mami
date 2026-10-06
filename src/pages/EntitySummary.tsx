@@ -144,7 +144,7 @@ const reportToneStyles: Record<
   success: "bg-sitecorp-success",
   danger: "bg-sitecorp-danger",
   warning: "bg-sitecorp-warning",
-  blue: "bg-blue-600",
+  blue: "bg-sitecorp-primary",
 }
 
 const DemographicReportCard: React.FC<DemographicReportCardProps> = ({

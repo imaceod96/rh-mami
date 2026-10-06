@@ -150,7 +150,7 @@ const EntityVacations = () => {
       label: "Actualmente de vacaciones",
       value: String(kpis.onVacation),
       icon: <Palmtree className="h-4 w-4" />,
-      tone: "border-blue-500/30 bg-blue-500/5 text-blue-600",
+      tone: "border-sitecorp-primary/30 bg-sitecorp-primary/5 text-sitecorp-primary",
     },
   ]
 
@@ -322,7 +322,7 @@ const EntityVacations = () => {
                           <td className="px-3 py-3 font-medium text-ink">
                             {row.full_name}
                             {row.active_vacation && (
-                              <span className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600">
+                              <span className="ml-2 inline-flex items-center gap-1 text-xs text-sitecorp-primary">
                                 <Palmtree className="h-3 w-3" /> De vacaciones
                               </span>
                             )}
@@ -428,7 +428,7 @@ const EntityVacations = () => {
                       </div>
 
                       {row.active_vacation && (
-                        <p className="flex items-center gap-1.5 text-sm text-blue-600">
+                        <p className="flex items-center gap-1.5 text-sm text-sitecorp-primary">
                           <Palmtree className="h-4 w-4" /> De vacaciones
                         </p>
                       )}

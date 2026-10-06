@@ -14,8 +14,10 @@ const buttonVariants = cva(
           "bg-sitecorp-danger text-white hover:bg-sitecorp-danger/90",
         outline:
           "border border-sitecorp-primary bg-transparent text-sitecorp-primary hover:bg-sitecorp-primary/10",
+        // Secondary neutral (no naranja): el naranja es acento de marca, no
+        // el sustituto universal de secondary.
         secondary:
-          "bg-sitecorp-secondary-orange text-white hover:bg-sitecorp-secondary-orange/90",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-sitecorp-primary/10 hover:text-sitecorp-primary",
         link: "text-sitecorp-primary underline-offset-4 hover:underline",
       },

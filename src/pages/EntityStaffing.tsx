@@ -550,8 +550,8 @@ const EntityStaffing = () => {
     const kpiCards = [
       { label: "Trabajadores activos", value: kpis.activeWorkers, icon: Users, accent: "text-sitecorp-primary" },
       { label: "Plazas autorizadas", value: kpis.totalAuthorized, icon: Network, accent: "text-sitecorp-primary" },
-      { label: "Ocupados", value: kpis.occupied, icon: UserCheck, accent: "text-emerald-600" },
-      { label: "Vacantes", value: kpis.vacant, icon: Briefcase, accent: "text-amber-600" },
+      { label: "Ocupados", value: kpis.occupied, icon: UserCheck, accent: "text-sitecorp-success" },
+      { label: "Vacantes", value: kpis.vacant, icon: Briefcase, accent: "text-sitecorp-warning" },
     ]
 
   return (
@@ -779,7 +779,7 @@ const EntityStaffing = () => {
                             {w.employment_status === "active" ? "Activo" : "Inactivo"}
                           </SiteCorpStatusBadge>
                                           {w.employment_status === "active" && (!assignment || !position) && (
-                            <Badge variant="outline" className="border-amber-500 text-amber-800">Pendiente de vinculación</Badge>
+                            <Badge variant="outline" className="border-sitecorp-warning/40 text-sitecorp-warning">Pendiente de vinculación</Badge>
                           )}
                         </div>
 

@@ -274,7 +274,7 @@ const EntityContractAlerts = () => {
     primary: "border-sitecorp-primary/40 bg-sitecorp-primary/5",
     danger: "border-sitecorp-danger/30 bg-sitecorp-danger/5",
     warning: "border-sitecorp-warning/30 bg-sitecorp-warning/5",
-    info: "border-blue-500/30 bg-blue-500/5",
+    info: "border-sitecorp-primary/30 bg-sitecorp-primary/5",
     neutral: "border-border bg-muted/40",
   }
 
@@ -282,7 +282,7 @@ const EntityContractAlerts = () => {
     primary: "text-sitecorp-primary",
     danger: "text-sitecorp-danger",
     warning: "text-sitecorp-warning",
-    info: "text-blue-600",
+    info: "text-sitecorp-primary",
     neutral: "text-ink",
   }
 
