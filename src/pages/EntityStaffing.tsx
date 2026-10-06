@@ -1,5 +1,6 @@
 import * as React from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
@@ -153,6 +154,8 @@ const EntityStaffing = () => {
   const [migrationDialogOpen, setMigrationDialogOpen] = React.useState(false)
   const [linkWorkerId, setLinkWorkerId] = React.useState<string | null>(null)
   const [editingWorker, setEditingWorker] = React.useState<WorkerEditingData | null>(null)
+
+  const queryClient = useQueryClient()
 
   const showNotice = (type: "success" | "danger" | "info", message: string) => {
     setNotice({ type, message })
@@ -929,15 +932,15 @@ const EntityStaffing = () => {
 
       <Dialog open={migrationDialogOpen} onOpenChange={setMigrationDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader><DialogTitle>Migrar trabajador</DialogTitle><DialogDescription>Crea un Worker histórico directamente. El puesto es opcional; no se generan contratos ni documentos.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Migrar trabajador</DialogTitle><DialogDescription>Crea un Worker histórico directamente. Queda sin puesto y sin documentos; podrá vincularlo a la plantilla después.</DialogDescription></DialogHeader>
           <MigratedWorkerDialog
-            positions={positionOptions}
             onCancel={() => setMigrationDialogOpen(false)}
-            onSuccess={async (workerId, pending) => {
+            onSuccess={async () => {
               await loadData()
+              queryClient.invalidateQueries()
               setMigrationDialogOpen(false)
-              showNotice("success", pending ? "Trabajador migrado. Pendiente de vinculación." : "Trabajador migrado con asignación inicial.")
-              if (pending) setAssignmentFilter("pending")
+              setAssignmentFilter("pending")
+              showNotice("success", "Trabajador creado correctamente.")
             }}
           />
         </DialogContent>

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Download, FileSpreadsheet, Loader2, Upload, AlertTriangle, CheckCircle2, XCircle, ClipboardCheck } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { Download, FileSpreadsheet, Loader2, Upload, AlertTriangle, CheckCircle2, XCircle, ClipboardCheck, UserPlus } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { MigratedWorkerDialog } from "@/components/migration/MigratedWorkerDialog"
 import {
   buildWorkerMigrationTemplate,
   downloadWorkerMigrationTemplate,
@@ -41,17 +43,20 @@ interface ImportSummary {
 const EntitySettingsInitialImport = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { permissions, loading: permissionLoading } = useEntityPermissions(entityId)
   const canManageWorkers = permissions.includes("workers.manage")
   const allowed = permissions.includes("workers.initial_import") || canManageWorkers
   const [file, setFile] = React.useState<File | null>(null)
   const [rows, setRows] = React.useState<MigrationRow[]>([])
   const [preview, setPreview] = React.useState<MigrationPreviewRow[]>([])
+  const [isValidated, setIsValidated] = React.useState(false)
   const [history, setHistory] = React.useState<BatchHistory[]>([])
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
   const [notice, setNotice] = React.useState("")
   const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [individualOpen, setIndividualOpen] = React.useState(false)
   const [summary, setSummary] = React.useState<ImportSummary | null>(null)
 
   const loadHistory = React.useCallback(async () => {
@@ -65,13 +70,7 @@ const EntitySettingsInitialImport = () => {
     const groups = new Map<string, BatchHistory>()
     for (const worker of data || []) {
       const batchId = worker.migration_batch_id as string
-      const group = groups.get(batchId) || {
-        batchId,
-        migratedAt: worker.migrated_at,
-        total: 0,
-        linked: 0,
-        pending: 0,
-      }
+      const group = groups.get(batchId) || { batchId, migratedAt: worker.migrated_at, total: 0, linked: 0, pending: 0 }
       group.total += 1
       const assigned = (worker.worker_position_assignments || []).some((assignment: any) => assignment.is_current && !assignment.end_date)
       if (worker.employment_status === "active" && assigned) group.linked += 1
@@ -85,6 +84,17 @@ const EntitySettingsInitialImport = () => {
     if (!allowed) return
     loadHistory().catch((cause) => setError(cause instanceof Error ? cause.message : "No se pudo cargar el historial."))
   }, [allowed, loadHistory])
+
+  // Al cambiar el archivo se invalida cualquier validación anterior.
+  const onSelectFile = (nextFile: File | null) => {
+    setFile(nextFile)
+    setRows([])
+    setPreview([])
+    setIsValidated(false)
+    setSummary(null)
+    setError("")
+    setNotice("")
+  }
 
   const handleDownload = async () => {
     setBusy(true)
@@ -111,10 +121,12 @@ const EntitySettingsInitialImport = () => {
       const checked = await validateWorkerMigration(entityId, mapped)
       setRows(mapped)
       setPreview(checked)
+      setIsValidated(true)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo validar el archivo.")
+      setIsValidated(false)
       setRows([])
       setPreview([])
+      setError(cause instanceof Error ? cause.message : "No se pudo validar el archivo.")
     } finally {
       setBusy(false)
     }
@@ -123,11 +135,12 @@ const EntitySettingsInitialImport = () => {
   const validCount = preview.filter((row) => row.status === "VALID").length
   const warningCount = preview.filter((row) => row.status === "WARNING").length
   const errorCount = preview.filter((row) => row.status === "ERROR").length
-  const canImport = preview.length > 0 && errorCount === 0 && !busy
+  const importableRows = preview.length - errorCount
   const incompleteCount = warningCount
+  const canImport = isValidated && preview.length > 0 && errorCount === 0 && !busy
 
-  // INICIAR CARGA: crea Workers reales. Nunca crea Assignments ni documentos.
-  const handleImport = async () => {
+  // INICIAR MIGRACIÓN: crea Workers reales. Nunca crea Assignments ni documentos.
+  const handleStartMigration = async () => {
     if (!entityId || !allowed || !canImport) return
     setBusy(true)
     setError("")
@@ -135,19 +148,17 @@ const EntitySettingsInitialImport = () => {
     try {
       const importRows = rows.map((row) => ({ ...row, position_id: undefined, position_code: "" }))
       const result = await importWorkerMigration(entityId, importRows, `MIG-${crypto.randomUUID()}`)
-      setSummary({
-        created: result.imported,
-        complete: result.imported - incompleteCount,
-        incomplete: incompleteCount,
-        pending: result.imported,
-      })
+      setSummary({ created: result.imported, complete: result.imported - incompleteCount, incomplete: incompleteCount, pending: result.imported })
       setConfirmOpen(false)
       setFile(null)
       setRows([])
       setPreview([])
+      setIsValidated(false)
+      queryClient.invalidateQueries()
       await loadHistory()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "El backend no pudo completar la carga.")
+      console.error("[initial-import] La migración no pudo completarse", cause)
+      setError(cause instanceof Error ? cause.message : "El backend no pudo completar la migración.")
     } finally {
       setBusy(false)
     }
@@ -158,15 +169,23 @@ const EntitySettingsInitialImport = () => {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      <SiteCorpPageHeader title="Carga inicial de trabajadores" description="Incorpora trabajadores existentes como Workers. La carga inicial crea solo personas: los trabajadores quedan pendientes de vinculación a plantilla." />
-      {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
+      <SiteCorpPageHeader
+        title="Carga inicial de trabajadores"
+        description="Incorpora trabajadores existentes como Workers. La migración crea solo personas: quedan pendientes de vinculación a plantilla."
+        actions={canManageWorkers && (
+          <Button variant="outline" onClick={() => setIndividualOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />Migración individual
+          </Button>
+        )}
+      />
+      {error && <SiteCorpAlert type="danger" title="Error">{error}</SiteCorpAlert>}
       {notice && <SiteCorpAlert type="success">{notice}</SiteCorpAlert>}
 
       {summary && (
         <SiteCorpCard className="rounded-2xl border-emerald-200 bg-emerald-50/60">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-emerald-900">Carga completada</h2>
+              <h2 className="text-lg font-semibold text-emerald-900">Migración completada</h2>
               <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-sm text-emerald-900 sm:grid-cols-4">
                 <div><dt className="text-emerald-700">Trabajadores creados</dt><dd className="text-xl font-semibold">{summary.created}</dd></div>
                 <div><dt className="text-emerald-700">Con información completa</dt><dd className="text-xl font-semibold">{summary.complete}</dd></div>
@@ -193,8 +212,9 @@ const EntitySettingsInitialImport = () => {
             <p className="mt-1 text-sm text-slate-600">Archivo .xlsx, máximo 10 MB. Validar solo analiza el archivo: no crea trabajadores.</p>
             <div className="mt-4 space-y-2">
               <Label htmlFor="initial-import-file">Archivo Excel</Label>
-              <SiteCorpInput id="initial-import-file" type="file" accept=".xlsx" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] || null); setPreview([]); setRows([]); setError(""); setSummary(null) }} />
+              <SiteCorpInput id="initial-import-file" type="file" accept=".xlsx" disabled={busy} onChange={(event) => onSelectFile(event.target.files?.[0] || null)} />
               {file && <p className="text-sm font-medium text-slate-700">{file.name}</p>}
+              {file && !isValidated && <p className="text-xs text-amber-700">Pulse Validar para analizar este archivo.</p>}
             </div>
             {allowed && <Button variant="outline" className="mt-4" onClick={handleValidate} disabled={!file || busy}>
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Validar
@@ -203,7 +223,7 @@ const EntitySettingsInitialImport = () => {
         </div>
       </SiteCorpCard>
 
-      {preview.length > 0 && <>
+      {isValidated && preview.length > 0 && <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Summary label="Total" value={preview.length} tone="neutral" />
           <Summary label="Válidos" value={validCount} tone="valid" />
@@ -213,16 +233,19 @@ const EntitySettingsInitialImport = () => {
         <SiteCorpCard className="rounded-2xl">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Preview de importación</h2>
-              <p className="text-sm text-slate-600">Validar no modifica datos. Iniciar carga crea los trabajadores reales (sin vinculación a puestos).</p>
+              <h2 className="text-lg font-semibold text-slate-900">Preview de migración</h2>
+              <p className="text-sm text-slate-600">Validar no modifica datos. Iniciar migración crea los trabajadores reales (sin vinculación a puestos).</p>
             </div>
             <Button onClick={() => setConfirmOpen(true)} disabled={!canImport}>
-              <ClipboardCheck className="mr-2 h-4 w-4" />{busy ? "Procesando…" : "Iniciar carga"}
+              <ClipboardCheck className="mr-2 h-4 w-4" />Iniciar migración
             </Button>
           </div>
           {errorCount > 0
-            ? <SiteCorpAlert type="danger">Corrige los errores antes de iniciar la carga. El lote no se ejecutará.</SiteCorpAlert>
-            : <SiteCorpAlert type="info">Se crearán {preview.length} trabajadores. Quedarán pendientes de vinculación a plantilla.</SiteCorpAlert>}
+            ? <SiteCorpAlert type="danger">Corrige los errores antes de iniciar la migración. El lote no se ejecutará.</SiteCorpAlert>
+            : <div className="space-y-1">
+                <SiteCorpAlert type="info">Se crearán {importableRows} trabajadores.</SiteCorpAlert>
+                {incompleteCount > 0 && <SiteCorpAlert type="warning">{incompleteCount} trabajadores tienen información pendiente de completar.</SiteCorpAlert>}
+              </div>}
           <div className="mt-4 overflow-x-auto rounded-xl border">
             <Table>
               <TableHeader><TableRow><TableHead>Fila</TableHead><TableHead>Identificación</TableHead><TableHead>Trabajador</TableHead><TableHead>Nacimiento</TableHead><TableHead>Incorporación</TableHead><TableHead>Estado y detalle</TableHead></TableRow></TableHeader>
@@ -255,19 +278,37 @@ const EntitySettingsInitialImport = () => {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Iniciar carga de trabajadores</DialogTitle>
-            <DialogDescription>Se crearán {preview.length} trabajadores en SiteCorp.</DialogDescription>
+            <DialogTitle>Iniciar migración</DialogTitle>
+            <DialogDescription>Se crearán {importableRows} trabajadores en SiteCorp.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 text-sm text-slate-700">
-            <p>Los trabajadores se crearán <strong>sin vinculación a Puestos</strong>.</p>
+            <p>Los trabajadores se crearán inicialmente <strong>sin vinculación a Puestos</strong>.</p>
             {incompleteCount > 0 && <p>{incompleteCount} trabajadores quedarán con información pendiente de completar.</p>}
-            <p>Podrás completar sus datos y asignarlos posteriormente desde Trabajadores.</p>
+            <p>Podrás completar sus datos y vincularlos posteriormente desde Trabajadores.</p>
             <p className="font-medium text-slate-900">¿Deseas continuar?</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={busy}>Cancelar</Button>
-            <Button onClick={handleImport} disabled={busy}>{busy ? "Iniciando…" : "Iniciar carga"}</Button>
+            <Button onClick={handleStartMigration} disabled={busy}>{busy ? "Migrando trabajadores…" : "Iniciar migración"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={individualOpen} onOpenChange={setIndividualOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Migración individual</DialogTitle>
+            <DialogDescription>Crea un Worker histórico directamente. Queda sin puesto y sin documentos; podrá vincularlo a la plantilla después.</DialogDescription>
+          </DialogHeader>
+          <MigratedWorkerDialog
+            onCancel={() => setIndividualOpen(false)}
+            onSuccess={async () => {
+              queryClient.invalidateQueries()
+              await loadHistory()
+              setIndividualOpen(false)
+              setNotice("Trabajador creado correctamente.")
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>

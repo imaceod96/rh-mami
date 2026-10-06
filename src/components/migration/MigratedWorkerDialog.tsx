@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
+import { ciToBirthDate } from "@/utils/ci"
 import { createMigratedWorker, type MigrationRow } from "@/lib/worker-migration"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Button } from "@/components/ui/sitecorp-button"
@@ -10,25 +11,25 @@ import { Label } from "@/components/ui/label"
 import { SelectItem } from "@/components/ui/select"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 import type { CatalogOption } from "@/lib/catalogs"
-import type { WorkerPositionOption } from "@/components/workers/WorkerForm"
 
 interface Props {
-  positions: WorkerPositionOption[]
-  onSuccess: (workerId: string, pending: boolean) => void
+  onSuccess: (workerId: string) => void
   onCancel: () => void
 }
 
-export function MigratedWorkerDialog({ positions, onSuccess, onCancel }: Props) {
+const EMPTY_FORM = {
+  identification: "", first_name: "", first_surname: "", second_surname: "", birth_date: "",
+  gender_id: "", marital_status_id: "", skin_color_id: "", phone: "", email: "", address: "",
+  province: "", municipality: "", employment_start_date: "", education_level_id: "", specialty: "",
+  profession_or_trade: "", initial_vacation_balance: "", vacation_cutoff_date: "",
+}
+
+export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
   const { entityId } = useParams<{ entityId: string }>()
   const [catalogs, setCatalogs] = React.useState<Record<string, CatalogOption[]>>({})
   const [licenseCategories, setLicenseCategories] = React.useState<CatalogOption[]>([])
   const [licenseIds, setLicenseIds] = React.useState<string[]>([])
-  const [form, setForm] = React.useState({
-    identification: "", first_name: "", first_surname: "", second_surname: "", birth_date: "",
-    gender_id: "", marital_status_id: "", skin_color_id: "", phone: "", email: "", address: "",
-    province: "", municipality: "", employment_start_date: "", education_level_id: "", specialty: "",
-    profession_or_trade: "", position_id: "", initial_vacation_balance: "", vacation_cutoff_date: "",
-  })
+  const [form, setForm] = React.useState({ ...EMPTY_FORM })
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
 
@@ -48,35 +49,51 @@ export function MigratedWorkerDialog({ positions, onSuccess, onCancel }: Props) 
   }, [])
 
   const set = (key: keyof typeof form, value: string) => setForm((previous) => ({ ...previous, [key]: value }))
+
+  // Al escribir la identificación, deriva la fecha de nacimiento con la lógica
+  // existente de SiteCorp (nunca la inventa).
+  const handleIdentification = (value: string) => {
+    setForm((previous) => {
+      const derivedBefore = ciToBirthDate(previous.identification)
+      const next = { ...previous, identification: value }
+      if (!previous.birth_date || previous.birth_date === derivedBefore) {
+        next.birth_date = ciToBirthDate(value) || ""
+      }
+      return next
+    })
+  }
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!entityId) return
+    if (!entityId) {
+      setError("No se pudo determinar la entidad actual.")
+      return
+    }
     setBusy(true)
     setError("")
     try {
-      const row: MigrationRow = {
-        ...form,
-        driving_license_category_ids: licenseIds,
-        position_code: "",
-      }
       const balance = form.initial_vacation_balance.trim().replace(/\s/g, "").replace(",", ".")
       if (balance && !/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(balance)) throw new Error("El saldo inicial de vacaciones no es válido.")
-      const result = await createMigratedWorker(entityId, {
-        ...row,
+      const row: MigrationRow = {
+        ...form,
+        birth_date: form.birth_date || ciToBirthDate(form.identification) || "",
+        driving_license_category_ids: licenseIds,
+        position_code: "",
         initial_vacation_balance: balance,
-        vacation_cutoff_date: form.vacation_cutoff_date,
-      })
-      onSuccess(result.worker_id, !result.assignment_id)
+      }
+      const result = await createMigratedWorker(entityId, row)
+      onSuccess(result.worker_id)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo migrar el trabajador.")
+      console.error("[migrated-worker-dialog] No se pudo crear el trabajador", cause)
+      setError(cause instanceof Error ? cause.message : "No se pudo crear el trabajador.")
     } finally {
       setBusy(false)
     }
   }
 
-  const field = (label: string, key: keyof typeof form, type = "text", required = false) => <div className="space-y-1.5" key={key}>
+  const field = (label: string, key: keyof typeof form, type = "text", required = false, onChange?: (value: string) => void) => <div className="space-y-1.5" key={key}>
     <Label htmlFor={`migration-${key}`}>{label}{required ? " *" : ""}</Label>
-    <SiteCorpInput id={`migration-${key}`} type={type} value={form[key]} onChange={(event) => set(key, event.target.value)} required={required} />
+    <SiteCorpInput id={`migration-${key}`} type={type} value={form[key]} onChange={(event) => (onChange ? onChange(event.target.value) : set(key, event.target.value))} required={required} />
   </div>
   const catalog = (label: string, key: "gender_id" | "marital_status_id" | "skin_color_id" | "education_level_id") => <div className="space-y-1.5" key={key}>
     <Label>{label}</Label><SiteCorpSelect value={form[key]} onValueChange={(value) => set(key, value)}><SelectItem value="">Sin especificar</SelectItem>{(catalogs[key] || []).map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SiteCorpSelect>
@@ -85,19 +102,19 @@ export function MigratedWorkerDialog({ positions, onSuccess, onCancel }: Props) 
   return <form className="space-y-5" onSubmit={submit}>
     {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {field("Identificación", "identification", "text", true)}{field("Nombre", "first_name", "text", true)}{field("Primer apellido", "first_surname", "text", true)}
+      {field("Identificación", "identification", "text", true, handleIdentification)}{field("Nombre", "first_name", "text", true)}{field("Primer apellido", "first_surname", "text", true)}
       {field("Segundo apellido", "second_surname")}{field("Fecha de nacimiento", "birth_date", "date")}{catalog("Sexo", "gender_id")}
       {catalog("Estado civil", "marital_status_id")}{catalog("Color de piel", "skin_color_id")}{field("Teléfono", "phone")}
       {field("Correo", "email", "email")}{field("Dirección", "address")}{field("Provincia", "province")}
       {field("Municipio", "municipality")}{field("Fecha de incorporación", "employment_start_date", "date", true)}
       {catalog("Nivel educacional", "education_level_id")}{field("Especialidad", "specialty")}{field("Profesión u oficio", "profession_or_trade")}
     </div>
+    <p className="-mt-1 text-xs text-slate-600">La fecha de nacimiento se deriva del carné de identidad cuando es posible; puede completarla manualmente si no se deriva.</p>
     <div className="space-y-2"><Label>Licencias de conducción</Label><DrivingLicenseSelector categories={licenseCategories} value={licenseIds} onChange={setLicenseIds} disabled={busy} /></div>
     <div className="grid gap-3 sm:grid-cols-3">
-      <div className="space-y-1.5"><Label>Puesto (opcional)</Label><SiteCorpSelect value={form.position_id} onValueChange={(value) => set("position_id", value)}><SelectItem value="">Pendiente de vinculación</SelectItem>{positions.filter((position) => position.is_active && position.currentAssignments < position.authorized_quantity).map((position) => <SelectItem key={position.id} value={position.id}>{position.name} ({position.code}) · {position.currentAssignments}/{position.authorized_quantity}</SelectItem>)}</SiteCorpSelect></div>
       {field("Saldo inicial vacaciones (opcional)", "initial_vacation_balance", "text")}{field("Fecha corte vacaciones", "vacation_cutoff_date", "date")}
     </div>
-    <p className="text-xs text-slate-600">Sin saldo informado permanece desconocido. La migración no crea contrato ni documentos.</p>
-    <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button><Button type="submit" disabled={busy}>{busy ? "Migrando…" : "Migrar trabajador"}</Button></div>
+    <p className="text-xs text-slate-600">El trabajador se crea sin puesto y sin documentos. Podrá vincularlo a la plantilla posteriormente desde su ficha.</p>
+    <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancelar</Button><Button type="submit" disabled={busy}>{busy ? "Creando…" : "Crear trabajador"}</Button></div>
   </form>
 }
