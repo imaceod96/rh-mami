@@ -137,15 +137,35 @@ export function downloadWorkerMigrationTemplate(blob: Blob): void {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Clasificación de los errores de estructura del archivo de plantilla.
+ * Permite a la UI mostrar un mensaje accionable sin exponer detalles internos.
+ * No cambia ninguna regla de validación: solo expone de forma tipada el error
+ * que el parser ya detectaba.
+ */
+export type WorkerMigrationFileErrorCode = "MISSING_COLUMNS" | "SHEET_MISSING" | "INVALID_FILE"
+
+export class WorkerMigrationTemplateError extends Error {
+  readonly code: WorkerMigrationFileErrorCode
+  readonly missingColumns: string[]
+
+  constructor(code: WorkerMigrationFileErrorCode, message: string, missingColumns: string[] = []) {
+    super(message)
+    this.name = "WorkerMigrationTemplateError"
+    this.code = code
+    this.missingColumns = missingColumns
+  }
+}
+
 export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow[]> {
-  if (file.size > 10 * 1024 * 1024) throw new Error("El archivo supera el límite de 10 MB.")
-  if (!file.name.toLowerCase().endsWith(".xlsx")) throw new Error("Seleccione un archivo .xlsx válido.")
+  if (file.size > 10 * 1024 * 1024) throw new WorkerMigrationTemplateError("INVALID_FILE", "El archivo supera el límite de 10 MB.")
+  if (!file.name.toLowerCase().endsWith(".xlsx")) throw new WorkerMigrationTemplateError("INVALID_FILE", "Seleccione un archivo .xlsx válido.")
   const mod: any = await import("exceljs")
   const ExcelJS = mod?.default ?? mod
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(await file.arrayBuffer())
   const sheet = workbook.getWorksheet("Trabajadores") || workbook.worksheets[0]
-  if (!sheet) throw new Error("El archivo no contiene ninguna hoja de trabajo.")
+  if (!sheet) throw new WorkerMigrationTemplateError("SHEET_MISSING", "El archivo no contiene ninguna hoja de trabajo.")
   const indexHeaders = (rowNumber: number) => {
     const map = new Map<string, number>()
     sheet.getRow(rowNumber).eachCell((cell: any, column: number) => map.set(excelText(cell.value).toLowerCase(), column))
@@ -164,7 +184,13 @@ export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow
   }
   const required = ["identificación", "nombre", "primer apellido", "fecha de incorporación"]
   const missing = required.filter((header) => !headerIndex.has(header))
-  if (missing.length) throw new Error(`Faltan columnas requeridas: ${missing.join(", ")}.`)
+  if (missing.length) {
+    throw new WorkerMigrationTemplateError(
+      "MISSING_COLUMNS",
+      `Faltan columnas requeridas: ${missing.join(", ")}.`,
+      missing,
+    )
+  }
   // Las columnas ausentes en el archivo NO deben romper la lectura. La plantilla
   // oficial omite "Fecha nacimiento" (se deriva de la identificación) y
   // "Código Puesto" (la carga inicial no vincula puestos). Nunca se debe pedir a

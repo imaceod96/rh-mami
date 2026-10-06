@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
-import { Download, FileSpreadsheet, Loader2, Upload, AlertTriangle, CheckCircle2, XCircle, ClipboardCheck, UserPlus } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, Upload, AlertTriangle, AlertCircle, CheckCircle2, XCircle, ClipboardCheck, UserPlus } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
@@ -21,6 +21,7 @@ import {
   mapMigrationRows,
   readWorkerMigrationExcel,
   validateWorkerMigration,
+  WorkerMigrationTemplateError,
   type MigrationPreviewRow,
   type MigrationRow,
 } from "@/lib/worker-migration"
@@ -40,6 +41,45 @@ interface ImportSummary {
   pending: number
 }
 
+/** Error de VALIDACIÓN del archivo mostrado dentro de la sección de carga.
+ * Se separa del `error` general (historial / migración) para poder explicar
+ * al usuario qué hacer sin exponer detalles técnicos. */
+interface ValidationFailure {
+  title: string
+  message: string
+  missingColumns?: string[]
+}
+
+/** "identificación, nombre" → "Identificación y Nombre" */
+const formatColumnList = (columns: string[]) => {
+  const labels = columns.map((column) => column.charAt(0).toUpperCase() + column.slice(1))
+  if (labels.length <= 1) return labels[0] || ""
+  return `${labels.slice(0, -1).join(", ")} y ${labels[labels.length - 1]}`
+}
+
+const describeValidationFailure = (cause: unknown, phase: "read" | "process"): ValidationFailure => {
+  if (cause instanceof WorkerMigrationTemplateError && cause.code === "MISSING_COLUMNS") {
+    return {
+      title: "Formato de plantilla incorrecto",
+      message:
+        "El archivo seleccionado no tiene el formato requerido para realizar la carga inicial de trabajadores.\n\n" +
+        "Utiliza la plantilla oficial disponible en la parte superior de esta página, completa la información respetando su estructura y vuelve a cargar el archivo.",
+      missingColumns: cause.missingColumns,
+    }
+  }
+  if (phase === "read") {
+    return {
+      title: "No se pudo leer el archivo",
+      message:
+        "No hemos podido procesar el archivo seleccionado. Comprueba que sea un archivo Excel válido y que utilice la plantilla oficial de carga inicial de trabajadores.",
+    }
+  }
+  return {
+    title: "No se pudo validar el archivo",
+    message: "No hemos podido validar el archivo en este momento. Inténtalo de nuevo más tarde.",
+  }
+}
+
 const EntitySettingsInitialImport = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const navigate = useNavigate()
@@ -55,6 +95,7 @@ const EntitySettingsInitialImport = () => {
   const [history, setHistory] = React.useState<BatchHistory[]>([])
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [validationError, setValidationError] = React.useState<ValidationFailure | null>(null)
   const [notice, setNotice] = React.useState("")
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [individualOpen, setIndividualOpen] = React.useState(false)
@@ -94,6 +135,7 @@ const EntitySettingsInitialImport = () => {
     setIsValidated(false)
     setSummary(null)
     setError("")
+    setValidationError(null)
     setNotice("")
   }
 
@@ -117,19 +159,25 @@ const EntitySettingsInitialImport = () => {
     setError("")
     setNotice("")
     setSummary(null)
+    setValidationError(null)
+    // "read" = leer/parsear el Excel (estructura del archivo).
+    // "process" = catálogos + RPC de validación (datos por fila).
+    let phase: "read" | "process" = "read"
     try {
       const parsed = await readWorkerMigrationExcel(file)
+      phase = "process"
       const mapped = await mapMigrationRows(parsed)
       const checked = await validateWorkerMigration(entityId, mapped)
       setRows(mapped)
       setPreview(checked)
       setIsValidated(true)
     } catch (cause) {
+      // El detalle técnico completo queda en consola para diagnóstico.
       console.error("[initial-import] No se pudo validar el archivo", cause)
       setIsValidated(false)
       setRows([])
       setPreview([])
-      setError(cause instanceof Error ? cause.message : "No se pudo validar el archivo.")
+      setValidationError(describeValidationFailure(cause, phase))
     } finally {
       setBusy(false)
       setValidating(false)
@@ -230,6 +278,21 @@ const EntitySettingsInitialImport = () => {
                         : "Archivo validado correctamente."}
                   </p>
                 )}
+                {validationError && (
+                  <SiteCorpAlert type="danger" title={validationError.title} className="mt-2">
+                    <div className="mt-1 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-sitecorp-danger" />
+                        <p className="whitespace-pre-line">{validationError.message}</p>
+                      </div>
+                      {validationError.missingColumns && validationError.missingColumns.length > 0 && (
+                        <p className="text-xs text-sitecorp-danger">
+                          Columnas requeridas no encontradas: {formatColumnList(validationError.missingColumns)}.
+                        </p>
+                      )}
+                    </div>
+                  </SiteCorpAlert>
+                )}
               </div>
               {allowed && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -243,12 +306,14 @@ const EntitySettingsInitialImport = () => {
                 </div>
               )}
               {allowed && (
-                <p className={`mt-2 text-xs ${canImport ? "text-sitecorp-success" : errorCount > 0 ? "text-sitecorp-danger" : "text-sitecorp-warning"}`}>
-                  {errorCount > 0
-                    ? "Corrige los errores detectados antes de iniciar la migración."
-                    : hasPreview
-                      ? `Se crearán ${importableRows} trabajadores.`
-                      : "Valida el archivo antes de iniciar la migración."}
+                <p className={`mt-2 text-xs ${canImport ? "text-sitecorp-success" : errorCount > 0 || validationError ? "text-sitecorp-danger" : "text-sitecorp-warning"}`}>
+                  {validationError
+                    ? "Corrige el archivo o utiliza la plantilla oficial y vuelve a pulsar Validar."
+                    : errorCount > 0
+                      ? "Corrige los errores detectados antes de iniciar la migración."
+                      : hasPreview
+                        ? `Se crearán ${importableRows} trabajadores.`
+                        : "Valida el archivo antes de iniciar la migración."}
                 </p>
               )}
             </div>
