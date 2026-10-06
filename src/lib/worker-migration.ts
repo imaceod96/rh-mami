@@ -165,7 +165,14 @@ export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow
   const required = ["identificación", "nombre", "primer apellido", "fecha de incorporación"]
   const missing = required.filter((header) => !headerIndex.has(header))
   if (missing.length) throw new Error(`Faltan columnas requeridas: ${missing.join(", ")}.`)
-  const get = (row: any, header: string) => row.getCell(headerIndex.get(header.toLowerCase()) || 0).value
+  // Las columnas ausentes en el archivo NO deben romper la lectura. La plantilla
+  // oficial omite "Fecha nacimiento" (se deriva de la identificación) y
+  // "Código Puesto" (la carga inicial no vincula puestos). Nunca se debe pedir a
+  // exceljs una columna inexistente: getCell(0) lanza una excepción.
+  const get = (row: any, header: string) => {
+    const column = headerIndex.get(header.toLowerCase())
+    return column ? row.getCell(column).value : undefined
+  }
   const rows: MigrationRow[] = []
   for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber)

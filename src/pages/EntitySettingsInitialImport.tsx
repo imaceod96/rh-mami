@@ -51,6 +51,7 @@ const EntitySettingsInitialImport = () => {
   const [rows, setRows] = React.useState<MigrationRow[]>([])
   const [preview, setPreview] = React.useState<MigrationPreviewRow[]>([])
   const [isValidated, setIsValidated] = React.useState(false)
+  const [validating, setValidating] = React.useState(false)
   const [history, setHistory] = React.useState<BatchHistory[]>([])
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -110,7 +111,8 @@ const EntitySettingsInitialImport = () => {
 
   // VALIDAR: solo lectura/análisis. No crea Workers, Assignments ni documentos.
   const handleValidate = async () => {
-    if (!file || !entityId || !allowed) return
+    if (!file || !entityId || !allowed || validating) return
+    setValidating(true)
     setBusy(true)
     setError("")
     setNotice("")
@@ -123,12 +125,14 @@ const EntitySettingsInitialImport = () => {
       setPreview(checked)
       setIsValidated(true)
     } catch (cause) {
+      console.error("[initial-import] No se pudo validar el archivo", cause)
       setIsValidated(false)
       setRows([])
       setPreview([])
       setError(cause instanceof Error ? cause.message : "No se pudo validar el archivo.")
     } finally {
       setBusy(false)
+      setValidating(false)
     }
   }
 
@@ -217,11 +221,21 @@ const EntitySettingsInitialImport = () => {
               <SiteCorpInput id="initial-import-file" type="file" accept=".xlsx" disabled={busy} onChange={(event) => onSelectFile(event.target.files?.[0] || null)} />
               {file && <p className="text-sm font-medium text-slate-700">{file.name}</p>}
                 {file && !isValidated && <p className="text-xs text-sitecorp-warning">Archivo seleccionado. Validación pendiente.</p>}
+                {file && isValidated && (
+                  <p className={`text-xs ${errorCount > 0 ? "text-sitecorp-danger" : warningCount > 0 ? "text-sitecorp-warning" : "text-sitecorp-success"}`}>
+                    {errorCount > 0
+                      ? "Archivo validado con errores. Corrige los errores antes de iniciar la migración."
+                      : warningCount > 0
+                        ? "Archivo validado con advertencias."
+                        : "Archivo validado correctamente."}
+                  </p>
+                )}
               </div>
               {allowed && (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <Button variant="outline" onClick={handleValidate} disabled={!file || busy}>
-                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Validar
+                    {validating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    {validating ? "Validando…" : "Validar"}
                   </Button>
                   <Button onClick={() => setConfirmOpen(true)} disabled={!canImport}>
                     <ClipboardCheck className="mr-2 h-4 w-4" />Iniciar migración
