@@ -266,6 +266,61 @@ const WorkerPrenominaDialog = ({
             )}
           </div>
 
+          {/* Categoría académica (concepto automático, solo lectura) */}
+          <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-ink">Pago categoría académica</h4>
+              <span className="rounded-full bg-sitecorp-primary/10 px-2 py-0.5 text-[11px] font-medium text-sitecorp-primary">
+                Automático
+              </span>
+            </div>
+
+            {academicMissingConfig ? (
+              <SiteCorpAlert type="danger">
+                Máster/Doctor sin importe configurado. Configure el Pago por categoría académica de la
+                entidad; la prenómina no podrá cerrarse hasta resolverlo.
+              </SiteCorpAlert>
+            ) : entry.academic_category === null ? (
+              <p className="text-sm text-muted-foreground">
+                Sin categoría académica (ni Máster ni Doctor): no genera pago.
+              </p>
+            ) : (
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <span className="text-muted-foreground">Categoría aplicada: </span>
+                  <span className="font-medium text-ink">
+                    {academicCategoryLabel(entry.academic_category)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Importe mensual: </span>
+                  <span className="font-medium text-ink">
+                    {entry.academic_monthly_amount !== null
+                      ? formatMoneyWithCurrency(entry.academic_monthly_amount, currency)
+                      : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Tarifa por hora: </span>
+                  <span className="font-medium text-ink">
+                    {formatMoneyWithCurrency(preview.academicHourlyRate, currency)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Pago del período: </span>
+                  <span className="font-semibold text-ink">
+                    {formatMoneyWithCurrency(preview.academicPayment, currency)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Se resuelve automáticamente: importe mensual ÷ 190,6 × horas trabajadas. Si el
+              trabajador tiene Máster y Doctor, prevalece el importe de Doctor.
+            </p>
+          </div>
+
           {/* Días trabajados */}
           <div className="space-y-2">
             <Label htmlFor="prenomina-worked-days">Días trabajados</Label>
@@ -370,11 +425,17 @@ const WorkerPrenominaDialog = ({
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-border p-3 text-sm">
               <span className="text-muted-foreground">Pago antigüedad: </span>
               <span className="font-medium text-ink">
                 {formatMoneyWithCurrency(preview.tenurePayment, currency)}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border p-3 text-sm">
+              <span className="text-muted-foreground">Categoría académica: </span>
+              <span className="font-medium text-ink">
+                {formatMoneyWithCurrency(preview.academicPayment, currency)}
               </span>
             </div>
             <div className="rounded-xl border border-border p-3 text-sm">

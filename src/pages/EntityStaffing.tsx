@@ -504,11 +504,14 @@ const EntityStaffing = () => {
         showNotice("info", "Esta entidad todavía no tiene puestos configurados en su plantilla.")
         return
       }
-      const blob = await buildStaffingWorkbookBlob(rows)
+      const blob = await buildStaffingWorkbookBlob(rows, {
+        entityName,
+        generatedAt: new Date(),
+      })
       saveStaffingExcelBlob(blob, entityName)
     } catch (err) {
-      console.error("Error generating staffing Excel:", err)
-      showNotice("danger", "No se pudo generar la plantilla. Inténtalo nuevamente.")
+      console.error("Error generating Anexo 14:", err)
+      showNotice("danger", "No se pudo generar el Anexo 14. Inténtalo nuevamente.")
     } finally {
       setExporting(false)
     }
@@ -567,14 +570,14 @@ const EntityStaffing = () => {
               variant="outline"
               onClick={handleDownloadExcel}
               disabled={exporting}
-              title="Descargar la plantilla completa en Excel"
+              title="Descargar el Anexo 14: registro de trabajadores de la plantilla"
             >
               {exporting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              {exporting ? "Generando Excel..." : "Descargar Excel"}
+              {exporting ? "Generando Anexo 14..." : "Descargar Anexo 14"}
             </SiteCorpButton>
             {canManage && (
               <SiteCorpButton variant="outline" onClick={() => setMigrationDialogOpen(true)}>

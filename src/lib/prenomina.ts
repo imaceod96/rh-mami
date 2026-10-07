@@ -1,4 +1,7 @@
 import { supabase } from "@/lib/supabase"
+import { academicCategoryLabel } from "@/lib/academic-payment"
+
+export { academicCategoryLabel }
 
 /**
  * PRENÓMINA (Fase 1) — preparación mensual del pago de los trabajadores activos.
@@ -260,14 +263,6 @@ export function computeEntryPreview(
   }
 }
 
-/** Etiqueta de la categoría académica snapshot: Máster / Doctor / sin categoría. */
-export const academicCategoryLabel = (
-  category: "MASTER" | "DOCTOR" | null | undefined
-): string => {
-  if (category === "DOCTOR") return "Doctor"
-  if (category === "MASTER") return "Máster"
-  return "Sin categoría académica"
-}
 
 /** Etiqueta legible de la antigüedad del período: "X años, Y meses". */
 export const formatTenureLabel = (
