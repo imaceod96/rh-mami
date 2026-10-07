@@ -392,6 +392,8 @@ export const changeWorkerPosition = async (input: {
   signaturePlace?: string | null
   representativeAssignmentId?: string | null
   requireFormalized?: boolean
+  /** Fecha de la Resolución cuando el Cargo destino es Especialista Principal. */
+  resolutionDate?: string | null
 }): Promise<{
   previous_assignment_id: string
   new_assignment_id: string
@@ -399,6 +401,8 @@ export const changeWorkerPosition = async (input: {
   salary_history_id: string | null
   changes: AddendumChange[]
   has_contractual_changes: boolean
+  is_principal_specialist: boolean
+  resolution_id: string | null
   /** 'NO_CONTRACT' cuando el cambio no pudo registrar anexo por falta de contrato vigente */
   addendum_skipped: string | null
   addendum: {
@@ -422,6 +426,7 @@ export const changeWorkerPosition = async (input: {
     p_signature_place: input.signaturePlace?.trim() || null,
     p_representative_assignment_id: input.representativeAssignmentId || null,
     p_require_formalized: input.requireFormalized ?? false,
+    p_resolution_date: input.resolutionDate || null,
   })
   if (error) throw error
   return data as any

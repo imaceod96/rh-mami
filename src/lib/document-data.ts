@@ -117,7 +117,38 @@ export interface AddendumDocumentData {
   }
 }
 
-export type DocumentData = ContractDocumentData | AddendumDocumentData | Sc404DocumentData
+/**
+ * Datos documentales de una RESOLUCIÓN (Cargo Especialista Principal).
+ * La fuente es `worker_resolutions` (snapshot histórico): el documento nunca se
+ * recalcula desde el estado vivo una vez creada la Resolución.
+ */
+export interface ResolutionDocumentData {
+  document_type: "RESOLUTION"
+  resolution_id: string
+  entity: {
+    name: string | null
+    municipality: string | null
+    revolution_year: string | null
+  }
+  /** Empresa a la que pertenece la UEB (r.emp). Vacío si la entidad no es UEB. */
+  parent_company: { name: string | null }
+  representative: { name: string | null; position: string | null }
+  worker: { full_name: string | null; identification: string | null }
+  job: {
+    name: string | null
+    salary_group_sequence: number | null
+    salary_amount: number | null
+    currency_code: string | null
+    work_content: string | null
+  }
+  resolution: { date: string | null }
+}
+
+export type DocumentData =
+  | ContractDocumentData
+  | AddendumDocumentData
+  | Sc404DocumentData
+  | ResolutionDocumentData
 
 export type Sc404SourceType = "VACATION" | "MEDICAL_CERTIFICATE"
 
@@ -404,6 +435,17 @@ export async function getAddendumDocumentData(addendumId: string): Promise<Adden
   })
   if (error) throw error
   return data as AddendumDocumentData
+}
+
+/** Datos documentales completos de una Resolución (Cargo Especialista Principal). */
+export async function getResolutionDocumentData(
+  resolutionId: string
+): Promise<ResolutionDocumentData> {
+  const { data, error } = await supabase.rpc("get_resolution_document_data", {
+    p_resolution_id: resolutionId,
+  })
+  if (error) throw error
+  return data as ResolutionDocumentData
 }
 
 /** Información pendiente para poder generar el contrato (§47/§49/§50). */

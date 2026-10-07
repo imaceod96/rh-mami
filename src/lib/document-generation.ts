@@ -11,6 +11,7 @@ import {
 import {
   getAddendumDocumentData,
   getContractDocumentData,
+  getResolutionDocumentData,
   getSc404DocumentData,
   type DocumentData,
   type Sc404SourceType,
@@ -33,10 +34,17 @@ import { renderDocx } from "@/lib/docx-render"
 
 export const WORKER_DOCUMENTS_BUCKET = "documents"
 
-export type GenerationDocumentKind = "CONTRACT" | "ADDENDUM" | "VACATION" | "MEDICAL_CERTIFICATE"
+export type GenerationDocumentKind =
+  | "CONTRACT"
+  | "ADDENDUM"
+  | "VACATION"
+  | "MEDICAL_CERTIFICATE"
+  | "RESOLUTION"
 
 const isSc404Kind = (kind: GenerationDocumentKind): kind is Sc404SourceType =>
   kind === "VACATION" || kind === "MEDICAL_CERTIFICATE"
+
+const isResolutionKind = (kind: GenerationDocumentKind): boolean => kind === "RESOLUTION"
 
 export type TemplateResolutionStatus = "PINNED" | "RESOLVED" | "NONE" | "AMBIGUOUS"
 
@@ -122,6 +130,7 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   EMPLOYMENT_CONTRACT_INDETERMINED: "Contrato de Trabajo por Tiempo Indeterminado",
   EMPLOYMENT_CONTRACT_ADDENDUM: "Anexo al Contrato de Trabajo",
   SC_4_04: "Modelo SC-4-04 — Notificación de Vacaciones, Deducciones, Licencias y Subsidios",
+  RESOLUTION: "Resolución — Especialista Principal",
 }
 
 /** Dónde puede corregirse cada variable (§66). Sin navegación inteligente. */
@@ -188,6 +197,28 @@ interface SourceContext {
 const loadSourceContext = async (kind: GenerationDocumentKind, sourceId: string): Promise<SourceContext> => {
   if (isSc404Kind(kind)) {
     return loadSc404SourceContext(kind, sourceId)
+  }
+  if (isResolutionKind(kind)) {
+    const { data, error } = await supabase
+      .from("worker_resolutions")
+      .select("id, worker_id, organization_entity_id, resolution_date, document_template_version_id")
+      .eq("id", sourceId)
+      .maybeSingle()
+    throwIfError(error)
+    const row = record(data)
+    if (!row.id) throw new Error("Resolución no encontrada")
+    const date = text(row.resolution_date)
+    return {
+      kind,
+      sourceId,
+      workerId: String(row.worker_id),
+      entityId: String(row.organization_entity_id),
+      // Una Resolución es un evento formal: se genera una vez creada.
+      formalized: true,
+      referenceDate: date ?? new Date().toISOString().slice(0, 10),
+      documentTypeCode: "RESOLUTION",
+      pinnedVersionId: text(row.document_template_version_id),
+    }
   }
   if (kind === "CONTRACT") {
     const { data, error } = await supabase
@@ -406,9 +437,11 @@ export const precheckDocumentGeneration = async (
 
   const documentData: DocumentData = isSc404Kind(kind)
     ? await getSc404DocumentData(kind, sourceId)
-    : kind === "CONTRACT"
-      ? await getContractDocumentData(sourceId)
-      : await getAddendumDocumentData(sourceId)
+    : isResolutionKind(kind)
+      ? await getResolutionDocumentData(sourceId)
+      : kind === "CONTRACT"
+        ? await getContractDocumentData(sourceId)
+        : await getAddendumDocumentData(sourceId)
 
   const resolved = resolveAllDocumentVariables(documentData)
   // SC-4-04 (§26): las variables no aplicables al origen se sustituyen por
@@ -504,7 +537,9 @@ export const buildGeneratedDocumentName = (
   const base =
     precheck.kind === "ADDENDUM"
       ? ["Anexo", "Contrato", workerName]
-      : isSc404Kind(precheck.kind)
+      : isResolutionKind(precheck.kind)
+        ? ["Resolucion", workerName]
+        : isSc404Kind(precheck.kind)
         ? precheck.kind === "VACATION"
           ? ["Modelo SC-4-04 - Vacaciones", workerName]
           : ["Modelo SC-4-04 - Certificados/Licencia", workerName]
@@ -622,7 +657,7 @@ const runGeneration = async (
   // 3) Fijar la versión de plantilla en la fuente antes de reservar la generación (§9).
   //    SC-4-04: los orígenes (vacaciones/certificados) no fijan versión; la
   //    trazabilidad vive en worker_documents.document_template_version_id.
-  if (!isSc404Kind(kind) && precheck.template.status === "RESOLVED") {
+  if (!isSc404Kind(kind) && !isResolutionKind(kind) && precheck.template.status === "RESOLVED") {
     try {
       await pinTemplateVersion(kind, sourceId, versionId)
     } catch (err) {
@@ -639,11 +674,16 @@ const runGeneration = async (
           p_source_id: sourceId,
           p_template_version_id: versionId,
         })
-      : await supabase.rpc("begin_document_generation", {
-          p_employment_contract_id: kind === "CONTRACT" ? sourceId : null,
-          p_contract_addendum_id: kind === "ADDENDUM" ? sourceId : null,
-          p_template_version_id: versionId,
-        })
+      : isResolutionKind(kind)
+        ? await supabase.rpc("begin_resolution_generation", {
+            p_resolution_id: sourceId,
+            p_template_version_id: versionId,
+          })
+        : await supabase.rpc("begin_document_generation", {
+            p_employment_contract_id: kind === "CONTRACT" ? sourceId : null,
+            p_contract_addendum_id: kind === "ADDENDUM" ? sourceId : null,
+            p_template_version_id: versionId,
+          })
     throwIfError(error)
     const row = record(data)
     reservation = {
@@ -735,12 +775,25 @@ export const generateSc404Document = (sourceType: Sc404SourceType, sourceId: str
 export const precheckSc404Document = (sourceType: Sc404SourceType, sourceId: string) =>
   precheckDocumentGeneration(sourceType, sourceId)
 
+/** Genera el documento de una Resolución (Cargo Especialista Principal). */
+export const generateResolutionDocument = (resolutionId: string) =>
+  runGeneration("RESOLUTION", resolutionId)
+
+export const precheckResolutionDocument = (resolutionId: string) =>
+  precheckDocumentGeneration("RESOLUTION", resolutionId)
+
 /* ------------------------------------------------------------------ */
 /* Consulta y descarga                                                 */
 /* ------------------------------------------------------------------ */
 
 export const fetchGeneratedDocuments = async (
-  source: { contractId?: string; addendumId?: string; vacationId?: string; certificateId?: string }
+  source: {
+    contractId?: string
+    addendumId?: string
+    vacationId?: string
+    certificateId?: string
+    resolutionId?: string
+  }
 ): Promise<GeneratedDocumentRow[]> => {
   let query = supabase
     .from("worker_documents")
@@ -761,6 +814,8 @@ export const fetchGeneratedDocuments = async (
     query = query
       .eq("document_source_type", "MEDICAL_CERTIFICATE")
       .eq("document_source_id", source.certificateId)
+  } else if (source.resolutionId) {
+    query = query.eq("document_source_type", "RESOLUTION").eq("document_source_id", source.resolutionId)
   }
 
   const { data, error } = await query

@@ -43,6 +43,13 @@ import {
   type TemplateAvailability,
 } from "@/lib/contract-automation"
 import { formatConditionDate } from "@/lib/contract-conditions"
+import ResolutionForm, {
+  type ResolutionFormValues,
+} from "@/components/resolutions/ResolutionForm"
+import {
+  ensureResolutionDocumentGenerated,
+  updateJobWorkContent,
+} from "@/lib/resolutions"
 
 interface PositionRow {
   id: string
@@ -60,6 +67,7 @@ interface PositionRow {
   job: {
     id: string
     name: string
+    is_principal_specialist: boolean
     area: { id: string; name: string } | null
     salary_group: { id: string; salary_scale_id: string; sequence_number: number } | null
   } | null
@@ -142,6 +150,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
   const [addendumTemplate, setAddendumTemplate] = React.useState<TemplateAvailability | null>(null)
   const [addendumTemplateChecking, setAddendumTemplateChecking] = React.useState(false)
   const [processStage, setProcessStage] = React.useState<string | null>(null)
+  const [resolutionValues, setResolutionValues] = React.useState<ResolutionFormValues | null>(null)
   const queryClient = useQueryClient()
 
   const loadPositions = React.useCallback(async () => {
@@ -155,7 +164,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
           `id, name, code, is_active, authorized_quantity,
            work_location, daily_hours, weekly_hours, monthly_hours, break_minutes, schedule_notes,
            job:organization_jobs(
-             id, name, code, is_active, area_id,
+             id, name, code, is_active, area_id, is_principal_specialist,
              area:organization_areas(id, name),
              salary_group:salary_groups(id, salary_scale_id, sequence_number)
            )`
@@ -228,6 +237,7 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
     setSignatureDate("")
     setSignaturePlace("")
     setRepresentativeAssignmentId(null)
+    setResolutionValues(null)
     loadPositions()
   }, [open, loadPositions])
 
@@ -246,6 +256,9 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
     () => positions.find((p) => p.id === selectedPositionId) || null,
     [positions, selectedPositionId]
   )
+
+  /** §45: si el NUEVO Cargo es Especialista Principal, el documento es la Resolución. */
+  const isPrincipalSpecialist = selected?.job?.is_principal_specialist === true
 
   const selectedGroup = selected?.job?.salary_group || null
   const selectedSalary = salaryForGroup(applicableScaleId, selectedGroup, salaryValuesByGroup)
@@ -336,6 +349,78 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
       setError("La fecha efectiva debe ser posterior al inicio del puesto actual.")
       return
     }
+
+    // §45: movimiento formal hacia un Cargo Especialista Principal → RESOLUCIÓN.
+    if (isPrincipalSpecialist) {
+      if (!resolutionValues || !resolutionValues.valid) {
+        setError(resolutionValues?.error || "Complete la información de la Resolución.")
+        return
+      }
+      setSubmitting(true)
+      try {
+        if (resolutionValues.workContentChanged && selected?.job?.id) {
+          try {
+            await updateJobWorkContent(selected.job.id, resolutionValues.workContent || "")
+          } catch {
+            /* best-effort: el snapshot conserva el valor introducido */
+          }
+        }
+
+        const result = await changeWorkerPosition({
+          workerId,
+          newPositionId: selectedPositionId,
+          effectiveDate,
+          reason: reason.trim() || null,
+          notes: notes.trim() || null,
+          createAddendum: false,
+          reasonCode: "POSITION_CHANGE",
+          representativeAssignmentId: resolutionValues.representativeAssignmentId,
+          resolutionDate: resolutionValues.resolutionDate,
+        })
+
+        let documentWarning: string | null = null
+        if (result.resolution_id) {
+          setProcessStage("Generando Resolución…")
+          try {
+            const doc = await ensureResolutionDocumentGenerated(result.resolution_id)
+            if (!doc.skipped && !doc.generated) {
+              documentWarning =
+                doc.result?.error || "No se pudo generar la Resolución automáticamente."
+            }
+          } catch (genErr) {
+            documentWarning =
+              genErr instanceof Error
+                ? genErr.message
+                : "No se pudo generar la Resolución automáticamente."
+          }
+        }
+
+        invalidateContractAlertData(queryClient)
+        setProcessStage(null)
+
+        if (documentWarning) {
+          showError(
+            `El movimiento se realizó, pero la Resolución no se pudo generar: ${documentWarning}. Puede regenerarla desde la pestaña Documentos del trabajador.`
+          )
+        } else {
+          showSuccess(
+            "Cambio de puesto realizado. Resolución generada y archivada en los Documentos del trabajador."
+          )
+        }
+        onOpenChange(false)
+        onSuccess()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : ""
+        const friendly = msg || "No se pudo completar el cambio de puesto."
+        setError(friendly)
+        showError(friendly)
+      } finally {
+        setSubmitting(false)
+        setProcessStage(null)
+      }
+      return
+    }
+
     if (previewLoading) {
       setError("Espere a que se calculen las diferencias contractuales.")
       return
@@ -649,8 +734,8 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
             </p>
           </div>
 
-          {/* Diferencias contractuales (Fase 11A.6) */}
-          {selected && !effectiveDate ? (
+          {/* Diferencias contractuales (Fase 11A.6) — no aplica a la Resolución */}
+          {!isPrincipalSpecialist && (selected && !effectiveDate ? (
             <SiteCorpAlert type="info">
               Indique la fecha efectiva para calcular las diferencias contractuales del cambio.
             </SiteCorpAlert>
@@ -768,7 +853,20 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
                 </div>
               )}
             </>
-          ) : null}
+          ) : null)}
+
+          {/* §45: Resolución para Cargo destino Especialista Principal */}
+          {isPrincipalSpecialist && (
+            <ResolutionForm
+              key={`${selectedPositionId}-${effectiveDate}`}
+              entityId={entityId}
+              positionId={selectedPositionId}
+              workerId={workerId}
+              initialResolutionDate={effectiveDate}
+              canManageContractData
+              onValuesChange={setResolutionValues}
+            />
+          )}
 
           {/* Motivo */}
           <div className="space-y-2">
@@ -818,10 +916,18 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
               loading ||
               selectable.length === 0 ||
               previewLoading ||
-              (formalizeNow && (addendumTemplateBlocked || addendumTemplateChecking))
+              (isPrincipalSpecialist
+                ? !resolutionValues || !resolutionValues.valid
+                : formalizeNow && (addendumTemplateBlocked || addendumTemplateChecking))
             }
           >
-            {processStage ? processStage : submitting ? "Procesando…" : "Confirmar cambio de puesto"}
+            {processStage
+              ? processStage
+              : submitting
+                ? "Procesando…"
+                : isPrincipalSpecialist
+                  ? "Confirmar movimiento y Resolución"
+                  : "Confirmar cambio de puesto"}
           </SiteCorpButton>
         </div>
       </DialogContent>

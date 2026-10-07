@@ -3,6 +3,7 @@ import type {
   AddendumDocumentData,
   ContractDocumentData,
   DocumentData,
+  ResolutionDocumentData,
   Sc404DocumentData,
 } from "@/lib/document-data"
 
@@ -18,7 +19,7 @@ import type {
  * Este archivo NO genera documentos: sólo describe, resuelve y formatea.
  */
 
-export type DocumentTypeCode = "CONTRACT" | "ADDENDUM" | "SC_4_04"
+export type DocumentTypeCode = "CONTRACT" | "ADDENDUM" | "SC_4_04" | "RESOLUTION"
 
 export type DocumentVariableDataType = "text" | "integer" | "amount" | "date" | "hours"
 
@@ -38,6 +39,7 @@ export interface DocumentVariableDefinition {
     | "Retribución"
     | "Anexo"
     | "SC-4-04"
+    | "Resolución"
     | "Vacaciones"
     | "Certificado médico"
     | "Documento"
@@ -302,6 +304,23 @@ export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   { key: "a.nue_salario", label: "Anexo · Salario nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Salario nuevo según el snapshot del anexo." },
   { key: "a.nue_otros", label: "Anexo · Otros pagos nuevos", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Otros pagos según el lado «después» del anexo." },
   { key: "a.nue_total", label: "Anexo · Total nuevo", category: "Anexo", documentTypes: ["ADDENDUM"], dataType: "amount", kind: "SOURCE", description: "Total contractual nuevo según el anexo." },
+
+  // ---------------- Resolución · catálogo VISIBLE exclusivo (short aliases r.*) ----------------
+  // Documento sustitutivo del contrato cuando el Cargo destino es Especialista
+  // Principal. Se mantienen variables CORTAS r.* (nunca nombres largos).
+  { key: "r.nom", label: "Resolución · Nombre completo", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Nombre y apellidos del trabajador." },
+  { key: "r.car", label: "Resolución · Cargo", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Cargo destino que pasa a ocupar el trabajador." },
+  { key: "r.ent", label: "Resolución · Nombre de la entidad", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Entidad que emite la Resolución." },
+  { key: "r.emp", label: "Resolución · Empresa", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Empresa a la que pertenece la UEB (vacío si la entidad no es UEB)." },
+  { key: "r.sal", label: "Resolución · Salario", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "amount", kind: "SOURCE", description: "Salario correspondiente al nuevo Cargo." },
+  { key: "r.ge", label: "Resolución · Grupo Escala", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Grupo Escala del nuevo Cargo (valor real, p. ej. XI)." },
+  { key: "r.fun", label: "Resolución · Funciones / contenido de trabajo", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Funciones / contenido de trabajo del nuevo Cargo." },
+  { key: "r.mun", label: "Resolución · Municipio", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Municipio donde se firma (dirección contractual de la entidad)." },
+  { key: "r.dia", label: "Resolución · Día de firma", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "CALCULATED", description: "Día de la fecha de Resolución." },
+  { key: "r.mes", label: "Resolución · Mes de firma", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "CALCULATED", description: "Mes de la fecha de Resolución en español." },
+  { key: "r.ano", label: "Resolución · Año de firma", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "CALCULATED", description: "Año de la fecha de Resolución." },
+  { key: "r.rev", label: "Resolución · Año de la Revolución", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Año de la Revolución configurado como texto en la información contractual." },
+  { key: "r.rep", label: "Resolución · Representante", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Persona a nombre de quien sale la Resolución." },
 ]
 
 export const documentVariableByKey = (key: string): DocumentVariableDefinition | undefined =>
@@ -443,6 +462,9 @@ const isContractData = (data: DocumentData): data is ContractDocumentData =>
 
 const isSc404Data = (data: DocumentData): data is Sc404DocumentData =>
   data.document_type === "SC_4_04"
+
+const isResolutionData = (data: DocumentData): data is ResolutionDocumentData =>
+  data.document_type === "RESOLUTION"
 
 const textOrNull = (value: unknown): string | null => {
   if (value === null || value === undefined) return null
@@ -648,6 +670,32 @@ const rawValueFor = (
         return incorporationYear !== null ? String(incorporationYear).slice(-2) : null
       case "s.vac": return isVacation ? "X" : null
       case "s.lic": return isMedical ? "X" : null
+      default: return null
+    }
+  }
+
+  // ---------------- Resolución (Especialista Principal) ----------------
+  if (isResolutionData(data)) {
+    const date = data.resolution.date
+    switch (definition.key) {
+      case "r.nom": return textOrNull(data.worker.full_name)
+      case "r.car": return textOrNull(data.job.name)
+      case "r.ent": return textOrNull(data.entity.name)
+      case "r.emp": return textOrNull(data.parent_company.name)
+      case "r.sal": return data.job.salary_amount
+      case "r.ge":
+        return data.job.salary_group_sequence != null
+          ? toRomanNumeral(data.job.salary_group_sequence)
+          : null
+      case "r.fun": return textOrNull(data.job.work_content)
+      case "r.mun": return textOrNull(data.entity.municipality)
+      case "r.dia":
+        return date != null ? String(Number(date.slice(0, 10).split("-")[2])) : null
+      case "r.mes": return documentSignatureMonth(date)
+      case "r.ano":
+        return date != null ? String(Number(date.slice(0, 10).split("-")[0])) : null
+      case "r.rev": return textOrNull(data.entity.revolution_year)
+      case "r.rep": return textOrNull(data.representative.name)
       default: return null
     }
   }

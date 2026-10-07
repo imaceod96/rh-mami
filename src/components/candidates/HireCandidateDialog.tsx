@@ -26,6 +26,13 @@ import {
   type SalaryValue,
 } from "@/lib/salary"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
+import ResolutionForm, {
+  type ResolutionFormValues,
+} from "@/components/resolutions/ResolutionForm"
+import {
+  ensureResolutionDocumentGenerated,
+  updateJobWorkContent,
+} from "@/lib/resolutions"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
 import { ContractReadinessChecklist } from "@/components/contracts/ContractReadinessChecklist"
@@ -196,6 +203,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     React.useState<TemplateAvailability | null>(null)
   const [templateChecking, setTemplateChecking] = React.useState(false)
   const [processStage, setProcessStage] = React.useState<string | null>(null)
+  const [resolutionValues, setResolutionValues] = React.useState<ResolutionFormValues | null>(null)
   const [segmentsByPosition, setSegmentsByPosition] = React.useState<
     Record<string, PositionScheduleSegment[]>
   >({})
@@ -325,6 +333,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
     setRepresentativeAssignmentId(null)
     setError(null)
     setOccupancy({})
+    setResolutionValues(null)
     loadData()
   }, [open, candidate?.id, presetPositionId, loadData])
 
@@ -375,6 +384,11 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
 
   const selectedGroup = selected?.job?.salary_group || null
   const selectedSalary = salaryForGroup(applicableScaleId, selectedGroup, salaryValuesByGroup)
+  /**
+   * §44: si el Cargo destino es Especialista Principal, el documento es una
+   * RESOLUCIÓN (nunca un contrato). El comportamiento de Cuadro NO se modifica.
+   */
+  const isPrincipalSpecialist = selected?.job?.is_principal_specialist === true
   const selectedType = contractTypes.find((t) => t.id === contractTypeId) || null
   const isDetermined = selectedType?.code === "DETERMINADO"
   const vacancies = selected
@@ -494,6 +508,89 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       setError("La fecha de incorporación es obligatoria.")
       return
     }
+    // §44: Cargo Especialista Principal → formulario de RESOLUCIÓN (no contrato).
+    if (isPrincipalSpecialist) {
+      if (!resolutionValues || !resolutionValues.valid) {
+        setError(resolutionValues?.error || "Complete la información de la Resolución.")
+        return
+      }
+      setSubmitting(true)
+      try {
+        // Las funciones pertenecen al Cargo: se persisten en su fuente de verdad.
+        if (resolutionValues.workContentChanged && selected?.job?.id) {
+          try {
+            await updateJobWorkContent(selected.job.id, resolutionValues.workContent || "")
+          } catch {
+            /* best-effort: el snapshot conserva el valor introducido */
+          }
+        }
+        const { data, error: rpcError } = await supabase.rpc("hire_candidate", {
+          p_candidate_id: selectedCandidate.id,
+          p_position_id: positionId,
+          p_hire_date: hireDate,
+          p_contract_type_id: null,
+          p_contract_start_date: null,
+          p_contract_end_date: null,
+          p_notes: notes.trim() || null,
+          p_representative_assignment_id: resolutionValues.representativeAssignmentId,
+          p_signature_date: null,
+          p_signature_place: null,
+          p_payment_method_id: null,
+          p_compensation_components: null,
+          p_payment_schedule_text: null,
+          p_resolution_date: resolutionValues.resolutionDate,
+        })
+        if (rpcError) throw rpcError
+
+        const payload = (data as any) || {}
+        const workerId = payload.worker_id as string | undefined
+        const resolutionId = payload.resolution_id as string | undefined
+
+        let documentWarning: string | null = null
+        if (resolutionId) {
+          setProcessStage("Generando Resolución…")
+          try {
+            const doc = await ensureResolutionDocumentGenerated(resolutionId)
+            if (!doc.skipped && !doc.generated) {
+              documentWarning =
+                doc.result?.error || "No se pudo generar la Resolución automáticamente."
+            }
+          } catch (genErr) {
+            documentWarning =
+              genErr instanceof Error
+                ? genErr.message
+                : "No se pudo generar la Resolución automáticamente."
+          }
+        }
+
+        invalidateContractAlertData(queryClient)
+        setProcessStage(null)
+
+        if (documentWarning) {
+          showError(
+            `La Resolución se registró, pero el documento no se pudo generar: ${documentWarning}. Puede regenerarlo desde la pestaña Documentos del trabajador.`
+          )
+        } else {
+          showSuccess(
+            isReincorporation
+              ? "Reincorporación completada. Resolución generada y archivada en los Documentos del trabajador."
+              : "Contratación completada. Resolución generada y archivada en los Documentos del trabajador."
+          )
+        }
+        onOpenChange(false)
+        if (workerId) onSuccess(workerId)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : ""
+        const friendly = msg || "No se pudo completar la Resolución."
+        setError(friendly)
+        showError(friendly)
+      } finally {
+        setSubmitting(false)
+        setProcessStage(null)
+      }
+      return
+    }
+
     const specialDocumentRole = selected?.job?.is_cuadro || selected?.job?.is_principal_specialist
     if (!specialDocumentRole && !contractTypeId) {
       setError("Selecciona un tipo de contrato.")
@@ -937,19 +1034,36 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
               }}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Tipo de contrato *</Label>
-            <SiteCorpSelect value={contractTypeId} onValueChange={setContractTypeId}>
-              <option value="">Seleccionar tipo</option>
-              {contractTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </SiteCorpSelect>
-          </div>
+          {!isPrincipalSpecialist && (
+            <div className="space-y-2">
+              <Label>Tipo de contrato *</Label>
+              <SiteCorpSelect value={contractTypeId} onValueChange={setContractTypeId}>
+                <option value="">Seleccionar tipo</option>
+                {contractTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </SiteCorpSelect>
+            </div>
+          )}
         </div>
 
+        {isPrincipalSpecialist && (
+          <ResolutionForm
+            key={`${positionId}-${hireDate}`}
+            entityId={entityId}
+            positionId={positionId}
+            workerId={selectedCandidate?.worker?.id ?? null}
+            personName={selectedCandidate?.fullName ?? null}
+            initialResolutionDate={hireDate}
+            canManageContractData={canManageOrganization}
+            onValuesChange={setResolutionValues}
+          />
+        )}
+
+        {!isPrincipalSpecialist && (
+        <>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Inicio del contrato *</Label>
@@ -1060,6 +1174,8 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         {templateChecking && !templateBlocked && (
           <p className="text-xs text-muted-foreground">Comprobando la plantilla documental…</p>
         )}
+        </>
+        )}
 
         <div className="space-y-2">
           <Label>Observaciones</Label>
@@ -1087,16 +1203,18 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
               !selectedCandidate ||
               !positionId ||
               !hasVacancy ||
-              !contractTypeId ||
-              !signatureDate ||
-              !signaturePlace.trim() ||
-              !paymentMethodId ||
-              hasInvalidComponent(components) ||
-              formalizationBlocked ||
-              !representativeAssignmentId ||
-              templateBlocked ||
-              (!!contractTypeId && !!signatureDate && templateChecking) ||
-              (!!readiness && !readiness.ready)
+              (isPrincipalSpecialist
+                ? !resolutionValues || !resolutionValues.valid
+                : !contractTypeId ||
+                  !signatureDate ||
+                  !signaturePlace.trim() ||
+                  !paymentMethodId ||
+                  hasInvalidComponent(components) ||
+                  formalizationBlocked ||
+                  !representativeAssignmentId ||
+                  templateBlocked ||
+                  (!!contractTypeId && !!signatureDate && templateChecking) ||
+                  (!!readiness && !readiness.ready))
             }
           >
             <UserPlus className="mr-2 h-4 w-4" />
@@ -1104,9 +1222,11 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
               ? processStage
               : submitting
                 ? "Procesando…"
-                : isReincorporation
-                  ? "Confirmar reincorporación"
-                  : "Confirmar contratación"}
+                : isPrincipalSpecialist
+                  ? "Confirmar Resolución"
+                  : isReincorporation
+                    ? "Confirmar reincorporación"
+                    : "Confirmar contratación"}
           </SiteCorpButton>
         </div>
       </DialogContent>
