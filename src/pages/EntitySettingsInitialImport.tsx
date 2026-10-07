@@ -100,6 +100,9 @@ const EntitySettingsInitialImport = () => {
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [individualOpen, setIndividualOpen] = React.useState(false)
   const [summary, setSummary] = React.useState<ImportSummary | null>(null)
+  // Validación cruzada persona-en-masa (NO bloqueante): identificaciones repetidas
+  // que se crearon igualmente y que el usuario debe corregir.
+  const [duplicateIdentifications, setDuplicateIdentifications] = React.useState<string[]>([])
 
   const loadHistory = React.useCallback(async () => {
     if (!entityId) return
@@ -134,6 +137,7 @@ const EntitySettingsInitialImport = () => {
     setPreview([])
     setIsValidated(false)
     setSummary(null)
+    setDuplicateIdentifications([])
     setError("")
     setValidationError(null)
     setNotice("")
@@ -188,7 +192,10 @@ const EntitySettingsInitialImport = () => {
   const warningCount = preview.filter((row) => row.status === "WARNING").length
   const errorCount = preview.filter((row) => row.status === "ERROR").length
   const importableRows = preview.length - errorCount
-  const incompleteCount = warningCount
+  // "Información pendiente" cuenta solo las filas con datos incompletos. Las
+  // advertencias por identificación repetida (no bloqueantes) no son datos
+  // pendientes: se crean igualmente y se corrigen aparte.
+  const incompleteCount = preview.filter((row) => row.messages.some((message) => message.startsWith("Información incompleta"))).length
   // El Preview solo existe tras una validación vigente (se limpia al cambiar de archivo).
   const hasPreview = preview.length > 0
   const canImport = hasPreview && errorCount === 0 && !busy
@@ -203,6 +210,7 @@ const EntitySettingsInitialImport = () => {
       const importRows = rows.map((row) => ({ ...row, position_id: undefined, position_code: "" }))
       const result = await importWorkerMigration(entityId, importRows, `MIG-${crypto.randomUUID()}`)
       setSummary({ created: result.imported, complete: result.imported - incompleteCount, incomplete: incompleteCount, pending: result.imported })
+      setDuplicateIdentifications(result.duplicate_identifications)
       setConfirmOpen(false)
       setFile(null)
       setRows([])
@@ -250,6 +258,25 @@ const EntitySettingsInitialImport = () => {
             <Button onClick={() => navigate(`/entity/${entityId}/staffing`)}>Ir a Trabajadores</Button>
           </div>
         </SiteCorpCard>
+      )}
+
+      {duplicateIdentifications.length > 0 && (
+        <SiteCorpAlert type="warning" title="Identificaciones repetidas detectadas">
+          <div className="mt-1 space-y-2">
+            <p>
+              Estas identificaciones están repetidas en el archivo o ya existían en el workspace. La carga se completó:
+              las personas se crearon igualmente.
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5 font-mono text-xs">
+              {duplicateIdentifications.map((identification) => (
+                <li key={identification}>{identification}</li>
+              ))}
+            </ul>
+            <p className="font-medium text-slate-900">
+              Corrija estas identificaciones en los trabajadores creados para que cada persona tenga su carné propio.
+            </p>
+          </div>
+        </SiteCorpAlert>
       )}
 
       <SiteCorpCard className="rounded-2xl">

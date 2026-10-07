@@ -20,6 +20,7 @@ import {
   Palmtree,
   HeartPulse,
   Calculator,
+  FileSignature,
   ChevronDown,
   ChevronRight,
 } from "lucide-react"
@@ -47,6 +48,7 @@ const navIcons: Record<string, React.ReactNode> = {
   workers: <UserCheck className="h-5 w-5" />,
   reentries: <Undo2 className="h-5 w-5" />,
   staffing: <Briefcase className="h-5 w-5" />,
+  hiring: <FileSignature className="h-5 w-5" />,
   prenomina: <Calculator className="h-5 w-5" />,
   vacations: <Palmtree className="h-5 w-5" />,
   "medical-certificates": <HeartPulse className="h-5 w-5" />,

@@ -332,6 +332,15 @@ export async function validateWorkerMigration(entityId: string, rows: MigrationR
   })
 }
 
+export interface WorkerMigrationImportResult {
+  total_rows: number
+  imported: number
+  worker_ids: string[]
+  /** Identificaciones repetidas dentro del archivo o ya existentes en el workspace.
+   * La carga NO se bloqueó por ellas: las personas se crearon y solo deben corregirse. */
+  duplicate_identifications: string[]
+}
+
 export async function importWorkerMigration(entityId: string, rows: MigrationRow[], batchId: string) {
   const { data, error } = await supabase.rpc("migration_import_rows", {
     p_entity_id: entityId,
@@ -339,7 +348,8 @@ export async function importWorkerMigration(entityId: string, rows: MigrationRow
     p_batch_id: batchId,
   })
   if (error) throw error
-  return data as { total_rows: number; imported: number; worker_ids: string[] }
+  const result = data as WorkerMigrationImportResult
+  return { ...result, duplicate_identifications: result.duplicate_identifications || [] }
 }
 
 export async function createMigratedWorker(entityId: string, row: MigrationRow) {
