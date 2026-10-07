@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import { NO_OCCUPATIONAL_CATEGORY_LABEL } from "@/lib/occupational-categories"
+import { NO_PREPARATION_LEVEL_LABEL } from "@/lib/job-preparation-levels"
 import {
   WEEK_DAYS,
   formatTime,
@@ -33,6 +35,9 @@ export interface PositionJobOption {
     salary_scale_id: string
     sequence_number: number
   } | null
+  /** Clasificación del cargo: se muestra derivada, nunca se edita en el Puesto. */
+  occupational_category: { id: string; name: string } | null
+  preparation_levels: { id: string; code: string; name: string }[]
 }
 
 export interface PositionEditingData {
@@ -197,10 +202,17 @@ export const PositionForm: React.FC<PositionFormProps> = ({
       salaryLabel = value ? formatSalary(value) : null
     }
 
+    const preparationLabel =
+      selectedJob.preparation_levels.length > 0
+        ? selectedJob.preparation_levels.map((level) => level.code).join(", ")
+        : null
+
     return {
       areaLabel: area ? `${area.name} (${area.code})` : "N/A",
       groupLabel,
       salaryLabel,
+      categoryLabel: selectedJob.occupational_category?.name || NO_OCCUPATIONAL_CATEGORY_LABEL,
+      preparationLabel,
     }
   }, [selectedJob, applicableScaleId, salaryValuesByGroup])
 
@@ -460,7 +472,7 @@ export const PositionForm: React.FC<PositionFormProps> = ({
           Capacidad
         </p>
         <div className="space-y-2">
-          <Label htmlFor="position-quantity">Cantidad autorizada *</Label>
+          <Label htmlFor="position-quantity">No. de puestos (cantidad autorizada) *</Label>
           <SiteCorpInput
             id="position-quantity"
             type="number"
@@ -671,11 +683,11 @@ export const PositionForm: React.FC<PositionFormProps> = ({
         </div>
       </div>
 
-      {/* RETRIBUCIÓN (derivada del cargo) */}
+      {/* CLASIFICACIÓN Y RETRIBUCIÓN (derivadas del cargo) */}
       {derivedInfo && (
         <div className="space-y-4 border-t border-border pt-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Retribución (heredada del cargo)
+            Clasificación y retribución (heredadas del cargo)
           </p>
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -686,12 +698,22 @@ export const PositionForm: React.FC<PositionFormProps> = ({
             </div>
             <dl className="grid gap-2 sm:grid-cols-3">
               <div>
-                <dt className="text-xs text-muted-foreground">Área</dt>
-                <dd className="text-sm font-medium text-ink">{derivedInfo.areaLabel}</dd>
+                <dt className="text-xs text-muted-foreground">Categoría Ocupacional</dt>
+                <dd className="text-sm font-medium text-ink">{derivedInfo.categoryLabel}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Grupo salarial</dt>
+                <dt className="text-xs text-muted-foreground">Nivel de preparación</dt>
+                <dd className="text-sm font-medium text-ink">
+                  {derivedInfo.preparationLabel || NO_PREPARATION_LEVEL_LABEL}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Grupo escala</dt>
                 <dd className="text-sm font-medium text-ink">{derivedInfo.groupLabel}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Área</dt>
+                <dd className="text-sm font-medium text-ink">{derivedInfo.areaLabel}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Salario actual</dt>
@@ -706,6 +728,11 @@ export const PositionForm: React.FC<PositionFormProps> = ({
                 </dd>
               </div>
             </dl>
+            <p className="mt-2 text-xs text-muted-foreground">
+              La categoría ocupacional, el nivel de preparación y el grupo escala se definen en el
+              Cargo. El nombre del puesto y la cantidad autorizada («No. de puestos») son propios
+              del Puesto.
+            </p>
           </div>
         </div>
       )}

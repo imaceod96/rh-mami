@@ -17,6 +17,7 @@ import WorkerPrenominaDialog from "@/components/prenomina/WorkerPrenominaDialog"
 import {
   MONTH_LABELS,
   PRENOMINA_STATUS_LABELS,
+  academicCategoryLabel,
   type PrenominaPeriod,
   type PrenominaWorkerEntry,
   type PrenominaNightEntry,
@@ -257,6 +258,16 @@ const EntityPrenomina = () => {
     [entries]
   )
 
+  const academicIssues = React.useMemo(
+    () => entries.filter((e) => e.academic_status !== "OK").length,
+    [entries]
+  )
+
+  const grandAcademic = React.useMemo(
+    () => entries.reduce((acc, e) => acc + Number(e.academic_payment || 0), 0),
+    [entries]
+  )
+
   if (permissionsLoading || loading) {
     return <SiteCorpLoading />
   }
@@ -409,6 +420,15 @@ const EntityPrenomina = () => {
                   </SiteCorpAlert>
                 )}
 
+                {academicIssues > 0 && (
+                  <SiteCorpAlert type="warning">
+                    {academicIssues} trabajador(es) con categoría académica (Máster/Doctor) sin
+                    importe configurado. Configura el Pago por categoría académica de la entidad; la
+                    prenómina no podrá cerrarse hasta resolverlo. Deja el importe vacío para «no
+                    configurado»; un 0 explícito es válido.
+                  </SiteCorpAlert>
+                )}
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -421,6 +441,11 @@ const EntityPrenomina = () => {
                       <TableHead>Horas calculadas</TableHead>
                       <TableHead>Pago salario escala</TableHead>
                       <TableHead>Antigüedad</TableHead>
+                      <TableHead>
+                        <span title="Pago por categoría académica: se añade automáticamente (Máster o Doctor).">
+                          Pago categoría académica
+                        </span>
+                      </TableHead>
                       <TableHead>Nocturnidad</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead className="text-right">Detalle</TableHead>
@@ -462,6 +487,23 @@ const EntityPrenomina = () => {
                             </span>
                           )}
                         </TableCell>
+                        <TableCell>
+                          {entry.academic_status !== "OK" ? (
+                            <span className="text-xs font-medium text-sitecorp-danger">
+                              Sin importe configurado
+                            </span>
+                          ) : entry.academic_monthly_amount === null ? (
+                            <span className="text-muted-foreground">{formatMoney(0)}</span>
+                          ) : (
+                            <span
+                              title={`${academicCategoryLabel(entry.academic_category)} · ${
+                                entry.academic_monthly_amount
+                              } CUP/mes`}
+                            >
+                              {formatMoney(entry.academic_payment)}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell>{formatMoney(entry.total_night_payment)}</TableCell>
                         <TableCell className="font-medium text-ink">{formatMoney(entry.total_payment)}</TableCell>
                         <TableCell className="text-right">
@@ -485,6 +527,12 @@ const EntityPrenomina = () => {
                     <span className="text-sm text-muted-foreground">Total antigüedad: </span>
                     <span className="text-base font-semibold text-ink">
                       {formatMoney(grandTenure)} {entries[0]?.salary_currency || "CUP"}
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-border px-5 py-3">
+                    <span className="text-sm text-muted-foreground">Total categoría académica: </span>
+                    <span className="text-base font-semibold text-ink">
+                      {formatMoney(grandAcademic)} {entries[0]?.salary_currency || "CUP"}
                     </span>
                   </div>
                   <div className="rounded-xl border-2 border-sitecorp-primary/30 bg-sitecorp-primary/5 px-5 py-3">

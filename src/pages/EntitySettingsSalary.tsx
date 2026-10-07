@@ -55,7 +55,6 @@ const EntitySettingsSalary = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [showAddGroup, setShowAddGroup] = React.useState(false)
-  const [newGroupDesc, setNewGroupDesc] = React.useState("")
   const [canManageGlobal, setCanManageGlobal] = React.useState(false)
   const [canManageEntitySalary, setCanManageEntitySalary] = React.useState(false)
   // Cambio salarial en revisión (Fase 11A): nunca se guarda directamente.
@@ -140,16 +139,16 @@ const EntitySettingsSalary = () => {
     loadScale()
   }, [loadScale])
 
-  const handleAddGroup = async (description: string, salary: string, effectiveFrom: string) => {
-      if (!scale || !description.trim()) return
+  const handleAddGroup = async (salary: string, effectiveFrom: string) => {
+      if (!scale) return
       try {
-        const newGroup = await addSalaryGroup(scale.id, description.trim())
+        // El grupo se crea sin descripción: ese dato ya no forma parte de la UI.
+        const newGroup = await addSalaryGroup(scale.id)
         if (newGroup) {
           const amount = parseFloat(salary)
           if (!isNaN(amount) && amount > 0) {
             await addSalaryValue(newGroup.id, amount, "CUP", effectiveFrom)
           }
-          setNewGroupDesc("")
           setShowAddGroup(false)
           await loadScale()
         }
@@ -168,8 +167,7 @@ const EntitySettingsSalary = () => {
     setChangeGroup(group)
   }
 
-  const groupLabel = (group: SalaryGroupRow) =>
-    `Grupo ${group.roman_numeral}${group.description ? ` — ${group.description}` : ""}`
+  const groupLabel = (group: SalaryGroupRow) => `Grupo ${group.roman_numeral}`
 
   const handleViewHistory = async (groupId: string) => {
     setHistoryGroupId(groupId)
@@ -319,7 +317,6 @@ const EntitySettingsSalary = () => {
                                             <div>
                                               <p className="text-sm font-medium text-ink">
                                                 Grupo {group.roman_numeral}
-                                                {group.description && ` — ${group.description}`}
                                               </p>
                                               <p className="text-xs text-muted-foreground">
                                                 Secuencia: {group.sequence_number}
@@ -446,7 +443,6 @@ const EntitySettingsSalary = () => {
                       <div>
                         <p className="text-sm font-medium text-ink">
                           Grupo {group.roman_numeral}
-                          {group.description && ` — ${group.description}`}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Secuencia: {group.sequence_number}

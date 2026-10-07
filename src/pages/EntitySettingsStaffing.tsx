@@ -45,12 +45,26 @@ import {
   Trash2,
   Upload,
   FileText,
+  FileSpreadsheet,
+  Loader2,
 } from "lucide-react"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import {
   NO_OCCUPATIONAL_CATEGORY_LABEL,
   fetchOccupationalCategories,
 } from "@/lib/occupational-categories"
+import {
+  NO_PREPARATION_LEVEL_LABEL,
+  fetchJobPreparationLevels,
+  formatPreparationLevels,
+  type PreparationLevel,
+} from "@/lib/job-preparation-levels"
+import {
+  buildAnexo14FileName,
+  buildAnexo14WorkbookBlob,
+  fetchAnexo14Rows,
+  saveAnexo14Blob,
+} from "@/lib/positions-export"
 import {
   NO_WORK_INFO_LABEL,
   fetchEntityScheduleSegments,
@@ -152,6 +166,7 @@ interface OrganizationPosition {
     code: string
     is_active: boolean
     area_id: string
+    occupational_category_id: string | null
     area: {
       id: string
       name: string
@@ -219,6 +234,7 @@ const EntitySettingsStaffing = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [canManage, setCanManage] = React.useState(false)
+  const [entityName, setEntityName] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("active")
   const [areaFilter, setAreaFilter] = React.useState<string>("all")
   // Fase 11A.2: filtro por categoría ocupacional del cargo
@@ -243,6 +259,12 @@ const EntitySettingsStaffing = () => {
   const [positionDialogOpen, setPositionDialogOpen] = React.useState(false)
   const [editingPosition, setEditingPosition] = React.useState<PositionEditingData | null>(null)
   const [activeTab, setActiveTab] = React.useState("areas")
+  // Datos derivados del Cargo que la vista de Puestos muestra (nunca se copian al Puesto).
+  const [categoryNameById, setCategoryNameById] = React.useState<Record<string, string>>({})
+  const [preparationLevelsByJob, setPreparationLevelsByJob] = React.useState<
+    Record<string, PreparationLevel[]>
+  >({})
+  const [exporting, setExporting] = React.useState(false)
 
   const showNotice = (type: "success" | "danger", message: string) => {
     setNotice({ type, message })
@@ -280,6 +302,13 @@ const EntitySettingsStaffing = () => {
         permission_code: "staffing.manage",
       })
       setCanManage(!!canManageData)
+
+      const { data: entityData } = await supabase
+        .from("organization_entities")
+        .select("name")
+        .eq("id", entityId)
+        .maybeSingle()
+      setEntityName((entityData as { name: string } | null)?.name || "")
 
       // Load areas
       const { data: areasData, error: areasError } = await supabase
@@ -321,6 +350,7 @@ const EntitySettingsStaffing = () => {
       // cliente por id para no depender de la detección de la nueva FK por PostgREST.
       const categories = await fetchOccupationalCategories({ includeInactive: true })
       const categoryById = new Map(categories.map(c => [c.id, c]))
+      setCategoryNameById(Object.fromEntries(categories.map(c => [c.id, c.name])))
 
       // Transform jobs to include current salary value
       const jobsWithCurrentValue = (jobsData as any[])?.map((job: any) => {
@@ -348,6 +378,11 @@ const EntitySettingsStaffing = () => {
       }) as OrganizationJob[]
 
       setJobs(jobsWithCurrentValue || [])
+
+      // Niveles de preparación configurados por cargo (derivados, sólo lectura)
+      setPreparationLevelsByJob(
+        await fetchJobPreparationLevels((jobsWithCurrentValue || []).map(j => j.id))
+      )
 
       // Escala salarial aplicable a la entidad:
       // PRESUPUESTADA → escala global; EMPRESARIAL → escala de esta entidad (sin fallback)
@@ -399,6 +434,7 @@ const EntitySettingsStaffing = () => {
             code,
             is_active,
             area_id,
+            occupational_category_id,
             area:organization_areas(id, name, code),
             salary_group:salary_groups(id, salary_scale_id, sequence_number)
           )
@@ -535,7 +571,7 @@ const EntitySettingsStaffing = () => {
     [applicableScaleId, salaryValuesByGroup]
   )
 
-  // Opciones de cargo para el formulario (área incluida para info derivada)
+  // Opciones de cargo para el formulario (información derivada del cargo incluida)
   const positionJobOptions: PositionJobOption[] = React.useMemo(
     () =>
       jobs.map(j => ({
@@ -554,8 +590,16 @@ const EntitySettingsStaffing = () => {
               sequence_number: j.salary_group.sequence_number,
             }
           : null,
+        occupational_category: j.occupational_category
+          ? { id: j.occupational_category.id, name: j.occupational_category.name }
+          : null,
+        preparation_levels: (preparationLevelsByJob[j.id] || []).map(level => ({
+          id: level.id,
+          code: level.code,
+          name: level.name,
+        })),
       })),
-    [jobs]
+    [jobs, preparationLevelsByJob]
   )
 
   // Position dialog handlers
@@ -589,6 +633,37 @@ const EntitySettingsStaffing = () => {
     await loadData()
     setPositionDialogOpen(false)
     setEditingPosition(null)
+  }
+
+  /**
+   * Anexo 14 de Puestos: exporta EXCLUSIVAMENTE la estructura de puestos del
+   * alcance que se está viendo (entidad + filtros activos de área/cargo/estado).
+   * La autorización y el orden organizativo se resuelven en el backend.
+   */
+  const handleExportAnexo14 = async () => {
+    if (!entityId || exporting) return
+    setExporting(true)
+    try {
+      const rows = await fetchAnexo14Rows(entityId, {
+        includeInactive: statusFilter !== "active",
+        areaId: areaFilter !== "all" ? areaFilter : null,
+        jobId: jobFilter !== "all" ? jobFilter : null,
+      })
+      if (rows.length === 0) {
+        showNotice("danger", "No hay puestos que exportar con el alcance actual.")
+        return
+      }
+      const blob = await buildAnexo14WorkbookBlob(rows, {
+        entityName,
+        generatedAt: new Date(),
+      })
+      saveAnexo14Blob(blob, buildAnexo14FileName(entityName))
+    } catch (err) {
+      console.error("Error generating Anexo 14:", err)
+      showNotice("danger", "No se pudo generar el Anexo 14. Inténtalo nuevamente.")
+    } finally {
+      setExporting(false)
+    }
   }
 
   const handleToggleActivePosition = async (position: OrganizationPosition) => {
@@ -1161,11 +1236,26 @@ const EntitySettingsStaffing = () => {
                   Define los puestos autorizados de la plantilla a partir de los cargos.
                 </p>
               </div>
-              {canManage && activeJobs.length > 0 && (
-                <SiteCorpButton onClick={openCreatePositionDialog}>
-                  <Plus className="mr-2 h-4 w-4" /> Nuevo puesto
+              <div className="flex flex-wrap items-center gap-2">
+                <SiteCorpButton
+                  variant="outline"
+                  onClick={handleExportAnexo14}
+                  disabled={exporting || positions.length === 0}
+                  title="Descargar el Anexo 14 con la estructura de puestos (sólo puestos)"
+                >
+                  {exporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  )}
+                  {exporting ? "Generando Anexo 14..." : "Exportar Anexo 14"}
                 </SiteCorpButton>
-              )}
+                {canManage && activeJobs.length > 0 && (
+                  <SiteCorpButton onClick={openCreatePositionDialog}>
+                    <Plus className="mr-2 h-4 w-4" /> Nuevo puesto
+                  </SiteCorpButton>
+                )}
+              </div>
             </div>
 
             {/* Sin cargos activos: requisito previo */}
@@ -1256,43 +1346,74 @@ const EntitySettingsStaffing = () => {
                           key={position.id}
                           className="rounded-xl border border-border bg-white p-4"
                         >
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-                            <span className="text-sm font-medium text-ink">
-                              {position.name}
-                            </span>
-                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                              {position.code}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Área: {position.job?.area?.name || "—"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Cargo: {position.job?.name || "—"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Grupo:{" "}
-                              {position.job?.salary_group
-                                ? toRomanNumeral(position.job.salary_group.sequence_number)
-                                : "N/A"}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                                                          {salary ? (
-                                                            `${salary.amount.toLocaleString("es-CU", {
-                                                              minimumFractionDigits: 2,
-                                                            })} ${salary.currency_code}`
-                                                          ) : (
-                                                            <span className="italic">
-                                                              {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
-                                                            </span>
-                                                          )}
-                                                        </span>
-                                                        <span className="font-medium text-ink">
-                                                          {position.authorized_quantity}
-                                                        </span>
-                                                        <SiteCorpStatusBadge status={position.is_active ? "success" : "neutral"}>
-                                                          {position.is_active ? "Activo" : "Inactivo"}
-                                                        </SiteCorpStatusBadge>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex min-w-0 flex-1 flex-col gap-3">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="text-sm font-semibold text-ink">
+                                {position.name}
+                              </span>
+                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                {position.code}
+                              </span>
+                              <SiteCorpStatusBadge status={position.is_active ? "success" : "neutral"}>
+                                {position.is_active ? "Activo" : "Inactivo"}
+                              </SiteCorpStatusBadge>
+                            </div>
+
+                            {/* Información principal del Puesto. Categoría ocupacional,
+                                nivel de preparación y grupo escala se muestran derivados
+                                del Cargo; sólo la cantidad autorizada es del Puesto. */}
+                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                              <div>
+                                <dt className="text-xs text-muted-foreground">Categoría Ocupacional</dt>
+                                <dd className="text-sm font-medium text-ink">
+                                  {position.job?.occupational_category_id
+                                    ? categoryNameById[position.job.occupational_category_id] ||
+                                      NO_OCCUPATIONAL_CATEGORY_LABEL
+                                    : NO_OCCUPATIONAL_CATEGORY_LABEL}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs text-muted-foreground">No. de puestos</dt>
+                                <dd className="text-sm font-medium text-ink">
+                                  {position.authorized_quantity}
+                                </dd>
+                                <p className="text-[11px] text-muted-foreground">Cantidad autorizada</p>
+                              </div>
+                              <div>
+                                <dt className="text-xs text-muted-foreground">Nivel de preparación</dt>
+                                <dd className="text-sm font-medium text-ink">
+                                  {formatPreparationLevels(
+                                    position.job ? preparationLevelsByJob[position.job.id] : undefined
+                                  ) || NO_PREPARATION_LEVEL_LABEL}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs text-muted-foreground">Grupo escala</dt>
+                                <dd className="text-sm font-medium text-ink">
+                                  {position.job?.salary_group
+                                    ? toRomanNumeral(position.job.salary_group.sequence_number)
+                                    : "N/A"}
+                                </dd>
+                              </div>
+                            </dl>
+
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                              <span>Área: {position.job?.area?.name || "—"}</span>
+                              <span>Cargo: {position.job?.name || "—"}</span>
+                              <span>
+                                Salario:{" "}
+                                {salary ? (
+                                  `${salary.amount.toLocaleString("es-CU", {
+                                    minimumFractionDigits: 2,
+                                  })} ${salary.currency_code}`
+                                ) : (
+                                  <span className="italic">
+                                    {applicableScaleId ? "Salario no configurado" : "Sin escala configurada"}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
                           </div>
 
                           {canManage && (

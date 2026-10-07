@@ -4,15 +4,23 @@ import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { X } from "lucide-react"
 
+/**
+ * Alta de grupo salarial.
+ *
+ * Sólo se solicitan los datos del grupo y su salario: número de secuencia
+ * (asignado por el sistema) + importe + vigencia. La descripción dejó de formar
+ * parte de la interfaz en ambos regímenes (PRESUPUESTADA y EMPRESARIAL); la
+ * columna `salary_groups.description` se conserva en la base de datos para no
+ * alterar históricos, pero nunca se inventa un valor nuevo.
+ */
 interface SalaryGroupDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (description: string, salary: string, effectiveFrom: string) => Promise<void>
+  onSubmit: (salary: string, effectiveFrom: string) => Promise<void>
   isLoading?: boolean
 }
 
 export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: SalaryGroupDialogProps) => {
-  const [description, setDescription] = React.useState("")
   const [salary, setSalary] = React.useState("")
   const [effectiveFrom, setEffectiveFrom] = React.useState("")
   const [salaryError, setSalaryError] = React.useState("")
@@ -27,7 +35,7 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!description.trim() || isLoading) return
+    if (isLoading) return
 
     const salaryErr = validateSalary(salary)
     if (salaryErr) {
@@ -38,8 +46,7 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
 
     if (!effectiveFrom.trim()) return
 
-    await onSubmit(description.trim(), salary.trim(), effectiveFrom)
-    setDescription("")
+    await onSubmit(salary.trim(), effectiveFrom)
     setSalary("")
     setEffectiveFrom("")
     setSalaryError("")
@@ -47,7 +54,6 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
   }
 
   const handleClose = () => {
-    setDescription("")
     setSalary("")
     setEffectiveFrom("")
     setSalaryError("")
@@ -63,17 +69,10 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
             <X className="ml-auto h-4 w-4 text-muted-foreground cursor-pointer hover:text-ink" onClick={handleClose} />
           </DialogTitle>
           <DialogDescription>
-            Ingrese la información del nuevo grupo salarial
+            Ingrese el salario y la vigencia del nuevo grupo salarial
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <SiteCorpInput
-            placeholder="Descripción del grupo (opcional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={isLoading}
-            autoFocus
-          />
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Salario *</label>
             <SiteCorpInput
@@ -85,6 +84,7 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
                 if (salaryError) setSalaryError("")
               }}
               disabled={isLoading}
+              autoFocus
             />
             {salaryError && (
               <p className="text-xs text-sitecorp-danger">{salaryError}</p>
@@ -104,7 +104,7 @@ export const SalaryGroupDialog = ({ open, onOpenChange, onSubmit, isLoading }: S
             <SiteCorpButton variant="outline" type="button" onClick={handleClose} disabled={isLoading}>
               Cancelar
             </SiteCorpButton>
-            <SiteCorpButton type="submit" disabled={isLoading || !description.trim() || !salary || !effectiveFrom}>
+            <SiteCorpButton type="submit" disabled={isLoading || !salary || !effectiveFrom}>
               {isLoading ? "Guardando..." : "Guardar"}
             </SiteCorpButton>
           </div>

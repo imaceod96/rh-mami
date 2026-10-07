@@ -83,7 +83,8 @@ const EntitySettings = () => {
       },
       {
         title: "Documentos rectores",
-        description: "Espacio reservado para la futura gestión de documentos rectores.",
+        description:
+          "Registra y consulta los documentos rectores de esta entidad (nombre y archivo).",
         icon: FileText,
         href: `/entity/${currentEntity?.id}/settings/governing-documents`,
         permissions: ["organization.view", "organization.manage"],

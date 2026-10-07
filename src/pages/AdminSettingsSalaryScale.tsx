@@ -41,7 +41,6 @@ const AdminSettingsSalaryScale = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [showAddGroup, setShowAddGroup] = React.useState(false)
-  const [newGroupDesc, setNewGroupDesc] = React.useState("")
   const [changeGroup, setChangeGroup] = React.useState<SalaryGroupRow | null>(null)
   const [showCreateScale, setShowCreateScale] = React.useState(false)
   const [newScaleName, setNewScaleName] = React.useState("Escala salarial presupuestada general")
@@ -95,17 +94,17 @@ const AdminSettingsSalaryScale = () => {
     checkPermission()
   }, [loadScale, checkPermission])
 
-  const handleAddGroup = async (description: string, salary: string, effectiveFrom: string) => {
-      if (!scale || !description.trim()) return
+  const handleAddGroup = async (salary: string, effectiveFrom: string) => {
+      if (!scale) return
       try {
-        const newGroup = await addSalaryGroup(scale.id, description.trim())
+        // El grupo se crea sin descripción: ese dato ya no forma parte de la UI.
+        const newGroup = await addSalaryGroup(scale.id)
         if (newGroup) {
           const amount = parseFloat(salary)
           if (!isNaN(amount) && amount > 0) {
             // Valor inicial del grupo: se registra con la misma función atómica
             await addSalaryValue(newGroup.id, amount, "CUP", effectiveFrom)
           }
-          setNewGroupDesc("")
           setShowAddGroup(false)
           await loadScale()
           showSuccess("Grupo salarial añadido correctamente.")
@@ -278,7 +277,6 @@ const AdminSettingsSalaryScale = () => {
                       <div>
                         <p className="text-sm font-medium text-ink">
                           Grupo {group.roman_numeral}
-                          {group.description && ` — ${group.description}`}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Secuencia: {group.sequence_number}

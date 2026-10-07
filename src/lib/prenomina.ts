@@ -72,6 +72,14 @@ export interface PrenominaWorkerEntry {
   tenure_hourly_rate: number
   tenure_payment: number
   tenure_status: string
+  // Pago por categoría académica (Máster / Doctor) — snapshot del período
+  has_masters_degree_snapshot: boolean
+  has_doctorate_degree_snapshot: boolean
+  academic_category: "MASTER" | "DOCTOR" | null
+  academic_status: string
+  academic_monthly_amount: number | null
+  academic_hourly_rate: number
+  academic_payment: number
   night_payment_19_23: number
   night_payment_23_07: number
   total_night_payment: number
@@ -197,6 +205,8 @@ export interface EntryPreview {
   scaleSalaryPayment: number
   tenureHourlyRate: number
   tenurePayment: number
+  academicHourlyRate: number
+  academicPayment: number
   nightPayment19_23: number
   nightPayment23_07: number
   totalNightPayment: number
@@ -208,7 +218,8 @@ export function computeEntryPreview(
   tenureBaseAmount: number | null,
   workdayHours: number | null,
   workedDays: number,
-  nights: NightPreview[]
+  nights: NightPreview[],
+  academicMonthlyAmount: number | null = null
 ): EntryPreview {
   const hourlyRate =
     salaryScaleAmount && salaryScaleAmount > 0
@@ -219,9 +230,15 @@ export function computeEntryPreview(
     tenureBaseAmount && tenureBaseAmount > 0
       ? Math.round((tenureBaseAmount / MONTHLY_SALARY_HOURS_DIVISOR) * 1e6) / 1e6
       : 0
+  // Categoría académica: mismo divisor y MISMAS horas trabajadas (concepto mensual).
+  const academicHourlyRate =
+    academicMonthlyAmount && academicMonthlyAmount > 0
+      ? Math.round((academicMonthlyAmount / MONTHLY_SALARY_HOURS_DIVISOR) * 1e6) / 1e6
+      : 0
   const workedHours = Math.round((workedDays || 0) * (workdayHours || 0) * 1e4) / 1e4
   const scaleSalaryPayment = Math.round(workedHours * hourlyRate * 100) / 100
   const tenurePayment = Math.round(workedHours * tenureHourlyRate * 100) / 100
+  const academicPayment = Math.round(workedHours * academicHourlyRate * 100) / 100
   const nightPayment19_23 = Math.round(nights.reduce((acc, n) => acc + n.payment19_23, 0) * 100) / 100
   const nightPayment23_07 = Math.round(nights.reduce((acc, n) => acc + n.payment23_07, 0) * 100) / 100
   const totalNightPayment = Math.round((nightPayment19_23 + nightPayment23_07) * 100) / 100
@@ -231,11 +248,25 @@ export function computeEntryPreview(
     scaleSalaryPayment,
     tenureHourlyRate,
     tenurePayment,
+    academicHourlyRate,
+    academicPayment,
     nightPayment19_23,
     nightPayment23_07,
     totalNightPayment,
-    totalPayment: Math.round((scaleSalaryPayment + tenurePayment + totalNightPayment) * 100) / 100,
+    totalPayment:
+      Math.round(
+        (scaleSalaryPayment + tenurePayment + academicPayment + totalNightPayment) * 100
+      ) / 100,
   }
+}
+
+/** Etiqueta de la categoría académica snapshot: Máster / Doctor / sin categoría. */
+export const academicCategoryLabel = (
+  category: "MASTER" | "DOCTOR" | null | undefined
+): string => {
+  if (category === "DOCTOR") return "Doctor"
+  if (category === "MASTER") return "Máster"
+  return "Sin categoría académica"
 }
 
 /** Etiqueta legible de la antigüedad del período: "X años, Y meses". */
@@ -317,6 +348,16 @@ const normalizeEntry = (row: any): PrenominaWorkerEntry => ({
   tenure_base_amount: toNumberOrNull(row.tenure_base_amount),
   tenure_hourly_rate: Number(row.tenure_hourly_rate || 0),
   tenure_payment: Number(row.tenure_payment || 0),
+  has_masters_degree_snapshot: !!row.has_masters_degree_snapshot,
+  has_doctorate_degree_snapshot: !!row.has_doctorate_degree_snapshot,
+  academic_category:
+    row.academic_category === "MASTER" || row.academic_category === "DOCTOR"
+      ? row.academic_category
+      : null,
+  academic_status: row.academic_status || "OK",
+  academic_monthly_amount: toNumberOrNull(row.academic_monthly_amount),
+  academic_hourly_rate: Number(row.academic_hourly_rate || 0),
+  academic_payment: Number(row.academic_payment || 0),
   night_payment_19_23: Number(row.night_payment_19_23 || 0),
   night_payment_23_07: Number(row.night_payment_23_07 || 0),
   total_night_payment: Number(row.total_night_payment || 0),
@@ -458,15 +499,17 @@ export const PRENOMINA_EXPORT_HEADERS = [
   "Nocturnidad 19–23",
   "Nocturnidad 23–07",
   "Total Nocturnidad",
+  "Categoría académica",
+  "Pago categoría académica",
   "Total Trabajador",
 ] as const
 
 const COLUMN_WIDTHS = [
-  6, 32, 18, 22, 26, 26, 14, 14, 14, 14, 14, 18, 20, 18, 20, 20, 18, 16, 16, 16, 16, 16,
+  6, 32, 18, 22, 26, 26, 14, 14, 14, 14, 14, 18, 20, 18, 20, 20, 18, 16, 16, 16, 16, 18, 18, 16,
 ]
 
 /** Números monetarios/numerados: índices (1-based) de columnas numéricas del Excel. */
-const NUMERIC_COLUMNS = [8, 9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22]
+const NUMERIC_COLUMNS = [8, 9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 23, 24]
 
 export function buildPrenominaFileName(entityName: string, year: number, month: number): string {
   const safeName =
@@ -530,6 +573,7 @@ export async function buildPrenominaWorkbookBlob(
 
   let totalScale = 0
   let totalTenure = 0
+  let totalAcademic = 0
   let total19 = 0
   let total23 = 0
   let totalNight = 0
@@ -569,6 +613,8 @@ export async function buildPrenominaWorkbookBlob(
       p19,
       p23,
       entry.total_night_payment,
+      academicCategoryLabel(entry.academic_category),
+      entry.academic_payment,
       entry.total_payment,
     ])
     // Identificación como texto (nunca notación científica)
@@ -583,6 +629,7 @@ export async function buildPrenominaWorkbookBlob(
 
     totalScale += Number(entry.scale_salary_payment || 0)
     totalTenure += Number(entry.tenure_payment || 0)
+    totalAcademic += Number(entry.academic_payment || 0)
     total19 += p19
     total23 += p23
     totalNight += Number(entry.total_night_payment || 0)
@@ -612,6 +659,8 @@ export async function buildPrenominaWorkbookBlob(
     Math.round(total19 * 100) / 100,
     Math.round(total23 * 100) / 100,
     Math.round(totalNight * 100) / 100,
+    "",
+    Math.round(totalAcademic * 100) / 100,
     Math.round(totalAll * 100) / 100,
   ])
   totalRow.font = { bold: true }

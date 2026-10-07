@@ -12,6 +12,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Plus, Trash2 } from "lucide-react"
 import {
+  academicCategoryLabel,
   type PrenominaWorkerEntry,
   type PrenominaNightEntry,
   computeEntryPreview,
@@ -88,12 +89,16 @@ const WorkerPrenominaDialog = ({
     entry.tenure_base_amount,
     entry.workday_hours,
     workedDaysValue,
-    nightPreviews
+    nightPreviews,
+    entry.academic_monthly_amount
   )
 
   // Antigüedad: dato derivado, solo lectura (se corrige en la ficha / escala).
   const tenureMissingStart = entry.tenure_status === "NO_START_DATE"
   const tenureMissingBand = entry.tenure_status === "NO_BAND"
+
+  // Categoría académica: concepto automático, nunca se escribe a mano.
+  const academicMissingConfig = entry.academic_status !== "OK"
 
   const updateRow = (index: number, patch: Partial<NightRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)))
