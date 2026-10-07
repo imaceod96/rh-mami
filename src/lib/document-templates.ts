@@ -37,6 +37,7 @@ export type DocumentTemplateTypeCode =
   | "EMPLOYMENT_CONTRACT_ADDENDUM"
   | "SC_4_04"
   | "RESOLUTION"
+  | "PAYROLL_MOVEMENT"
 
 export type DocumentTemplateVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE"
 
@@ -50,7 +51,9 @@ export const documentTypeCodeForTemplateType = (templateTypeCode: string): Docum
       ? "SC_4_04"
       : templateTypeCode === "RESOLUTION"
         ? "RESOLUTION"
-        : "CONTRACT"
+        : templateTypeCode === "PAYROLL_MOVEMENT"
+          ? "PAYROLL_MOVEMENT"
+          : "CONTRACT"
 
 export interface DocumentTemplateType {
   code: string

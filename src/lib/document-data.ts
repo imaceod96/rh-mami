@@ -144,11 +144,53 @@ export interface ResolutionDocumentData {
   resolution: { date: string | null }
 }
 
+/**
+ * Datos documentales de un MOVIMIENTO DE NÓMINA (Altas / Reubicaciones / Bajas).
+ * La fuente es `worker_payroll_movements` (snapshot histórico): el documento nunca
+ * se recalcula desde el estado vivo una vez creado el movimiento.
+ */
+export interface PayrollMovementDocumentData {
+  document_type: "PAYROLL_MOVEMENT"
+  movement_id: string
+  event_type: "ALTA" | "REUBICACION" | "BAJA"
+  effective_date: string | null
+  entity: {
+    organism: string | null
+    company: string | null
+    unit: string | null
+  }
+  worker: {
+    full_name: string | null
+    first_name: string | null
+    first_surname: string | null
+    second_surname: string | null
+    identification: string | null
+    gender_code: string | null
+  }
+  /** Situación actual/anterior (en Alta, el puesto de incorporación). */
+  actual: {
+    area: string | null
+    job: string | null
+    salary_group_sequence: number | null
+    salary_amount: number | null
+    currency: string | null
+  }
+  /** Situación nueva/posterior (vacía en Alta y Baja). */
+  next: {
+    area: string | null
+    job: string | null
+    salary_group_sequence: number | null
+    salary_amount: number | null
+    currency: string | null
+  }
+}
+
 export type DocumentData =
   | ContractDocumentData
   | AddendumDocumentData
   | Sc404DocumentData
   | ResolutionDocumentData
+  | PayrollMovementDocumentData
 
 export type Sc404SourceType = "VACATION" | "MEDICAL_CERTIFICATE"
 
@@ -446,6 +488,17 @@ export async function getResolutionDocumentData(
   })
   if (error) throw error
   return data as ResolutionDocumentData
+}
+
+/** Datos documentales completos de un Movimiento de Nómina. */
+export async function getPayrollMovementDocumentData(
+  movementId: string
+): Promise<PayrollMovementDocumentData> {
+  const { data, error } = await supabase.rpc("get_payroll_movement_document_data", {
+    p_movement_id: movementId,
+  })
+  if (error) throw error
+  return data as PayrollMovementDocumentData
 }
 
 /** Información pendiente para poder generar el contrato (§47/§49/§50). */

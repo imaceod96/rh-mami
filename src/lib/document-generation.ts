@@ -11,6 +11,7 @@ import {
 import {
   getAddendumDocumentData,
   getContractDocumentData,
+  getPayrollMovementDocumentData,
   getResolutionDocumentData,
   getSc404DocumentData,
   type DocumentData,
@@ -40,11 +41,15 @@ export type GenerationDocumentKind =
   | "VACATION"
   | "MEDICAL_CERTIFICATE"
   | "RESOLUTION"
+  | "PAYROLL_MOVEMENT"
 
 const isSc404Kind = (kind: GenerationDocumentKind): kind is Sc404SourceType =>
   kind === "VACATION" || kind === "MEDICAL_CERTIFICATE"
 
 const isResolutionKind = (kind: GenerationDocumentKind): boolean => kind === "RESOLUTION"
+
+const isPayrollMovementKind = (kind: GenerationDocumentKind): boolean =>
+  kind === "PAYROLL_MOVEMENT"
 
 export type TemplateResolutionStatus = "PINNED" | "RESOLVED" | "NONE" | "AMBIGUOUS"
 
@@ -131,6 +136,7 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   EMPLOYMENT_CONTRACT_ADDENDUM: "Anexo al Contrato de Trabajo",
   SC_4_04: "Modelo SC-4-04 — Notificación de Vacaciones, Deducciones, Licencias y Subsidios",
   RESOLUTION: "Resolución — Especialista Principal",
+  PAYROLL_MOVEMENT: "Movimiento de Nómina",
 }
 
 /** Dónde puede corregirse cada variable (§66). Sin navegación inteligente. */
@@ -220,6 +226,28 @@ const loadSourceContext = async (kind: GenerationDocumentKind, sourceId: string)
       pinnedVersionId: text(row.document_template_version_id),
     }
   }
+  if (isPayrollMovementKind(kind)) {
+    const { data, error } = await supabase
+      .from("worker_payroll_movements")
+      .select("id, worker_id, organization_entity_id, effective_date, document_template_version_id")
+      .eq("id", sourceId)
+      .maybeSingle()
+    throwIfError(error)
+    const row = record(data)
+    if (!row.id) throw new Error("Movimiento de Nómina no encontrado")
+    return {
+      kind,
+      sourceId,
+      workerId: String(row.worker_id),
+      entityId: String(row.organization_entity_id),
+      // Un Movimiento de Nómina es un evento formal: se genera una vez creado.
+      formalized: true,
+      referenceDate: text(row.effective_date) ?? new Date().toISOString().slice(0, 10),
+      documentTypeCode: "PAYROLL_MOVEMENT",
+      pinnedVersionId: text(row.document_template_version_id),
+    }
+  }
+
   if (kind === "CONTRACT") {
     const { data, error } = await supabase
       .from("employment_contracts")
@@ -439,9 +467,11 @@ export const precheckDocumentGeneration = async (
     ? await getSc404DocumentData(kind, sourceId)
     : isResolutionKind(kind)
       ? await getResolutionDocumentData(sourceId)
-      : kind === "CONTRACT"
-        ? await getContractDocumentData(sourceId)
-        : await getAddendumDocumentData(sourceId)
+      : isPayrollMovementKind(kind)
+        ? await getPayrollMovementDocumentData(sourceId)
+        : kind === "CONTRACT"
+          ? await getContractDocumentData(sourceId)
+          : await getAddendumDocumentData(sourceId)
 
   const resolved = resolveAllDocumentVariables(documentData)
   // SC-4-04 (§26): las variables no aplicables al origen se sustituyen por
@@ -467,6 +497,9 @@ export const precheckDocumentGeneration = async (
     documentData.document_type === "SC_4_04" &&
     documentData.origin.source_type === "VACATION" &&
     documentData.origin.incorporation_date === null
+  // Movimiento de Nómina: los vacíos legítimos NO bloquean (§46). Sólo bloquean
+  // los datos nucleares (identificación, nombre y fecha efectiva del movimiento).
+  const PAYROLL_CRITICAL_KEYS = new Set(["m.exp", "m.nom", "m.ap1", "m.dia", "m.mes", "m.ano"])
   const missingKeyList = isSc404Kind(kind)
     ? requiredVariables.filter(
         (key) =>
@@ -474,7 +507,11 @@ export const precheckDocumentGeneration = async (
           (SC404_CRITICAL_KEYS.has(key) ||
             (sc404IncorporationUndetermined && SC404_INCORPORATION_KEYS.has(key)))
       )
-    : requiredVariables.filter((key) => !(key in resolved.values))
+    : isPayrollMovementKind(kind)
+      ? requiredVariables.filter(
+          (key) => !(key in resolved.values) && PAYROLL_CRITICAL_KEYS.has(key)
+        )
+      : requiredVariables.filter((key) => !(key in resolved.values))
   const missing: MissingVariable[] = missingKeyList
     .map((key) => ({
       key,
@@ -539,6 +576,8 @@ export const buildGeneratedDocumentName = (
       ? ["Anexo", "Contrato", workerName]
       : isResolutionKind(precheck.kind)
         ? ["Resolucion", workerName]
+        : isPayrollMovementKind(precheck.kind)
+        ? ["Movimiento", "Nomina", workerName]
         : isSc404Kind(precheck.kind)
         ? precheck.kind === "VACATION"
           ? ["Modelo SC-4-04 - Vacaciones", workerName]
@@ -626,12 +665,17 @@ const runGeneration = async (
   // SC-4-04 (§26/§85): toda variable conocida del ámbito SC_4_04 parte de ""
   // y luego se sobrescribe con los valores resueltos: los campos no aplicables
   // al origen quedan visualmente vacíos (nunca «null» ni marcador residual).
-  const renderValues: Record<string, string> = isSc404Kind(kind)
+  const prefillType: "SC_4_04" | "PAYROLL_MOVEMENT" | null = isSc404Kind(kind)
+    ? "SC_4_04"
+    : isPayrollMovementKind(kind)
+      ? "PAYROLL_MOVEMENT"
+      : null
+  const renderValues: Record<string, string> = prefillType
     ? {
         ...Object.fromEntries(
-          DOCUMENT_VARIABLES.filter((definition) => definition.documentTypes.includes("SC_4_04")).map(
-            (definition) => [definition.key, ""]
-          )
+          DOCUMENT_VARIABLES.filter((definition) =>
+            definition.documentTypes.includes(prefillType)
+          ).map((definition) => [definition.key, ""])
         ),
         ...precheck.resolvedValues,
       }
@@ -657,7 +701,12 @@ const runGeneration = async (
   // 3) Fijar la versión de plantilla en la fuente antes de reservar la generación (§9).
   //    SC-4-04: los orígenes (vacaciones/certificados) no fijan versión; la
   //    trazabilidad vive en worker_documents.document_template_version_id.
-  if (!isSc404Kind(kind) && !isResolutionKind(kind) && precheck.template.status === "RESOLVED") {
+  if (
+    !isSc404Kind(kind) &&
+    !isResolutionKind(kind) &&
+    !isPayrollMovementKind(kind) &&
+    precheck.template.status === "RESOLVED"
+  ) {
     try {
       await pinTemplateVersion(kind, sourceId, versionId)
     } catch (err) {
@@ -679,7 +728,12 @@ const runGeneration = async (
             p_resolution_id: sourceId,
             p_template_version_id: versionId,
           })
-        : await supabase.rpc("begin_document_generation", {
+        : isPayrollMovementKind(kind)
+          ? await supabase.rpc("begin_payroll_movement_generation", {
+              p_movement_id: sourceId,
+              p_template_version_id: versionId,
+            })
+          : await supabase.rpc("begin_document_generation", {
             p_employment_contract_id: kind === "CONTRACT" ? sourceId : null,
             p_contract_addendum_id: kind === "ADDENDUM" ? sourceId : null,
             p_template_version_id: versionId,
@@ -782,6 +836,13 @@ export const generateResolutionDocument = (resolutionId: string) =>
 export const precheckResolutionDocument = (resolutionId: string) =>
   precheckDocumentGeneration("RESOLUTION", resolutionId)
 
+/** Genera el documento de un Movimiento de Nómina (Alta / Reubicación / Baja). */
+export const generatePayrollMovementDocument = (movementId: string) =>
+  runGeneration("PAYROLL_MOVEMENT", movementId)
+
+export const precheckPayrollMovementDocument = (movementId: string) =>
+  precheckDocumentGeneration("PAYROLL_MOVEMENT", movementId)
+
 /* ------------------------------------------------------------------ */
 /* Consulta y descarga                                                 */
 /* ------------------------------------------------------------------ */
@@ -793,6 +854,7 @@ export const fetchGeneratedDocuments = async (
     vacationId?: string
     certificateId?: string
     resolutionId?: string
+    movementId?: string
   }
 ): Promise<GeneratedDocumentRow[]> => {
   let query = supabase
@@ -816,6 +878,10 @@ export const fetchGeneratedDocuments = async (
       .eq("document_source_id", source.certificateId)
   } else if (source.resolutionId) {
     query = query.eq("document_source_type", "RESOLUTION").eq("document_source_id", source.resolutionId)
+  } else if (source.movementId) {
+    query = query
+      .eq("document_source_type", "PAYROLL_MOVEMENT")
+      .eq("document_source_id", source.movementId)
   }
 
   const { data, error } = await query

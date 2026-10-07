@@ -39,6 +39,7 @@ import EntityHiring from "./pages/EntityHiring"
 import EntityContractAlerts from "./pages/EntityContractAlerts"
 import EntityVacations from "./pages/EntityVacations"
 import EntityMedicalCertificates from "./pages/EntityMedicalCertificates"
+import EntityPendingDocuments from "./pages/EntityPendingDocuments"
 import WorkerDetail from "./pages/WorkerDetail"
 import EntitySettings from "./pages/EntitySettings"
 import EntitySettingsUsers from "./pages/EntitySettingsUsers"
@@ -159,6 +160,7 @@ const AppRoutes = () => {
           <Route path="/entity/:entityId/contracts/alerts" element={<EntityContractAlerts />} />
           <Route path="/entity/:entityId/vacations" element={<EntityVacations />} />
           <Route path="/entity/:entityId/medical-certificates" element={<EntityMedicalCertificates />} />
+          <Route path="/entity/:entityId/documents/pending" element={<EntityPendingDocuments />} />
           <Route path="/entity/:entityId/settings" element={<EntitySettings />} />
           <Route path="/entity/:entityId/settings/staffing" element={<EntitySettingsStaffing />} />
           <Route path="/entity/:entityId/settings/initial-import" element={<EntitySettingsInitialImport />} />

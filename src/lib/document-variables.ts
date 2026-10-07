@@ -3,6 +3,7 @@ import type {
   AddendumDocumentData,
   ContractDocumentData,
   DocumentData,
+  PayrollMovementDocumentData,
   ResolutionDocumentData,
   Sc404DocumentData,
 } from "@/lib/document-data"
@@ -19,7 +20,7 @@ import type {
  * Este archivo NO genera documentos: sólo describe, resuelve y formatea.
  */
 
-export type DocumentTypeCode = "CONTRACT" | "ADDENDUM" | "SC_4_04" | "RESOLUTION"
+export type DocumentTypeCode = "CONTRACT" | "ADDENDUM" | "SC_4_04" | "RESOLUTION" | "PAYROLL_MOVEMENT"
 
 export type DocumentVariableDataType = "text" | "integer" | "amount" | "date" | "hours"
 
@@ -40,6 +41,7 @@ export interface DocumentVariableDefinition {
     | "Anexo"
     | "SC-4-04"
     | "Resolución"
+    | "Movimiento de Nómina"
     | "Vacaciones"
     | "Certificado médico"
     | "Documento"
@@ -321,6 +323,32 @@ export const DOCUMENT_VARIABLES: DocumentVariableDefinition[] = [
   { key: "r.ano", label: "Resolución · Año de firma", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "CALCULATED", description: "Año de la fecha de Resolución." },
   { key: "r.rev", label: "Resolución · Año de la Revolución", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Año de la Revolución configurado como texto en la información contractual." },
   { key: "r.rep", label: "Resolución · Representante", category: "Resolución", documentTypes: ["RESOLUTION"], dataType: "text", kind: "SOURCE", description: "Persona a nombre de quien sale la Resolución." },
+
+  // ---------------- Movimiento de Nómina · catálogo visible (short aliases m.*) ----------------
+  // Documento de Altas, Reubicaciones (cambio de puesto y/o salario efectivo) y Bajas.
+  { key: "m.org", label: "Movimiento · Organismo", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Organismo configurado en la entidad (organization_entities.organism)." },
+  { key: "m.emp", label: "Movimiento · Empresa", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Empresa según la jerarquía real (UEB → empresa padre; empresa; o grupo empresarial)." },
+  { key: "m.uni", label: "Movimiento · Unidad", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Unidad concreta (UEB). Vacío si la entidad no es una UEB." },
+  { key: "m.exp", label: "Movimiento · Expediente", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Número de identificación del trabajador (11 dígitos, preservado como texto)." },
+  { key: "m.dia", label: "Movimiento · Día", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "integer", kind: "CALCULATED", description: "Día de la fecha efectiva del movimiento laboral." },
+  { key: "m.mes", label: "Movimiento · Mes", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "CALCULATED", description: "Mes de la fecha efectiva del movimiento (nombre en español)." },
+  { key: "m.ano", label: "Movimiento · Año", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "integer", kind: "CALCULATED", description: "Año de la fecha efectiva del movimiento." },
+  { key: "m.nom", label: "Movimiento · Nombre", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Nombre o nombres del trabajador." },
+  { key: "m.ap1", label: "Movimiento · Primer apellido", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Primer apellido del trabajador." },
+  { key: "m.ap2", label: "Movimiento · Segundo apellido", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Segundo apellido del trabajador." },
+  { key: "m.sex_m", label: "Movimiento · Sexo masculino", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» si el trabajador es masculino; vacío en caso contrario." },
+  { key: "m.sex_f", label: "Movimiento · Sexo femenino", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» si el trabajador es femenino; vacío en caso contrario." },
+  { key: "m.alta", label: "Movimiento · Alta", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» en una nueva contratación; vacío en el resto." },
+  { key: "m.reu", label: "Movimiento · Reubicación", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» en un cambio de puesto y/o cambio salarial efectivo; vacío en el resto." },
+  { key: "m.baja", label: "Movimiento · Baja", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "CALCULATED", description: "Devuelve «X» al dar de baja al trabajador; vacío en el resto." },
+  { key: "m.area_act", label: "Movimiento · Área actual", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Área actual/anterior (en Alta, el área de incorporación)." },
+  { key: "m.cargo_act", label: "Movimiento · Cargo actual", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Cargo actual/anterior (en Alta, el cargo de incorporación)." },
+  { key: "m.area_nva", label: "Movimiento · Área nueva", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Área nueva/posterior. Vacío en Alta y Baja." },
+  { key: "m.cargo_nvo", label: "Movimiento · Cargo nuevo", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Cargo nuevo/posterior. Vacío en Alta y Baja." },
+  { key: "m.ge_act", label: "Movimiento · Grupo Escala actual", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Grupo Escala actual/anterior (número romano)." },
+  { key: "m.sal_act", label: "Movimiento · Salario actual", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "amount", kind: "SOURCE", description: "Salario actual/anterior (snapshot)." },
+  { key: "m.ge_nvo", label: "Movimiento · Grupo Escala nuevo", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "text", kind: "SOURCE", description: "Grupo Escala nuevo/posterior. Vacío en Alta y Baja." },
+  { key: "m.sal_nvo", label: "Movimiento · Salario nuevo", category: "Movimiento de Nómina", documentTypes: ["PAYROLL_MOVEMENT"], dataType: "amount", kind: "SOURCE", description: "Salario nuevo/posterior. Vacío en Alta y Baja." },
 ]
 
 export const documentVariableByKey = (key: string): DocumentVariableDefinition | undefined =>
@@ -465,6 +493,9 @@ const isSc404Data = (data: DocumentData): data is Sc404DocumentData =>
 
 const isResolutionData = (data: DocumentData): data is ResolutionDocumentData =>
   data.document_type === "RESOLUTION"
+
+const isPayrollMovementData = (data: DocumentData): data is PayrollMovementDocumentData =>
+  data.document_type === "PAYROLL_MOVEMENT"
 
 const textOrNull = (value: unknown): string | null => {
   if (value === null || value === undefined) return null
@@ -696,6 +727,43 @@ const rawValueFor = (
         return date != null ? String(Number(date.slice(0, 10).split("-")[0])) : null
       case "r.rev": return textOrNull(data.entity.revolution_year)
       case "r.rep": return textOrNull(data.representative.name)
+      default: return null
+    }
+  }
+
+  // ---------------- Movimiento de Nómina (Altas / Reubicaciones / Bajas) ----------------
+  if (isPayrollMovementData(data)) {
+    const date = data.effective_date
+    switch (definition.key) {
+      case "m.org": return textOrNull(data.entity.organism)
+      case "m.emp": return textOrNull(data.entity.company)
+      case "m.uni": return textOrNull(data.entity.unit)
+      case "m.exp": return textOrNull(data.worker.identification)
+      case "m.dia": return date ? Number(date.slice(0, 10).split("-")[2]) : null
+      case "m.mes": return documentSignatureMonth(date)
+      case "m.ano": return date ? Number(date.slice(0, 10).split("-")[0]) : null
+      case "m.nom": return textOrNull(data.worker.first_name)
+      case "m.ap1": return textOrNull(data.worker.first_surname)
+      case "m.ap2": return textOrNull(data.worker.second_surname)
+      case "m.sex_m": return data.worker.gender_code === "M" ? "X" : null
+      case "m.sex_f": return data.worker.gender_code === "F" ? "X" : null
+      case "m.alta": return data.event_type === "ALTA" ? "X" : null
+      case "m.reu": return data.event_type === "REUBICACION" ? "X" : null
+      case "m.baja": return data.event_type === "BAJA" ? "X" : null
+      case "m.area_act": return textOrNull(data.actual.area)
+      case "m.cargo_act": return textOrNull(data.actual.job)
+      case "m.area_nva": return textOrNull(data.next.area)
+      case "m.cargo_nvo": return textOrNull(data.next.job)
+      case "m.ge_act":
+        return data.actual.salary_group_sequence != null
+          ? toRomanNumeral(data.actual.salary_group_sequence)
+          : null
+      case "m.sal_act": return data.actual.salary_amount
+      case "m.ge_nvo":
+        return data.next.salary_group_sequence != null
+          ? toRomanNumeral(data.next.salary_group_sequence)
+          : null
+      case "m.sal_nvo": return data.next.salary_amount
       default: return null
     }
   }

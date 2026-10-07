@@ -16,6 +16,7 @@ import { showSuccess } from "@/utils/toast"
 import {
   applySalaryChange,
   fetchSalaryChangeImpact,
+  finalizeSalaryChangeEvent,
   previewSalaryChange,
   type SalaryChangeApplyResult,
   type SalaryChangeImpactRow,
@@ -147,6 +148,11 @@ const ReviewSalaryChangeDialog: React.FC<ReviewSalaryChangeDialogProps> = ({
     setError(null)
     setSubmitting(true)
     try {
+      // Captura de los afectados ANTES de aplicar (salario anterior real por trabajador).
+      const impact = await fetchSalaryChangeImpact(groupId, parsedAmount, effectiveFrom).catch(
+        () => [] as SalaryChangeImpactRow[]
+      )
+
       const result = await applySalaryChange(
         groupId,
         parsedAmount,
@@ -154,6 +160,24 @@ const ReviewSalaryChangeDialog: React.FC<ReviewSalaryChangeDialogProps> = ({
         effectiveFrom,
         notes
       )
+
+      // Evento documental masivo: Movimientos de Nómina (Reubicación) + lotes ZIP.
+      if (result.status === "APPLIED" && impact.length > 0) {
+        try {
+          await finalizeSalaryChangeEvent(
+            groupId,
+            effectiveFrom,
+            `Cambio salarial · ${scaleLabel} · Grupo ${groupLabel}`,
+            impact.map((row) => ({
+              worker_id: row.worker_id,
+              previous_amount: row.previous_amount,
+            }))
+          )
+        } catch (eventError) {
+          // El cambio salarial YA se aplicó: el fallo de documentación no debe revertirlo.
+          console.error("No se pudo materializar el evento documental del cambio salarial", eventError)
+        }
+      }
 
       if (result.status === "UNCHANGED") {
         showSuccess("El importe ya estaba registrado con esa fecha de vigencia.")

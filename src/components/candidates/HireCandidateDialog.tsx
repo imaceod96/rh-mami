@@ -33,6 +33,7 @@ import {
   ensureResolutionDocumentGenerated,
   updateJobWorkContent,
 } from "@/lib/resolutions"
+import { ensurePayrollMovementDocumentGenerated } from "@/lib/payroll-movements"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
 import { ContractReadinessChecklist } from "@/components/contracts/ContractReadinessChecklist"
@@ -560,6 +561,15 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
               genErr instanceof Error
                 ? genErr.message
                 : "No se pudo generar la Resolución automáticamente."
+          }
+        }
+
+        // Movimiento de Nómina (Alta) → documento en el expediente del trabajador.
+        if (workerId) {
+          try {
+            await ensurePayrollMovementDocumentGenerated(workerId, "ALTA", hireDate)
+          } catch {
+            /* el movimiento ya quedó registrado; el documento puede regenerarse */
           }
         }
 

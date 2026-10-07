@@ -18,6 +18,7 @@ import {
   HeartPulse,
   Calculator,
   FileSignature,
+  FileArchive,
   ChevronDown,
   ChevronRight,
 } from "lucide-react"
@@ -43,6 +44,7 @@ const navIcons: Record<string, React.ReactNode> = {
   prenomina: <Calculator className="h-5 w-5" />,
   vacations: <Palmtree className="h-5 w-5" />,
   "medical-certificates": <HeartPulse className="h-5 w-5" />,
+  "pending-documents": <FileArchive className="h-5 w-5" />,
   "contract-alerts": <CalendarClock className="h-5 w-5" />,
   settings: <Settings className="h-5 w-5" />,
 }

@@ -70,6 +70,12 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
     path: (id) => `/entity/${id}/payroll-preparation`,
     permissions: ["prenomina.view", "prenomina.manage"],
   },
+  {
+    key: "pending-documents",
+    label: "Documentos pendientes",
+    path: (id) => `/entity/${id}/documents/pending`,
+    permissions: ["workers.view", "workers.manage"],
+  },
   // Vencimientos YA NO es un elemento directo del sidebar (§36): su página y ruta
   // siguen existiendo y se accede desde Resumen → «Próximos a vencer».
   {
@@ -154,6 +160,7 @@ export const ENTITY_NAV: EntityNavEntry[] = [
   link(moduleByKey("vacations")),
   link(moduleByKey("medical-certificates")),
   link(moduleByKey("prenomina")),
+  link(moduleByKey("pending-documents")),
   link(moduleByKey("settings")),
 ]
 

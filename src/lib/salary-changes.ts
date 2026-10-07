@@ -100,6 +100,35 @@ export async function fetchSalaryChangeImpact(
  * salarial de cada trabajador afectado y anexo contractual pendiente de generar.
  * Es idempotente: repetir el mismo cambio no duplica históricos ni anexos.
  */
+export interface SalaryChangeEventResult {
+  event_id: string
+  movements_created: number
+  movements_skipped: number
+  batches: number
+}
+
+/**
+ * Tras aplicar un cambio salarial masivo: crea un EVENTO documental, un Movimiento
+ * de Nómina (Reubicación) por trabajador realmente afectado y los lotes ZIP cuando
+ * se superan 5 documentos por entidad y tipo documental. NO aplica el cambio salarial
+ * (eso lo hace `applySalaryChange`); sólo materializa la documentación del evento.
+ */
+export async function finalizeSalaryChangeEvent(
+  groupId: string,
+  effectiveDate: string,
+  description: string | null,
+  workers: { worker_id: string; previous_amount: number }[]
+): Promise<SalaryChangeEventResult> {
+  const { data, error } = await supabase.rpc("finalize_salary_change_event", {
+    p_salary_group_id: groupId,
+    p_effective_date: effectiveDate,
+    p_description: description?.trim() || null,
+    p_workers: workers.map((w) => ({ worker_id: w.worker_id, previous_amount: w.previous_amount })),
+  })
+  if (error) throw error
+  return data as SalaryChangeEventResult
+}
+
 export async function applySalaryChange(
   groupId: string,
   newAmount: number,

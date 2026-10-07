@@ -36,6 +36,7 @@ import {
   previewPositionChange,
   type PositionChangePreview,
 } from "@/lib/addendums"
+import { ensurePayrollMovementDocumentGenerated } from "@/lib/payroll-movements"
 import {
   ensureAddendumDocumentGenerated,
   MISSING_ADDENDUM_TEMPLATE_MESSAGE,
@@ -395,6 +396,13 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
           }
         }
 
+        // Movimiento de Nómina (Reubicación) → documento en el expediente del trabajador.
+        try {
+          await ensurePayrollMovementDocumentGenerated(workerId, "REUBICACION", effectiveDate)
+        } catch {
+          /* el movimiento ya quedó registrado; el documento puede regenerarse */
+        }
+
         invalidateContractAlertData(queryClient)
         setProcessStage(null)
 
@@ -481,6 +489,13 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
               ? genErr.message
               : "No se pudo generar el documento del anexo automáticamente."
         }
+      }
+
+      // Movimiento de Nómina (Reubicación, con o sin anexo) → documento individual.
+      try {
+        await ensurePayrollMovementDocumentGenerated(workerId, "REUBICACION", effectiveDate)
+      } catch {
+        /* el movimiento ya quedó registrado; el documento puede regenerarse */
       }
 
       invalidateContractAlertData(queryClient)
