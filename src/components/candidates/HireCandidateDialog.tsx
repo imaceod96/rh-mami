@@ -701,6 +701,15 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         }
       }
 
+      // Movimiento de Nómina (Alta) → documento individual (no aplica a reincorporaciones).
+      if (workerId) {
+        try {
+          await ensurePayrollMovementDocumentGenerated(workerId, "ALTA", hireDate)
+        } catch {
+          /* el movimiento ya quedó registrado; el documento puede regenerarse */
+        }
+      }
+
       // Contratación/reincorporación crea el contrato vigente: recalcular alertas.
       invalidateContractAlertData(queryClient)
       setProcessStage(null)

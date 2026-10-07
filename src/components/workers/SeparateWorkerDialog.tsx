@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import { showSuccess, showError } from "@/utils/toast"
 import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
+import { ensurePayrollMovementDocumentGenerated } from "@/lib/payroll-movements"
 import { formatSalary } from "@/lib/salary"
 import type { WorkerCurrentSituation } from "@/components/workers/ChangePositionDialog"
 import { AlertTriangle, UserMinus } from "lucide-react"
@@ -100,6 +101,13 @@ const SeparateWorkerDialog: React.FC<SeparateWorkerDialogProps> = ({
         p_notes: notes.trim() || null,
       })
       if (rpcError) throw rpcError
+
+      // Movimiento de Nómina (Baja) → documento en el expediente histórico del trabajador.
+      try {
+        await ensurePayrollMovementDocumentGenerated(workerId, "BAJA", effectiveDate)
+      } catch {
+        /* el movimiento ya quedó registrado; el documento puede regenerarse */
+      }
 
       // La baja cierra el contrato vigente: recalcular alertas de vencimiento.
       invalidateContractAlertData(queryClient)
