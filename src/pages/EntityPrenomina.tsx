@@ -18,14 +18,17 @@ import {
   MONTH_LABELS,
   PRENOMINA_STATUS_LABELS,
   academicCategoryLabel,
+  claConfigFromEntry,
   type PrenominaPeriod,
   type PrenominaWorkerEntry,
   type PrenominaNightEntry,
+  type PrenominaClaConfig,
   buildPrenominaFileName,
   buildPrenominaWorkbookBlob,
   closePrenominaPeriod,
   createPrenominaPeriod,
   deletePrenominaNight,
+  fetchPrenominaClaConfig,
   fetchPrenominaEntries,
   fetchPrenominaNights,
   fetchPrenominaPeriod,
@@ -135,6 +138,7 @@ const EntityPrenomina = () => {
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [activeEntry, setActiveEntry] = React.useState<PrenominaWorkerEntry | null>(null)
+  const [activeClaConfig, setActiveClaConfig] = React.useState<PrenominaClaConfig | null>(null)
   // Detalle CLA desplegable por trabajador (minutos → horas → tarifa → importe).
   const [expandedEntryId, setExpandedEntryId] = React.useState<string | null>(null)
 
@@ -275,7 +279,14 @@ const EntityPrenomina = () => {
     workedDays: number,
     nights: SaveNightInput[],
     deletedNightIds: string[],
-    cla: { applied: boolean; dayMinutes: number; night1Minutes: number; night2Minutes: number }
+    cla: {
+      applied: boolean
+      dayUsed: boolean
+      dayMinutes: number
+      nightUsed: boolean
+      night1Minutes: number
+      night2Minutes: number
+    }
   ) => {
     if (!activeEntry) return
     await savePrenominaInputs(activeEntry.id, workedDays, activeEntry.salary_scale_amount, activeEntry.workday_hours)
@@ -289,12 +300,30 @@ const EntityPrenomina = () => {
     await savePrenominaCla(
       activeEntry.id,
       cla.applied,
+      cla.dayUsed,
       cla.dayMinutes,
+      cla.nightUsed,
       cla.night1Minutes,
       cla.night2Minutes
     )
     await reloadSelected()
     showNotice("success", "Detalle guardado")
+  }
+
+  // Abre la captura mensual del trabajador resolviendo la configuración CLA del
+  // Cargo: BORRADOR → Cargo ACTUAL; CERRADA → snapshot congelado del registro.
+  const openWorkerDialog = async (entry: PrenominaWorkerEntry) => {
+    setActiveEntry(entry)
+    if (period?.status === "CERRADA") {
+      setActiveClaConfig(claConfigFromEntry(entry))
+    } else {
+      try {
+        setActiveClaConfig(await fetchPrenominaClaConfig(entry.id))
+      } catch {
+        setActiveClaConfig(claConfigFromEntry(entry))
+      }
+    }
+    setDialogOpen(true)
   }
 
   const handleExport = async () => {
@@ -617,10 +646,7 @@ const EntityPrenomina = () => {
                         <TableCell className="text-right">
                           <SiteCorpButton
                             variant="outline"
-                            onClick={() => {
-                              setActiveEntry(entry)
-                              setDialogOpen(true)
-                            }}
+                            onClick={() => openWorkerDialog(entry)}
                           >
                             {readOnly ? "Ver" : "Editar"}
                           </SiteCorpButton>
@@ -676,6 +702,7 @@ const EntityPrenomina = () => {
         onOpenChange={setDialogOpen}
         entry={activeEntry}
         nights={activeEntry ? nightsByEntry[activeEntry.id] || [] : []}
+        claConfig={activeClaConfig}
         readOnly={readOnly || !canManage}
         onSave={handleSaveEntry}
       />

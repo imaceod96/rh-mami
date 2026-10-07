@@ -92,11 +92,13 @@ export interface PrenominaWorkerEntry {
   // Concepto INDEPENDIENTE de la Nocturnidad.
   cla_applied: boolean
   cla_day_enabled: boolean
+  cla_day_used: boolean
   cla_day_hourly_rate: number | null
   cla_day_minutes: number
   cla_day_hours: number
   cla_day_payment: number
   cla_night_enabled: boolean
+  cla_night_used: boolean
   cla_night1_start: string | null
   cla_night1_end: string | null
   cla_night1_hourly_rate: number | null
@@ -127,6 +129,41 @@ export interface PrenominaNightEntry {
   payment_19_23: number
   payment_23_07: number
   total_payment: number
+}
+
+/**
+ * Configuración CLA del Cargo ACTUAL del trabajador (para la captura mensual).
+ * Se resuelve desde el Assignment/Puesto vigente (RPC `prenomina_cla_config`) o,
+ * en períodos CERRADOS, desde el snapshot del propio registro.
+ */
+export interface PrenominaClaConfig {
+  applicable: boolean
+  day_enabled: boolean
+  day_rate: number | null
+  night_enabled: boolean
+  night1_start: string | null
+  night1_end: string | null
+  night1_rate: number | null
+  night2_start: string | null
+  night2_end: string | null
+  night2_rate: number | null
+}
+
+/** Construye la configuración CLA a partir del snapshot congelado del registro. */
+export function claConfigFromEntry(entry: PrenominaWorkerEntry): PrenominaClaConfig {
+  const t = (value: string | null | undefined) => (value ? String(value).slice(0, 5) : null)
+  return {
+    applicable: entry.cla_day_enabled || entry.cla_night_enabled,
+    day_enabled: entry.cla_day_enabled,
+    day_rate: entry.cla_day_hourly_rate,
+    night_enabled: entry.cla_night_enabled,
+    night1_start: t(entry.cla_night1_start),
+    night1_end: t(entry.cla_night1_end),
+    night1_rate: entry.cla_night1_hourly_rate,
+    night2_start: t(entry.cla_night2_start),
+    night2_end: t(entry.cla_night2_end),
+    night2_rate: entry.cla_night2_hourly_rate,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -442,11 +479,13 @@ const normalizeEntry = (row: any): PrenominaWorkerEntry => ({
   academic_payment: Number(row.academic_payment || 0),
   cla_applied: !!row.cla_applied,
   cla_day_enabled: !!row.cla_day_enabled,
+  cla_day_used: !!row.cla_day_used,
   cla_day_hourly_rate: toNumberOrNull(row.cla_day_hourly_rate),
   cla_day_minutes: Number(row.cla_day_minutes || 0),
   cla_day_hours: Number(row.cla_day_hours || 0),
   cla_day_payment: Number(row.cla_day_payment || 0),
   cla_night_enabled: !!row.cla_night_enabled,
+  cla_night_used: !!row.cla_night_used,
   cla_night1_start: row.cla_night1_start ?? null,
   cla_night1_end: row.cla_night1_end ?? null,
   cla_night1_hourly_rate: toNumberOrNull(row.cla_night1_hourly_rate),
@@ -505,6 +544,30 @@ export async function fetchPrenominaNights(
     return grouped
 }
 
+/**
+ * Configuración CLA del Cargo actual del trabajador (Assignment vigente).
+ * Autorizada con prenomina.view/manage, no requiere permisos de Plantilla.
+ */
+export async function fetchPrenominaClaConfig(entryId: string): Promise<PrenominaClaConfig> {
+  const { data, error } = await supabase.rpc("prenomina_cla_config", { p_entry_id: entryId })
+  if (error) throw error
+  const raw = (data || {}) as Record<string, unknown>
+  const num = (value: unknown): number | null =>
+    value === null || value === undefined ? null : Number(value)
+  return {
+    applicable: !!raw.applicable,
+    day_enabled: !!raw.day_enabled,
+    day_rate: num(raw.day_rate),
+    night_enabled: !!raw.night_enabled,
+    night1_start: (raw.night1_start as string) ?? null,
+    night1_end: (raw.night1_end as string) ?? null,
+    night1_rate: num(raw.night1_rate),
+    night2_start: (raw.night2_start as string) ?? null,
+    night2_end: (raw.night2_end as string) ?? null,
+    night2_rate: num(raw.night2_rate),
+  }
+}
+
 export async function createPrenominaPeriod(
   entityId: string,
   year: number,
@@ -545,14 +608,18 @@ export async function savePrenominaInputs(
 export async function savePrenominaCla(
   entryId: string,
   applied: boolean,
+  dayUsed: boolean,
   dayMinutes: number,
+  nightUsed: boolean,
   night1Minutes: number,
   night2Minutes: number
 ): Promise<void> {
   const { error } = await supabase.rpc("prenomina_save_cla", {
     p_entry_id: entryId,
     p_applied: applied,
+    p_day_used: dayUsed,
     p_day_minutes: dayMinutes,
+    p_night_used: nightUsed,
     p_night1_minutes: night1Minutes,
     p_night2_minutes: night2Minutes,
   })

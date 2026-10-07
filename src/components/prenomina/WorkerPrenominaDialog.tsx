@@ -15,6 +15,7 @@ import {
   academicCategoryLabel,
   type PrenominaWorkerEntry,
   type PrenominaNightEntry,
+  type PrenominaClaConfig,
   computeClaPreview,
   computeEntryPreview,
   computeNightPreview,
@@ -42,11 +43,19 @@ interface WorkerPrenominaDialogProps {
   entry: PrenominaWorkerEntry | null
   nights: PrenominaNightEntry[]
   readOnly: boolean
+  claConfig: PrenominaClaConfig | null
   onSave: (
     workedDays: number,
     nights: { id: string | null; start: string; end: string; nights: number }[],
     deletedNightIds: string[],
-    cla: { applied: boolean; dayMinutes: number; night1Minutes: number; night2Minutes: number }
+    cla: {
+      applied: boolean
+      dayUsed: boolean
+      dayMinutes: number
+      nightUsed: boolean
+      night1Minutes: number
+      night2Minutes: number
+    }
   ) => Promise<void>
 }
 
@@ -57,6 +66,7 @@ const WorkerPrenominaDialog = ({
   onOpenChange,
   entry,
   nights,
+  claConfig,
   readOnly,
   onSave,
 }: WorkerPrenominaDialogProps) => {
@@ -64,7 +74,11 @@ const WorkerPrenominaDialog = ({
   const [rows, setRows] = React.useState<NightRow[]>([])
   const [originalIds, setOriginalIds] = React.useState<string[]>([])
   // CLA — Condiciones Laborales Anormales (captura por trabajador del período).
+  // "Aplicar CLA" es mensual y por trabajador; las modalidades (used) se marcan
+  // por separado según lo configurado en el Cargo.
   const [claApplied, setClaApplied] = React.useState(false)
+  const [claDayUsed, setClaDayUsed] = React.useState(false)
+  const [claNightUsed, setClaNightUsed] = React.useState(false)
   const [claDayMinutes, setClaDayMinutes] = React.useState("0")
   const [claNight1Minutes, setClaNight1Minutes] = React.useState("0")
   const [claNight2Minutes, setClaNight2Minutes] = React.useState("0")
@@ -84,6 +98,8 @@ const WorkerPrenominaDialog = ({
     )
     setOriginalIds(nights.map((n) => n.id))
     setClaApplied(!!entry.cla_applied)
+    setClaDayUsed(!!entry.cla_day_used)
+    setClaNightUsed(!!entry.cla_night_used)
     setClaDayMinutes(String(entry.cla_day_minutes ?? 0))
     setClaNight1Minutes(String(entry.cla_night1_minutes ?? 0))
     setClaNight2Minutes(String(entry.cla_night2_minutes ?? 0))
@@ -96,15 +112,19 @@ const WorkerPrenominaDialog = ({
   const workedDaysValue = parseDecimalInput(workedDays)
 
   const nightPreviews = rows.map((r) => computeNightPreview(r.start, r.end, parseIntegerInput(r.nights)))
+  // CLA: modalidades configuradas en el Cargo + las que el usuario marcó (used).
+  const claDayEnabled = !!claConfig?.day_enabled
+  const claNightEnabled = !!claConfig?.night_enabled
+  const claConfigured = !!claConfig?.applicable && (claDayEnabled || claNightEnabled)
   const claPreview = computeClaPreview({
     applied: claApplied,
-    dayEnabled: entry.cla_day_enabled,
-    dayRate: entry.cla_day_hourly_rate,
+    dayEnabled: claDayEnabled && claDayUsed,
+    dayRate: claConfig?.day_rate ?? null,
     dayMinutes: parseIntegerInput(claDayMinutes),
-    nightEnabled: entry.cla_night_enabled,
-    night1Rate: entry.cla_night1_hourly_rate,
+    nightEnabled: claNightEnabled && claNightUsed,
+    night1Rate: claConfig?.night1_rate ?? null,
     night1Minutes: parseIntegerInput(claNight1Minutes),
-    night2Rate: entry.cla_night2_hourly_rate,
+    night2Rate: claConfig?.night2_rate ?? null,
     night2Minutes: parseIntegerInput(claNight2Minutes),
   })
   const preview = computeEntryPreview(
@@ -116,8 +136,6 @@ const WorkerPrenominaDialog = ({
     entry.academic_monthly_amount,
     claPreview
   )
-  // El Cargo tiene CLA si habilitó al menos un tipo (diurno o nocturno).
-  const claConfigured = entry.cla_day_enabled || entry.cla_night_enabled
 
   // Antigüedad: dato derivado, solo lectura (se corrige en la ficha / escala).
   const tenureMissingStart = entry.tenure_status === "NO_START_DATE"
@@ -163,20 +181,18 @@ const WorkerPrenominaDialog = ({
     let claDayMin = 0
     let claNight1Min = 0
     let claNight2Min = 0
-    if (claApplied) {
-      if (entry.cla_day_enabled) {
-        const value = readMinutes(claDayMinutes, "CLA diurno")
-        if (value === null) return
-        claDayMin = value
-      }
-      if (entry.cla_night_enabled) {
-        const value1 = readMinutes(claNight1Minutes, "CLA nocturno (tramo 1)")
-        if (value1 === null) return
-        claNight1Min = value1
-        const value2 = readMinutes(claNight2Minutes, "CLA nocturno (tramo 2)")
-        if (value2 === null) return
-        claNight2Min = value2
-      }
+    if (claApplied && claDayUsed && claDayEnabled) {
+      const value = readMinutes(claDayMinutes, "CLA diurno")
+      if (value === null) return
+      claDayMin = value
+    }
+    if (claApplied && claNightUsed && claNightEnabled) {
+      const value1 = readMinutes(claNight1Minutes, "CLA nocturno (tramo 1)")
+      if (value1 === null) return
+      claNight1Min = value1
+      const value2 = readMinutes(claNight2Minutes, "CLA nocturno (tramo 2)")
+      if (value2 === null) return
+      claNight2Min = value2
     }
 
     const keptIds = rows.map((r) => r.id).filter((id): id is string => !!id)
@@ -195,7 +211,9 @@ const WorkerPrenominaDialog = ({
         deletedNightIds,
         {
           applied: claApplied,
+          dayUsed: claApplied && claDayUsed && claDayEnabled,
           dayMinutes: claDayMin,
+          nightUsed: claApplied && claNightUsed && claNightEnabled,
           night1Minutes: claNight1Min,
           night2Minutes: claNight2Min,
         }
@@ -495,7 +513,7 @@ const WorkerPrenominaDialog = ({
 
               {!claConfigured ? (
                 <p className="text-sm text-muted-foreground">
-                  No aplica: el Cargo no tiene Condiciones Laborales Anormales configuradas.
+                  El Cargo no tiene Condiciones Laborales Anormales configuradas.
                 </p>
               ) : (
                 <>
@@ -507,94 +525,111 @@ const WorkerPrenominaDialog = ({
                       onChange={(e) => setClaApplied(e.target.checked)}
                       className="rounded border-gray-300"
                     />
-                    <span className="text-sm font-medium text-ink">Aplicar condiciones anormales</span>
+                    <span className="text-sm font-medium text-ink">Aplicar CLA</span>
                   </label>
 
                   {claApplied && (
                     <div className="space-y-4">
-                      {entry.cla_day_enabled && (
+                      {claDayEnabled && (
                         <div className="space-y-2 rounded-xl border border-border p-3">
-                          <p className="text-xs font-medium text-ink">CLA diurno</p>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <Label>Minutos trabajados en CLA diurno</Label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={claDayUsed}
+                              disabled={readOnly}
+                              onChange={(e) => setClaDayUsed(e.target.checked)}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="text-sm font-medium text-ink">Horario diurno</span>
+                          </label>
+                          {claDayUsed && (
+                            <div className="space-y-1 pl-6">
+                              <Label>Minutos trabajados</Label>
                               <input
                                 type="text"
                                 inputMode="numeric"
                                 value={claDayMinutes}
                                 disabled={readOnly}
                                 onChange={(e) => setClaDayMinutes(e.target.value)}
-                                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
-                                placeholder="Ej.: 90"
+                                className="flex h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                placeholder="Ej.: 150"
                               />
-                            </div>
-                            <div className="space-y-1 text-sm">
-                              <span className="text-muted-foreground">Conversión: </span>
-                              <span className="font-medium text-ink">
-                                {formatMinutesToHours(parseIntegerInput(claDayMinutes))}
-                              </span>
-                              <div className="text-muted-foreground">
-                                Tarifa: {formatMoneyWithCurrency(entry.cla_day_hourly_rate, currency)} ·
-                                <span className="ml-1 font-medium text-ink">
-                                  {formatMoneyWithCurrency(claPreview.dayPayment, currency)}
+                              <p className="text-xs text-muted-foreground">
+                                {formatMinutesToHours(parseIntegerInput(claDayMinutes))} · Tarifa{" "}
+                                {formatMoneyWithCurrency(claConfig?.day_rate ?? null, currency)} ·{" "}
+                                <span className="font-medium text-ink">
+                                  Subtotal: {formatMoneyWithCurrency(claPreview.dayPayment, currency)}
                                 </span>
-                              </div>
+                              </p>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
 
-                      {entry.cla_night_enabled && (
+                      {claNightEnabled && (
                         <div className="space-y-3 rounded-xl border border-border p-3">
-                          <p className="text-xs font-medium text-ink">CLA nocturno</p>
-                          <div className="space-y-3">
-                            <div className="space-y-1">
-                              <Label>
-                                {String(entry.cla_night1_start || "").slice(0, 5)} –{" "}
-                                {String(entry.cla_night1_end || "").slice(0, 5)} · minutos
-                              </Label>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                value={claNight1Minutes}
-                                disabled={readOnly}
-                                onChange={(e) => setClaNight1Minutes(e.target.value)}
-                                className="flex h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 py-2 text-sm"
-                                placeholder="Ej.: 120"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                {formatMinutesToHours(parseIntegerInput(claNight1Minutes))} · Tarifa{" "}
-                                {formatMoneyWithCurrency(entry.cla_night1_hourly_rate, currency)} ·{" "}
-                                <span className="font-medium text-ink">
-                                  {formatMoneyWithCurrency(claPreview.night1Payment, currency)}
-                                </span>
-                              </p>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={claNightUsed}
+                              disabled={readOnly}
+                              onChange={(e) => setClaNightUsed(e.target.checked)}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="text-sm font-medium text-ink">Horario nocturno</span>
+                          </label>
+                          {claNightUsed && (
+                            <div className="space-y-3 pl-6">
+                              <div className="space-y-1">
+                                <Label>
+                                  {claConfig?.night1_start ?? "—"} – {claConfig?.night1_end ?? "—"} · Minutos trabajados
+                                </Label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={claNight1Minutes}
+                                  disabled={readOnly}
+                                  onChange={(e) => setClaNight1Minutes(e.target.value)}
+                                  className="flex h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                  placeholder="Ej.: 90"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  {formatMinutesToHours(parseIntegerInput(claNight1Minutes))} · Tarifa{" "}
+                                  {formatMoneyWithCurrency(claConfig?.night1_rate ?? null, currency)} ·{" "}
+                                  <span className="font-medium text-ink">
+                                    Subtotal: {formatMoneyWithCurrency(claPreview.night1Payment, currency)}
+                                  </span>
+                                </p>
+                              </div>
+                              <div className="space-y-1">
+                                <Label>
+                                  {claConfig?.night2_start ?? "—"} – {claConfig?.night2_end ?? "—"} · Minutos trabajados
+                                </Label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={claNight2Minutes}
+                                  disabled={readOnly}
+                                  onChange={(e) => setClaNight2Minutes(e.target.value)}
+                                  className="flex h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                  placeholder="Ej.: 120"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  {formatMinutesToHours(parseIntegerInput(claNight2Minutes))} · Tarifa{" "}
+                                  {formatMoneyWithCurrency(claConfig?.night2_rate ?? null, currency)} ·{" "}
+                                  <span className="font-medium text-ink">
+                                    Subtotal: {formatMoneyWithCurrency(claPreview.night2Payment, currency)}
+                                  </span>
+                                </p>
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <Label>
-                                {String(entry.cla_night2_start || "").slice(0, 5)} –{" "}
-                                {String(entry.cla_night2_end || "").slice(0, 5)} · minutos
-                              </Label>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                value={claNight2Minutes}
-                                disabled={readOnly}
-                                onChange={(e) => setClaNight2Minutes(e.target.value)}
-                                className="flex h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 py-2 text-sm"
-                                placeholder="Ej.: 90"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                {formatMinutesToHours(parseIntegerInput(claNight2Minutes))} · Tarifa{" "}
-                                {formatMoneyWithCurrency(entry.cla_night2_hourly_rate, currency)} ·{" "}
-                                <span className="font-medium text-ink">
-                                  {formatMoneyWithCurrency(claPreview.night2Payment, currency)}
-                                </span>
-                              </p>
-                            </div>
-                          </div>
+                          )}
                         </div>
                       )}
+
+                      <p className="text-sm font-semibold text-ink">
+                        TOTAL CLA: {formatMoneyWithCurrency(claPreview.totalPayment, currency)}
+                      </p>
                     </div>
                   )}
                 </>
