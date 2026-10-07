@@ -13,6 +13,7 @@ import {
   Shield,
   ArrowLeft,
   Scale,
+  Settings,
 } from "lucide-react"
 
 const PlatformAdminLayout = React.forwardRef<
@@ -34,6 +35,24 @@ const PlatformAdminLayout = React.forwardRef<
   // Solo mostramos el regreso cuando el usuario está realmente dentro de un
   // contexto inferior (tenant/entidad); si ya está en Administración Global, no.
   const showGlobalAdminReturn = !!currentTenant || isEntityRoute
+
+  const navItem = (to: string, icon: React.ReactNode, label: string, exact = false) => {
+    const active = exact ? location.pathname === to : location.pathname.startsWith(to)
+    return (
+      <Link
+        to={to}
+        className={cn(
+          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+          active
+            ? "bg-sitecorp-primary/10 text-sitecorp-primary"
+            : "text-ink hover:bg-muted hover:text-ink"
+        )}
+      >
+        {icon}
+        <span className="truncate">{label}</span>
+      </Link>
+    )
+  }
 
   return (
     <div
@@ -59,41 +78,29 @@ const PlatformAdminLayout = React.forwardRef<
         {/* Navigation (scrollable) */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-1">
-            <Link
-              to="/admin"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-            >
-              <LayoutDashboard className="h-5 w-5" />
-              Inicio
-            </Link>
-            <Link
-              to="/admin/companies"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-            >
-              <Building2 className="h-5 w-5" />
-              Clientes / Organizaciones
-            </Link>
-            <Link
-              to="/admin/users"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-            >
-              <Users className="h-5 w-5" />
-              Usuarios
-            </Link>
-            <Link
-              to="/admin/roles"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-            >
-              <Shield className="h-5 w-5" />
-              Roles y permisos
-            </Link>
-            <Link
-              to="/admin/settings/salary-scale"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-            >
-              <Scale className="h-5 w-5" />
-              Escala salarial presupuestada
-            </Link>
+            {navItem("/admin", <LayoutDashboard className="h-5 w-5" />, "Inicio", true)}
+            {navItem(
+              "/admin/companies",
+              <Building2 className="h-5 w-5" />,
+              "Clientes / Organizaciones"
+            )}
+
+            {/* Sección Ajustes: configuración de la administración global de SiteCorp. */}
+            <div className="pt-3">
+              <p className="flex items-center gap-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Settings className="h-3.5 w-3.5" />
+                Ajustes
+              </p>
+              <div className="ml-3 space-y-1 border-l border-border pl-2">
+                {navItem("/admin/users", <Users className="h-5 w-5" />, "Usuarios")}
+                {navItem("/admin/roles", <Shield className="h-5 w-5" />, "Roles y permisos")}
+                {navItem(
+                  "/admin/settings/salary-scale",
+                  <Scale className="h-5 w-5" />,
+                  "Escala salarial presupuestada"
+                )}
+              </div>
+            </div>
           </div>
         </nav>
 
