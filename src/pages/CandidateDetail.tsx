@@ -7,7 +7,8 @@ import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { SiteCorpTabsList, SiteCorpTabTrigger } from "@/components/ui/sitecorp-tabs"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
@@ -1212,29 +1213,29 @@ const CandidateDetail = () => {
       {/* Tabs for detailed information */}
       <SiteCorpCard>
         <Tabs defaultValue="resumen" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7">
-            <TabsTrigger value="resumen">
+          <SiteCorpTabsList className="mb-4">
+            <SiteCorpTabTrigger value="resumen">
               <FileText className="mr-2 h-4 w-4" /> Resumen
-            </TabsTrigger>
-            <TabsTrigger value="datos-personales">
+            </SiteCorpTabTrigger>
+            <SiteCorpTabTrigger value="datos-personales">
               <Users className="mr-2 h-4 w-4" /> Datos personales
-            </TabsTrigger>
-            <TabsTrigger value="experiencia-laboral">
+            </SiteCorpTabTrigger>
+            <SiteCorpTabTrigger value="experiencia-laboral">
               <Briefcase className="mr-2 h-4 w-4" /> Experiencia
-            </TabsTrigger>
-            <TabsTrigger value="formacion">
+            </SiteCorpTabTrigger>
+            <SiteCorpTabTrigger value="formacion">
               <GraduationCap className="mr-2 h-4 w-4" /> Formación
-            </TabsTrigger>
-            <TabsTrigger value="documentos">
+            </SiteCorpTabTrigger>
+            <SiteCorpTabTrigger value="documentos">
               <Paperclip className="mr-2 h-4 w-4" /> Documentos
-            </TabsTrigger>
-            <TabsTrigger value="info-adicional">
+            </SiteCorpTabTrigger>
+            <SiteCorpTabTrigger value="info-adicional">
               <Info className="mr-2 h-4 w-4" /> Info adicional
-            </TabsTrigger>
-            <TabsTrigger value="notas">
+            </SiteCorpTabTrigger>
+            <SiteCorpTabTrigger value="notas">
               <Notes className="mr-2 h-4 w-4" /> Notas
-            </TabsTrigger>
-          </TabsList>
+            </SiteCorpTabTrigger>
+          </SiteCorpTabsList>
 
           {/* Resumen Tab */}
           <TabsContent value="resumen" className="space-y-6">

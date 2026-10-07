@@ -1,7 +1,5 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -11,8 +9,6 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Building2, Users, Shield, ArrowRight } from "lucide-react"
 
 const Admin = () => {
-  const { user, profile, isPlatformSuperAdmin } = useAuth()
-  const { currentTenant } = useCurrentTenant()
   const navigate = useNavigate()
   const [metrics, setMetrics] = React.useState({
     total: 0,
@@ -78,29 +74,7 @@ const Admin = () => {
         </SiteCorpCard>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <SiteCorpCard title="Mi cuenta">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sitecorp-primary">
-                <span className="text-sm font-bold text-white">
-                  {profile?.full_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
-                </span>
-              </div>
-              <div>
-                <p className="font-medium text-ink">{profile?.full_name || "Sin nombre"}</p>
-                <p className="text-sm text-muted-foreground">{user?.email}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <SiteCorpStatusBadge status={isPlatformSuperAdmin ? "success" : "warning"} />
-              <span className="text-sm text-muted-foreground">
-                {isPlatformSuperAdmin ? "SuperAdmin" : "Rol de plataforma"}
-              </span>
-            </div>
-          </div>
-        </SiteCorpCard>
-
+      <div className="grid gap-4">
         <SiteCorpCard title="Acciones rápidas">
           <div className="space-y-3">
             <SiteCorpButton

@@ -30,7 +30,8 @@ import {
   AlertTriangle,
   Wallet,
 } from "lucide-react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { SiteCorpTabsList, SiteCorpTabTrigger } from "@/components/ui/sitecorp-tabs"
 import WorkerVacationsTab from "@/components/vacations/WorkerVacationsTab"
 import WorkerMedicalCertificatesTab from "@/components/worker/WorkerMedicalCertificatesTab"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
@@ -992,22 +993,20 @@ const WorkerDetail = () => {
       )}
 
       <Tabs defaultValue="resumen" className="w-full">
-        <TabsList
-          className={`mb-4 grid w-full ${canViewVacations || canViewMedicalCerts ? "max-w-2xl grid-cols-2 sm:grid-cols-4" : "max-w-xl grid-cols-3"}`}
-        >
-          <TabsTrigger value="resumen">Resumen</TabsTrigger>
-          <TabsTrigger value="contratacion">
+        <SiteCorpTabsList className="mb-4">
+          <SiteCorpTabTrigger value="resumen">Resumen</SiteCorpTabTrigger>
+          <SiteCorpTabTrigger value="contratacion">
             Contratación
             {pendingContractAddendums.length > 0 && (
               <span className="ml-2 rounded-full bg-sitecorp-warning/10 px-2 py-0.5 text-xs font-semibold text-sitecorp-warning">
                 {pendingContractAddendums.length}
               </span>
             )}
-          </TabsTrigger>
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          {canViewVacations && <TabsTrigger value="vacaciones">Vacaciones</TabsTrigger>}
-          {canViewMedicalCerts && <TabsTrigger value="medical-certificates">Certificados médicos</TabsTrigger>}
-        </TabsList>
+          </SiteCorpTabTrigger>
+          <SiteCorpTabTrigger value="documentos">Documentos</SiteCorpTabTrigger>
+          {canViewVacations && <SiteCorpTabTrigger value="vacaciones">Vacaciones</SiteCorpTabTrigger>}
+          {canViewMedicalCerts && <SiteCorpTabTrigger value="medical-certificates">Certificados médicos</SiteCorpTabTrigger>}
+        </SiteCorpTabsList>
 
         <TabsContent value="resumen" className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">

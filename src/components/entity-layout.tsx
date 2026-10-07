@@ -13,9 +13,6 @@ import {
   Briefcase,
   Settings,
   ArrowLeft,
-  Layers,
-  Building,
-  Factory,
   CalendarClock,
   Palmtree,
   HeartPulse,
@@ -24,7 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react"
-import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
+import { SidebarUserMenu } from "@/components/sidebar-user-menu"
 import {
   ENTITY_NAV,
   hasSiteCorpAccount,
@@ -33,12 +30,6 @@ import {
   type EntityNavLink,
 } from "@/lib/sitecorp-account"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
-
-const entityTypeLabels: Record<string, string> = {
-  business_group: "Grupo empresarial",
-  company: "Empresa",
-  ueb: "UEB",
-}
 
 /** Iconos de los elementos del menú (la estructura está en ENTITY_NAV). */
 const navIcons: Record<string, React.ReactNode> = {
@@ -56,12 +47,6 @@ const navIcons: Record<string, React.ReactNode> = {
   settings: <Settings className="h-5 w-5" />,
 }
 
-const typeIcon = (type: string) => {
-  if (type === "business_group") return <Layers className="h-4 w-4" />
-  if (type === "company") return <Building className="h-4 w-4" />
-  return <Factory className="h-4 w-4" />
-}
-
 const isVisible = (entry: EntityNavEntry, permissions: string[]): boolean => {
   if (!entry.permissions || entry.permissions.length === 0) return true
   return entry.permissions.some((code) => permissions.includes(code))
@@ -71,24 +56,17 @@ const EntityLayout = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
-  const { logout } = useAuth()
-  const { currentTenant, clearCurrentTenant } = useCurrentTenant()
+  const { isPlatformUser } = useAuth()
+  const { clearCurrentTenant } = useCurrentTenant()
   const { currentEntity, clearCurrentEntity } = useCurrentEntity()
   const navigate = useNavigate()
   const location = useLocation()
-
-  const handleLogout = async () => {
-    await logout()
-    navigate("/login")
-  }
 
   const handleReturnToAdmin = () => {
     clearCurrentTenant()
     clearCurrentEntity()
     navigate("/admin")
   }
-
-  const isEntityRoute = location.pathname.startsWith("/entity/")
 
   const entityId = currentEntity?.id
 
@@ -151,6 +129,11 @@ const EntityLayout = React.forwardRef<
     )
   }
 
+  // "Regresar a Administración Global": solo para usuarios con acceso REAL a la
+  // administración global de SiteCorp que están navegando dentro de una entidad.
+  // Un usuario normal de empresa nunca lo ve.
+  const showGlobalAdminReturn = isPlatformUser
+
   return (
     <div
       ref={ref}
@@ -160,17 +143,19 @@ const EntityLayout = React.forwardRef<
       {/* Sidebar */}
       <div className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-border bg-card">
         {/* Logo / Brand */}
-        <div className="flex h-16 items-center border-b border-border px-6">
-          <div className="flex items-center gap-3">
+        <div className="flex h-16 shrink-0 items-center border-b border-border px-6">
+          <div className="flex min-w-0 items-center gap-3">
             <SiteCorpBrand variant="isotype" size="sm" />
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-semibold text-ink">SiteCorp</h2>
-              <p className="text-xs text-muted-foreground">Entidad</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {currentEntity?.name || "Entidad"}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation (scrollable) */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-1">
             {entityId && modulesEnabled && (
@@ -222,59 +207,25 @@ const EntityLayout = React.forwardRef<
           </div>
         </nav>
 
-        {/* Footer */}
-        <div className="border-t border-border p-4">
-          <button
-            onClick={handleReturnToAdmin}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" /> Volver a administración global
-          </button>
+        {/* Footer fijo (no desaparece aunque la navegación tenga scroll) */}
+        <div className="shrink-0 space-y-2 border-t border-border p-3">
+          {showGlobalAdminReturn && (
+            <button
+              type="button"
+              onClick={handleReturnToAdmin}
+              title="Regresar a Administración Global"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" />
+              <span className="truncate">Regresar a Administración Global</span>
+            </button>
+          )}
+          <SidebarUserMenu accountPath={isPlatformUser ? "/admin/account" : null} />
         </div>
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto bg-sitecorp-background ml-64">
-        {currentTenant && (
-          <div className="border-b border-border bg-muted/30 px-6 py-3">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleReturnToAdmin}
-                className="inline-flex items-center gap-2 rounded-md bg-sitecorp-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sitecorp-primary-dark"
-              >
-                <ArrowLeft className="h-4 w-4" /> Volver a administración global
-              </button>
-              <span className="text-sm text-muted-foreground">
-                Actualmente en: <strong className="text-ink">
-                  {currentEntity && typeIcon(currentEntity.entity_type)}
-                  {currentEntity?.name || "Entidad"}
-                </strong>
-              </span>
-            </div>
-          </div>
-        )}
-        {isEntityRoute && currentEntity && !currentTenant && (
-          <div className="border-b border-border bg-muted/30 px-6 py-3">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleReturnToAdmin}
-                className="inline-flex items-center gap-2 rounded-md bg-sitecorp-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-sitecorp-primary-dark"
-              >
-                <ArrowLeft className="h-4 w-4" /> Volver a administración global
-              </button>
-              <span className="text-sm text-muted-foreground">
-                Actualmente en:{" "}
-                <strong className="text-ink flex items-center gap-1">
-                  {typeIcon(currentEntity.entity_type)}
-                  {currentEntity.name}
-                  <SiteCorpStatusBadge status="neutral">
-                    {entityTypeLabels[currentEntity.entity_type] || "Entidad"}
-                  </SiteCorpStatusBadge>
-                </strong>
-              </span>
-            </div>
-          </div>
-        )}
+      <main className="ml-64 flex-1 overflow-y-auto bg-sitecorp-background">
         <Outlet />
       </main>
     </div>
