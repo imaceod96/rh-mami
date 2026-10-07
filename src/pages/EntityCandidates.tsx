@@ -31,6 +31,7 @@ import {
 } from "@/lib/catalogs"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 import { AcademicDegreeCheckboxes } from "@/components/person/AcademicDegreeCheckboxes"
+import { isValidIdentification, IDENTIFICATION_ERROR_MESSAGE } from "@/utils/ci"
 
 interface Candidate {
   id: string
@@ -399,15 +400,16 @@ const EntityCandidates = () => {
       const navigate = useNavigate()
 
   // DNI autocomplete for birth date (Cuban DNI format: first 6 digits = aammdd)
-    const handleIdentificationChange = (value: string) => {
-      const cleaned = value.replace(/\D/g, "")
-      setFormData(prev => ({ ...prev, identification: cleaned }))
-  
-      // Auto-fill birth date from first 6 digits (aammdd) and display as dd/mm/yyyy
-      if (cleaned.length >= 6) {
-        const yearStr = cleaned.substring(0, 2)
-        const monthStr = cleaned.substring(2, 4)
-        const dayStr = cleaned.substring(4, 6)
+  const handleIdentificationChange = (value: string) => {
+    // Se conserva el valor tal cual: la validación exige exactamente 11 dígitos.
+    setFormData(prev => ({ ...prev, identification: value }))
+
+    // Auto-fill birth date from first 6 digits (aammdd) and display as dd/mm/yyyy
+    const cleaned = value.replace(/\D/g, "")
+    if (cleaned.length >= 6) {
+      const yearStr = cleaned.substring(0, 2)
+      const monthStr = cleaned.substring(2, 4)
+      const dayStr = cleaned.substring(4, 6)
   
         const year = parseInt(yearStr, 10)
         const month = parseInt(monthStr, 10)
@@ -495,6 +497,10 @@ const EntityCandidates = () => {
     }
     if (!formData.identification.trim()) {
       setFormError("La identificación es obligatoria")
+      return
+    }
+    if (!isValidIdentification(formData.identification)) {
+      setFormError(IDENTIFICATION_ERROR_MESSAGE)
       return
     }
     // Integridad contractual: datos personales indispensables para formalizar
@@ -1175,7 +1181,8 @@ const EntityCandidates = () => {
                                   <Label>Identificación *</Label>
                                   <SiteCorpInput
                                     type="text"
-                                    placeholder="Cédula / DNI / Pasaporte"
+                                    inputMode="numeric"
+                                    placeholder="11 dígitos"
                                     value={formData.identification}
                                     onChange={(e) => handleIdentificationChange(e.target.value)}
                                     required

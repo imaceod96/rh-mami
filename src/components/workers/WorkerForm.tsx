@@ -8,7 +8,7 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Label } from "@/components/ui/label"
 import { toRomanNumeral } from "@/utils/roman-numerals"
-import { ciToBirthDate } from "@/utils/ci"
+import { ciToBirthDate, isValidIdentification, IDENTIFICATION_ERROR_MESSAGE } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/lib/representatives"
@@ -415,10 +415,11 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
   }, [form.education_level_id, educationLevels])
 
   const handleIdentificationChange = (value: string) => {
-    const cleaned = value.replace(/\D/g, "").substring(0, 11)
+    // Se conserva el valor tal cual: la validación exige exactamente 11 dígitos
+    // (0-9) y nunca se convierte a número (preserva ceros iniciales).
     setForm(prev => {
-      const derived = ciToBirthDate(cleaned)
-      return { ...prev, identification: cleaned, birth_date: derived || prev.birth_date }
+      const derived = ciToBirthDate(value)
+      return { ...prev, identification: value, birth_date: derived || prev.birth_date }
     })
   }
 
@@ -437,6 +438,10 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
     }
     if (!form.identification.trim()) {
       setFormError("El carné de identidad es obligatorio")
+      return
+    }
+    if (!isValidIdentification(form.identification)) {
+      setFormError(IDENTIFICATION_ERROR_MESSAGE)
       return
     }
     // Integridad contractual: datos personales indispensables para formalizar

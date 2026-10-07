@@ -13,7 +13,7 @@ import { Users, ArrowLeft, Save } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ciToBirthDate } from "@/utils/ci"
+import { ciToBirthDate, isValidIdentification, IDENTIFICATION_ERROR_MESSAGE } from "@/utils/ci"
 import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-locations-full"
 import {
   fetchCandidateDrivingLicenseIds,
@@ -423,10 +423,13 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
   }
 
   const handleIdentificationChange = (value: string) => {
-    const cleaned = value.replace(/\D/g, "")
-    setFormData(prev => ({ ...prev, identification: cleaned }))
+    // Se conserva el valor tal cual se escribe: la validación exige exactamente
+    // 11 dígitos (0-9). No se convierte a número para no perder ceros iniciales.
+    setFormData(prev => ({ ...prev, identification: value }))
 
-    const derived = ciToBirthDate(cleaned)
+    // La fecha de nacimiento se deriva solo de los dígitos disponibles (ayuda de
+    // autocompletado, nunca inventa una fecha).
+    const derived = ciToBirthDate(value)
     if (derived) {
       setFormData(prev => ({ ...prev, birth_date: derived }))
     }
@@ -454,6 +457,10 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
     }
     if (!formData.identification.trim()) {
       setFormError("La identificación es obligatoria")
+      return
+    }
+    if (!isValidIdentification(formData.identification)) {
+      setFormError(IDENTIFICATION_ERROR_MESSAGE)
       return
     }
     // Integridad contractual: al editar un candidato (incluidos los históricos)
@@ -673,7 +680,7 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
               </div>
               <div className="space-y-1.5">
                 <Label>Identificación *</Label>
-                <SiteCorpInput type="text" placeholder="Cédula / DNI / Pasaporte" value={formData.identification} onChange={(e) => handleIdentificationChange(e.target.value)} required />
+                <SiteCorpInput type="text" inputMode="numeric" placeholder="11 dígitos" value={formData.identification} onChange={(e) => handleIdentificationChange(e.target.value)} required />
               </div>
               <div className="space-y-1.5">
                 <Label>Fecha de nacimiento (dd/mm/aaaa) *</Label>

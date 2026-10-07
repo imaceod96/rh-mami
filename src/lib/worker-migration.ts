@@ -296,6 +296,10 @@ export async function validateWorkerMigration(entityId: string, rows: MigrationR
     if (row.driving_license_category_ids.some((id) => !catalogs.driving_license_category_ids.has(id))) {
       errors.push("Una o más categorías de licencia no existen en el catálogo.")
     }
+    // Número de Identificación: exactamente 11 dígitos (0-9), como texto.
+    if (!/^[0-9]{11}$/.test(String(row.identification || "").trim())) {
+      errors.push("El número de identificación debe contener exactamente 11 dígitos.")
+    }
     for (const [date, label] of [[row.birth_date, "Fecha de nacimiento"], [row.employment_start_date, "Fecha de incorporación"], [row.vacation_cutoff_date, "Fecha de corte de vacaciones"]]) {
       if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push(`${label} inválida.`)
     }

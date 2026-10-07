@@ -66,8 +66,18 @@ export const JobForm: React.FC<JobFormProps> = ({
       scopeType: string | null
       regime: string | null
     } | null>(null)
+    // CLA — Condiciones Laborales Anormales (configuración del CARGO).
+    // Reutiliza la opción existente "Condiciones anormales"; NO es Nocturnidad.
     const [hasAbnormalConditions, setHasAbnormalConditions] = React.useState(false)
-    const [abnormalConditionsAmount, setAbnormalConditionsAmount] = React.useState("")
+    const [claDayEnabled, setClaDayEnabled] = React.useState(false)
+    const [claDayRate, setClaDayRate] = React.useState("")
+    const [claNightEnabled, setClaNightEnabled] = React.useState(false)
+    const [claNight1Start, setClaNight1Start] = React.useState("")
+    const [claNight1End, setClaNight1End] = React.useState("")
+    const [claNight1Rate, setClaNight1Rate] = React.useState("")
+    const [claNight2Start, setClaNight2Start] = React.useState("")
+    const [claNight2End, setClaNight2End] = React.useState("")
+    const [claNight2Rate, setClaNight2Rate] = React.useState("")
 
   const navigate = useNavigate()
 
@@ -207,6 +217,16 @@ export const JobForm: React.FC<JobFormProps> = ({
       setIsCuadro(false)
       setIsPrincipalSpecialist(false)
       setSalaryVigente(null)
+      setHasAbnormalConditions(false)
+      setClaDayEnabled(false)
+      setClaDayRate("")
+      setClaNightEnabled(false)
+      setClaNight1Start("")
+      setClaNight1End("")
+      setClaNight1Rate("")
+      setClaNight2Start("")
+      setClaNight2End("")
+      setClaNight2Rate("")
       return
     }
 
@@ -216,11 +236,42 @@ export const JobForm: React.FC<JobFormProps> = ({
         setIsCuadro(!!editingJob.is_cuadro)
         setIsPrincipalSpecialist(!!editingJob.is_principal_specialist)
         setHasAbnormalConditions(editingJob.has_abnormal_conditions || false)
-        setAbnormalConditionsAmount(
-          editingJob.has_abnormal_conditions && editingJob.abnormal_conditions_amount != null
-            ? String(editingJob.abnormal_conditions_amount)
-            : ""
+        setClaDayEnabled(!!editingJob.cla_day_enabled)
+        setClaDayRate(
+          editingJob.cla_day_hourly_rate != null ? String(editingJob.cla_day_hourly_rate) : ""
         )
+        setClaNightEnabled(!!editingJob.cla_night_enabled)
+        setClaNight1Start("")
+        setClaNight1End("")
+        setClaNight1Rate("")
+        setClaNight2Start("")
+        setClaNight2End("")
+        setClaNight2Rate("")
+
+        // Tramos nocturnos CLA configurados para este Cargo (tabla hija)
+        if (editingJob.id) {
+          supabase
+            .from("organization_job_cla_night_segments")
+            .select("segment_order, start_time, end_time, hourly_rate")
+            .eq("organization_job_id", editingJob.id)
+            .order("segment_order")
+            .then(({ data: segData, error: segError }) => {
+              if (segError || !segData) return
+              const segs = segData as { segment_order: number; start_time: string; end_time: string; hourly_rate: number }[]
+              const s1 = segs.find((s) => s.segment_order === 1)
+              const s2 = segs.find((s) => s.segment_order === 2)
+              if (s1) {
+                setClaNight1Start(String(s1.start_time).slice(0, 5))
+                setClaNight1End(String(s1.end_time).slice(0, 5))
+                setClaNight1Rate(String(s1.hourly_rate))
+              }
+              if (s2) {
+                setClaNight2Start(String(s2.start_time).slice(0, 5))
+                setClaNight2End(String(s2.end_time).slice(0, 5))
+                setClaNight2Rate(String(s2.hourly_rate))
+              }
+            })
+        }
 
         // Load existing preparation levels for this job
         if (editingJob.id) {
@@ -281,6 +332,38 @@ export const JobForm: React.FC<JobFormProps> = ({
     }
   }
 
+  // Reemplazo atómico de los dos tramos nocturnos CLA del Cargo. Cuando el pago
+  // nocturno está desactivado se eliminan (no se guardan horarios huérfanos).
+  const saveClaNightSegments = async (jobId: string) => {
+    await supabase
+      .from("organization_job_cla_night_segments")
+      .delete()
+      .eq("organization_job_id", jobId)
+    if (hasAbnormalConditions && claNightEnabled) {
+      const { error: segError } = await supabase
+        .from("organization_job_cla_night_segments")
+        .insert([
+          {
+            organization_job_id: jobId,
+            organization_entity_id: entityId,
+            segment_order: 1,
+            start_time: claNight1Start,
+            end_time: claNight1End,
+            hourly_rate: parseFloat(claNight1Rate),
+          },
+          {
+            organization_job_id: jobId,
+            organization_entity_id: entityId,
+            segment_order: 2,
+            start_time: claNight2Start,
+            end_time: claNight2End,
+            hourly_rate: parseFloat(claNight2Rate),
+          },
+        ])
+      if (segError) throw segError
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault()
       if (!entityId) return
@@ -319,16 +402,34 @@ export const JobForm: React.FC<JobFormProps> = ({
           return
         }
     
-        // Validación de Condiciones Anormales
+        // Validación de CLA (no guardar configuraciones incompletas)
         if (hasAbnormalConditions) {
-          const amount = parseFloat(abnormalConditionsAmount)
-          if (isNaN(amount) || abnormalConditionsAmount.trim() === "") {
-            setFormError("Debe indicar el importe total a pagar para las condiciones anormales")
-            return
+          if (claDayEnabled) {
+            const rate = parseFloat(claDayRate)
+            if (claDayRate.trim() === "" || isNaN(rate) || rate < 0) {
+              setFormError("Indica una tarifa horaria válida (≥ 0) para el pago diurno de CLA")
+              return
+            }
           }
-          if (amount < 0) {
-            setFormError("El importe de condiciones anormales no puede ser negativo")
-            return
+          if (claNightEnabled) {
+            if (!claNight1Start || !claNight1End) {
+              setFormError("Tramo nocturno 1: indica hora de inicio y hora de fin")
+              return
+            }
+            const r1 = parseFloat(claNight1Rate)
+            if (claNight1Rate.trim() === "" || isNaN(r1) || r1 < 0) {
+              setFormError("Tramo nocturno 1: indica una tarifa horaria válida (≥ 0)")
+              return
+            }
+            if (!claNight2Start || !claNight2End) {
+              setFormError("Tramo nocturno 2: indica hora de inicio y hora de fin")
+              return
+            }
+            const r2 = parseFloat(claNight2Rate)
+            if (claNight2Rate.trim() === "" || isNaN(r2) || r2 < 0) {
+              setFormError("Tramo nocturno 2: indica una tarifa horaria válida (≥ 0)")
+              return
+            }
           }
         }
     
@@ -342,9 +443,8 @@ export const JobForm: React.FC<JobFormProps> = ({
     setSubmitting(true)
 
     try {
-          const abnormalAmount = hasAbnormalConditions
-            ? parseFloat(abnormalConditionsAmount)
-            : null
+          const claDayRateValue =
+            hasAbnormalConditions && claDayEnabled ? parseFloat(claDayRate) : null
     
           if (editingJob) {
             const { error: updateError } = await supabase
@@ -359,13 +459,16 @@ export const JobForm: React.FC<JobFormProps> = ({
                 required_profession_or_trade,
                 work_content,
                 has_abnormal_conditions: hasAbnormalConditions,
-                abnormal_conditions_amount: abnormalAmount,
+                cla_day_enabled: hasAbnormalConditions && claDayEnabled,
+                cla_day_hourly_rate: claDayRateValue,
+                cla_night_enabled: hasAbnormalConditions && claNightEnabled,
                 is_cuadro: isCuadro,
                 is_principal_specialist: isPrincipalSpecialist,
               })
               .eq("id", editingJob.id)
     
             if (updateError) throw updateError
+            await saveClaNightSegments(editingJob.id)
             await supabase.from("organization_job_preparation_levels").delete().eq("organization_job_id", editingJob.id)
             if (selectedPreparationLevels.length > 0) {
               const { error: prepError } = await supabase
@@ -389,7 +492,9 @@ export const JobForm: React.FC<JobFormProps> = ({
                 required_profession_or_trade,
                 work_content,
                 has_abnormal_conditions: hasAbnormalConditions,
-                abnormal_conditions_amount: abnormalAmount,
+                cla_day_enabled: hasAbnormalConditions && claDayEnabled,
+                cla_day_hourly_rate: claDayRateValue,
+                cla_night_enabled: hasAbnormalConditions && claNightEnabled,
                 is_cuadro: isCuadro,
                 is_principal_specialist: isPrincipalSpecialist,
               })
@@ -397,6 +502,7 @@ export const JobForm: React.FC<JobFormProps> = ({
               .single()
     
             if (insertError) throw insertError
+            if (insertedJob) await saveClaNightSegments(insertedJob.id)
             if (insertedJob && selectedPreparationLevels.length > 0) {
               const { error: prepError } = await supabase
                 .from("organization_job_preparation_levels")
@@ -690,37 +796,135 @@ export const JobForm: React.FC<JobFormProps> = ({
                 )}
               </div>
         
-              {/* CONDICIONES ANORMALES */}
+              {/* CLA — CONDICIONES LABORALES ANORMALES (configuración del Cargo) */}
               <div className="space-y-4 border-t border-border pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Condiciones anormales
+                  Condiciones Laborales Anormales (CLA)
                 </p>
         
                 <div className="space-y-2">
                   <SiteCorpCheckbox
-                                      label="Condiciones Anormales"
-                                      checked={hasAbnormalConditions}
-                                      onCheckedChange={(checked) => setHasAbnormalConditions(!!checked)}
-                                    />
+                    label="Condiciones anormales"
+                    checked={hasAbnormalConditions}
+                    onCheckedChange={(checked) => setHasAbnormalConditions(!!checked)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    CLA es un concepto independiente de la Nocturnidad. Las tarifas pertenecen al Cargo,
+                    no al trabajador ni a la Prenómina.
+                  </p>
                 </div>
         
                 {hasAbnormalConditions && (
-                  <div className="space-y-2">
-                    <Label htmlFor="job-abnormal-amount">Total a pagar *</Label>
-                    <SiteCorpInput
-                      id="job-abnormal-amount"
-                      name="abnormal_conditions_amount"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={abnormalConditionsAmount}
-                      onChange={(e) => setAbnormalConditionsAmount(e.target.value)}
-                      required
-                      placeholder="0.00"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Importe monetario asociado a las condiciones anormales de este cargo.
-                    </p>
+                  <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                    {/* Pago diurno */}
+                    <div className="space-y-3">
+                      <SiteCorpCheckbox
+                        label="Pago diurno"
+                        checked={claDayEnabled}
+                        onCheckedChange={(checked) => setClaDayEnabled(!!checked)}
+                      />
+                      {claDayEnabled && (
+                        <div className="space-y-2 pl-6">
+                          <Label htmlFor="job-cla-day-rate">Pago por hora diurna (CUP/h)</Label>
+                          <SiteCorpInput
+                            id="job-cla-day-rate"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={claDayRate}
+                            onChange={(e) => setClaDayRate(e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      )}
+                    </div>
+        
+                    {/* Pago nocturno: dos tramos configurables */}
+                    <div className="space-y-3 border-t pt-3">
+                      <SiteCorpCheckbox
+                        label="Pago nocturno"
+                        checked={claNightEnabled}
+                        onCheckedChange={(checked) => setClaNightEnabled(!!checked)}
+                      />
+                      {claNightEnabled && (
+                        <div className="space-y-4 pl-6">
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-ink">Tramo nocturno 1</p>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div className="space-y-1">
+                                <Label>Desde</Label>
+                                <input
+                                  type="time"
+                                  value={claNight1Start}
+                                  onChange={(e) => setClaNight1Start(e.target.value)}
+                                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Hasta</Label>
+                                <input
+                                  type="time"
+                                  value={claNight1End}
+                                  onChange={(e) => setClaNight1End(e.target.value)}
+                                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Pago por hora (CUP/h)</Label>
+                                <SiteCorpInput
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={claNight1Rate}
+                                  onChange={(e) => setClaNight1Rate(e.target.value)}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </div>
+                          </div>
+        
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-ink">Tramo nocturno 2</p>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div className="space-y-1">
+                                <Label>Desde</Label>
+                                <input
+                                  type="time"
+                                  value={claNight2Start}
+                                  onChange={(e) => setClaNight2Start(e.target.value)}
+                                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Hasta</Label>
+                                <input
+                                  type="time"
+                                  value={claNight2End}
+                                  onChange={(e) => setClaNight2End(e.target.value)}
+                                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Pago por hora (CUP/h)</Label>
+                                <SiteCorpInput
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={claNight2Rate}
+                                  onChange={(e) => setClaNight2Rate(e.target.value)}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </div>
+                          </div>
+        
+                          <p className="text-xs text-muted-foreground">
+                            Los dos tramos son independientes y admiten horarios que cruzan medianoche
+                            (p. ej. 23:00 → 07:00).
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

@@ -83,6 +83,28 @@ export interface PrenominaWorkerEntry {
   academic_monthly_amount: number | null
   academic_hourly_rate: number
   academic_payment: number
+  // CLA — Condiciones Laborales Anormales (snapshot por trabajador del período).
+  // Concepto INDEPENDIENTE de la Nocturnidad.
+  cla_applied: boolean
+  cla_day_enabled: boolean
+  cla_day_hourly_rate: number | null
+  cla_day_minutes: number
+  cla_day_hours: number
+  cla_day_payment: number
+  cla_night_enabled: boolean
+  cla_night1_start: string | null
+  cla_night1_end: string | null
+  cla_night1_hourly_rate: number | null
+  cla_night1_minutes: number
+  cla_night1_hours: number
+  cla_night1_payment: number
+  cla_night2_start: string | null
+  cla_night2_end: string | null
+  cla_night2_hourly_rate: number | null
+  cla_night2_minutes: number
+  cla_night2_hours: number
+  cla_night2_payment: number
+  cla_total_payment: number
   night_payment_19_23: number
   night_payment_23_07: number
   total_night_payment: number
@@ -121,6 +143,14 @@ export const formatMoneyWithCurrency = (
 
 export const formatHours = (value: number | null | undefined): string =>
   Number(value || 0).toLocaleString("es-CU", { maximumFractionDigits: 2 })
+
+/** Minutos enteros, sin decimales. */
+export const formatMinutes = (value: number | null | undefined): string =>
+  Number(value || 0).toLocaleString("es-CU", { maximumFractionDigits: 0 })
+
+/** Conversión explícita minutos → horas para auditoría: «90 min → 1,5 h». */
+export const formatMinutesToHours = (minutes: number | null | undefined): string =>
+  `${formatMinutes(minutes)} min → ${formatHours(Number(minutes || 0) / 60)} h`
 
 /** Días trabajados con coma decimal (UI española): 20.5 → "20,5". */
 export const formatDecimalInput = (value: number | null | undefined): string => {
@@ -202,6 +232,54 @@ export function computeNightPreview(start: string, end: string, nights: number):
   }
 }
 
+export interface ClaPreviewInput {
+  applied: boolean
+  dayEnabled: boolean
+  dayRate: number | null
+  dayMinutes: number
+  nightEnabled: boolean
+  night1Rate: number | null
+  night1Minutes: number
+  night2Rate: number | null
+  night2Minutes: number
+}
+
+export interface ClaPreview {
+  dayHours: number
+  dayPayment: number
+  night1Hours: number
+  night1Payment: number
+  night2Hours: number
+  night2Payment: number
+  totalPayment: number
+}
+
+/**
+ * Previsualiza el CLA de un trabajador en el período (espejo de prenomina_recalc_entry).
+ * Cada tramo es independiente: horas = minutos / 60 ; importe = horas × tarifa del tramo.
+ * No redondea prematuramente las horas (4 decimales) y aplica la política monetaria
+ * de Prenómina (2 decimales) al importe. NO tiene relación con la Nocturnidad.
+ */
+export function computeClaPreview(input: ClaPreviewInput): ClaPreview {
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  const r4 = (n: number) => Math.round(n * 1e4) / 1e4
+  const dayHours = input.applied && input.dayEnabled ? r4((input.dayMinutes || 0) / 60) : 0
+  const dayPayment = input.applied && input.dayEnabled ? r2(dayHours * Number(input.dayRate || 0)) : 0
+  const night1Hours = input.applied && input.nightEnabled ? r4((input.night1Minutes || 0) / 60) : 0
+  const night1Payment = input.applied && input.nightEnabled ? r2(night1Hours * Number(input.night1Rate || 0)) : 0
+  const night2Hours = input.applied && input.nightEnabled ? r4((input.night2Minutes || 0) / 60) : 0
+  const night2Payment = input.applied && input.nightEnabled ? r2(night2Hours * Number(input.night2Rate || 0)) : 0
+  return {
+    dayHours,
+    dayPayment,
+    night1Hours,
+    night1Payment,
+    night2Hours,
+    night2Payment,
+    totalPayment: r2(dayPayment + night1Payment + night2Payment),
+  }
+}
+
 export interface EntryPreview {
   hourlyRate: number
   workedHours: number
@@ -210,6 +288,7 @@ export interface EntryPreview {
   tenurePayment: number
   academicHourlyRate: number
   academicPayment: number
+  claTotalPayment: number
   nightPayment19_23: number
   nightPayment23_07: number
   totalNightPayment: number
@@ -222,7 +301,8 @@ export function computeEntryPreview(
   workdayHours: number | null,
   workedDays: number,
   nights: NightPreview[],
-  academicMonthlyAmount: number | null = null
+  academicMonthlyAmount: number | null = null,
+  cla: ClaPreview | null = null
 ): EntryPreview {
   const hourlyRate =
     salaryScaleAmount && salaryScaleAmount > 0
@@ -245,6 +325,7 @@ export function computeEntryPreview(
   const nightPayment19_23 = Math.round(nights.reduce((acc, n) => acc + n.payment19_23, 0) * 100) / 100
   const nightPayment23_07 = Math.round(nights.reduce((acc, n) => acc + n.payment23_07, 0) * 100) / 100
   const totalNightPayment = Math.round((nightPayment19_23 + nightPayment23_07) * 100) / 100
+  const claTotalPayment = cla ? cla.totalPayment : 0
   return {
     hourlyRate,
     workedHours,
@@ -253,12 +334,13 @@ export function computeEntryPreview(
     tenurePayment,
     academicHourlyRate,
     academicPayment,
+    claTotalPayment,
     nightPayment19_23,
     nightPayment23_07,
     totalNightPayment,
     totalPayment:
       Math.round(
-        (scaleSalaryPayment + tenurePayment + academicPayment + totalNightPayment) * 100
+        (scaleSalaryPayment + tenurePayment + academicPayment + totalNightPayment + claTotalPayment) * 100
       ) / 100,
   }
 }
@@ -353,6 +435,26 @@ const normalizeEntry = (row: any): PrenominaWorkerEntry => ({
   academic_monthly_amount: toNumberOrNull(row.academic_monthly_amount),
   academic_hourly_rate: Number(row.academic_hourly_rate || 0),
   academic_payment: Number(row.academic_payment || 0),
+  cla_applied: !!row.cla_applied,
+  cla_day_enabled: !!row.cla_day_enabled,
+  cla_day_hourly_rate: toNumberOrNull(row.cla_day_hourly_rate),
+  cla_day_minutes: Number(row.cla_day_minutes || 0),
+  cla_day_hours: Number(row.cla_day_hours || 0),
+  cla_day_payment: Number(row.cla_day_payment || 0),
+  cla_night_enabled: !!row.cla_night_enabled,
+  cla_night1_start: row.cla_night1_start ?? null,
+  cla_night1_end: row.cla_night1_end ?? null,
+  cla_night1_hourly_rate: toNumberOrNull(row.cla_night1_hourly_rate),
+  cla_night1_minutes: Number(row.cla_night1_minutes || 0),
+  cla_night1_hours: Number(row.cla_night1_hours || 0),
+  cla_night1_payment: Number(row.cla_night1_payment || 0),
+  cla_night2_start: row.cla_night2_start ?? null,
+  cla_night2_end: row.cla_night2_end ?? null,
+  cla_night2_hourly_rate: toNumberOrNull(row.cla_night2_hourly_rate),
+  cla_night2_minutes: Number(row.cla_night2_minutes || 0),
+  cla_night2_hours: Number(row.cla_night2_hours || 0),
+  cla_night2_payment: Number(row.cla_night2_payment || 0),
+  cla_total_payment: Number(row.cla_total_payment || 0),
   night_payment_19_23: Number(row.night_payment_19_23 || 0),
   night_payment_23_07: Number(row.night_payment_23_07 || 0),
   total_night_payment: Number(row.total_night_payment || 0),
@@ -435,6 +537,23 @@ export async function savePrenominaInputs(
   if (error) throw error
 }
 
+export async function savePrenominaCla(
+  entryId: string,
+  applied: boolean,
+  dayMinutes: number,
+  night1Minutes: number,
+  night2Minutes: number
+): Promise<void> {
+  const { error } = await supabase.rpc("prenomina_save_cla", {
+    p_entry_id: entryId,
+    p_applied: applied,
+    p_day_minutes: dayMinutes,
+    p_night1_minutes: night1Minutes,
+    p_night2_minutes: night2Minutes,
+  })
+  if (error) throw error
+}
+
 export async function savePrenominaNight(
   entryId: string,
   nightId: string | null,
@@ -494,17 +613,18 @@ export const PRENOMINA_EXPORT_HEADERS = [
   "Nocturnidad 19–23",
   "Nocturnidad 23–07",
   "Total Nocturnidad",
+  "CLA",
   "Categoría académica",
   "Pago categoría académica",
   "Total Trabajador",
 ] as const
 
 const COLUMN_WIDTHS = [
-  6, 32, 18, 22, 26, 26, 14, 14, 14, 14, 14, 18, 20, 18, 20, 20, 18, 16, 16, 16, 16, 18, 18, 16,
+  6, 32, 18, 22, 26, 26, 14, 14, 14, 14, 14, 18, 20, 18, 20, 20, 18, 16, 16, 16, 16, 14, 18, 18, 16,
 ]
 
 /** Números monetarios/numerados: índices (1-based) de columnas numéricas del Excel. */
-const NUMERIC_COLUMNS = [8, 9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 23, 24]
+const NUMERIC_COLUMNS = [8, 9, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22, 24, 25]
 
 export function buildPrenominaFileName(entityName: string, year: number, month: number): string {
   const safeName =
@@ -572,6 +692,7 @@ export async function buildPrenominaWorkbookBlob(
   let total19 = 0
   let total23 = 0
   let totalNight = 0
+  let totalCla = 0
   let totalAll = 0
 
   entries.forEach((entry, index) => {
@@ -608,6 +729,7 @@ export async function buildPrenominaWorkbookBlob(
       p19,
       p23,
       entry.total_night_payment,
+      entry.cla_total_payment,
       academicCategoryLabel(entry.academic_category),
       entry.academic_payment,
       entry.total_payment,
@@ -628,6 +750,7 @@ export async function buildPrenominaWorkbookBlob(
     total19 += p19
     total23 += p23
     totalNight += Number(entry.total_night_payment || 0)
+    totalCla += Number(entry.cla_total_payment || 0)
     totalAll += Number(entry.total_payment || 0)
   })
 
@@ -654,6 +777,7 @@ export async function buildPrenominaWorkbookBlob(
     Math.round(total19 * 100) / 100,
     Math.round(total23 * 100) / 100,
     Math.round(totalNight * 100) / 100,
+    Math.round(totalCla * 100) / 100,
     "",
     Math.round(totalAcademic * 100) / 100,
     Math.round(totalAll * 100) / 100,

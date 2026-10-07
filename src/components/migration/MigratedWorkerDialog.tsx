@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
-import { ciToBirthDate } from "@/utils/ci"
+import { ciToBirthDate, isValidIdentification, IDENTIFICATION_ERROR_MESSAGE } from "@/utils/ci"
 import { createMigratedWorker, type MigrationRow } from "@/lib/worker-migration"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Button } from "@/components/ui/sitecorp-button"
@@ -72,6 +72,8 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
     setBusy(true)
     setError("")
     try {
+      if (!form.identification.trim()) throw new Error("El número de identificación es obligatorio.")
+      if (!isValidIdentification(form.identification)) throw new Error(IDENTIFICATION_ERROR_MESSAGE)
       const startDate = form.employment_start_date.trim()
       if (!startDate) throw new Error("Indica la fecha en la que el trabajador comenzó a trabajar en la entidad.")
       if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error("La fecha de incorporación no es válida.")

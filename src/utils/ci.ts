@@ -20,3 +20,17 @@ export const ciToBirthDate = (ci: string): string | null => {
 
   return date.toISOString().split("T")[0]
 }
+
+/**
+ * Regla general de SiteCorp: el Número de Identificación / Carnet de Identidad
+ * debe contener EXACTAMENTE 11 dígitos (solo 0-9). Se almacena siempre como
+ * TEXTO para conservar los ceros iniciales; nunca se convierte a número.
+ */
+export const IDENTIFICATION_LENGTH = 11
+export const IDENTIFICATION_REGEX = /^[0-9]{11}$/
+export const IDENTIFICATION_ERROR_MESSAGE =
+  "El número de identificación debe contener exactamente 11 dígitos."
+
+/** true si el valor (recortado) son exactamente 11 dígitos. */
+export const isValidIdentification = (value: unknown): boolean =>
+  IDENTIFICATION_REGEX.test(String(value ?? "").trim())

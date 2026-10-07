@@ -12,7 +12,7 @@ import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SelectItem } from "@/components/ui/select"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { FileSpreadsheet, RefreshCw, Lock, Unlock, Eye } from "lucide-react"
+import { FileSpreadsheet, RefreshCw, Lock, Unlock, Eye, ChevronDown, ChevronRight } from "lucide-react"
 import WorkerPrenominaDialog from "@/components/prenomina/WorkerPrenominaDialog"
 import {
   MONTH_LABELS,
@@ -31,9 +31,12 @@ import {
   fetchPrenominaPeriod,
   fetchPrenominaPeriodTotals,
   fetchPrenominaPeriods,
+  formatHours,
   formatMoney,
+  formatMinutesToHours,
   refreshPrenominaWorkers,
   reopenPrenominaPeriod,
+  savePrenominaCla,
   savePrenominaExcelBlob,
   savePrenominaInputs,
   savePrenominaNight,
@@ -209,7 +212,8 @@ const EntityPrenomina = () => {
   const handleSaveEntry = async (
     workedDays: number,
     nights: SaveNightInput[],
-    deletedNightIds: string[]
+    deletedNightIds: string[],
+    cla: { applied: boolean; dayMinutes: number; night1Minutes: number; night2Minutes: number }
   ) => {
     if (!activeEntry) return
     await savePrenominaInputs(activeEntry.id, workedDays, activeEntry.salary_scale_amount, activeEntry.workday_hours)
@@ -219,6 +223,14 @@ const EntityPrenomina = () => {
     for (const night of nights) {
       await savePrenominaNight(activeEntry.id, night.id, night.start, night.end, night.nights)
     }
+    // CLA: captura de minutos + congelado de tarifas/horarios del Cargo (BORRADOR).
+    await savePrenominaCla(
+      activeEntry.id,
+      cla.applied,
+      cla.dayMinutes,
+      cla.night1Minutes,
+      cla.night2Minutes
+    )
     await reloadSelected()
     showNotice("success", "Detalle guardado")
   }
