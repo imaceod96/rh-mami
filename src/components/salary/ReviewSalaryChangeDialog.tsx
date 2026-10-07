@@ -13,6 +13,7 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { showSuccess } from "@/utils/toast"
+import { ensureEventDocumentation } from "@/lib/document-batches"
 import {
   applySalaryChange,
   fetchSalaryChangeImpact,
@@ -164,7 +165,7 @@ const ReviewSalaryChangeDialog: React.FC<ReviewSalaryChangeDialogProps> = ({
       // Evento documental masivo: Movimientos de Nómina (Reubicación) + lotes ZIP.
       if (result.status === "APPLIED" && impact.length > 0) {
         try {
-          await finalizeSalaryChangeEvent(
+          const event = await finalizeSalaryChangeEvent(
             groupId,
             effectiveFrom,
             `Cambio salarial · ${scaleLabel} · Grupo ${groupLabel}`,
@@ -173,6 +174,20 @@ const ReviewSalaryChangeDialog: React.FC<ReviewSalaryChangeDialogProps> = ({
               previous_amount: row.previous_amount,
             }))
           )
+
+          // Cierre documental automático (§75): genera los movimientos individuales,
+          // reconstruye lotes y empaqueta los ZIP de los lotes que superan 5 documentos.
+          try {
+            const docs = await ensureEventDocumentation(event.event_id)
+            if (docs.generated > 0 || docs.zipsCreated > 0) {
+              showSuccess(
+                `Documentación del evento: ${docs.generated} movimiento(s) generado(s)` +
+                  (docs.zipsCreated > 0 ? ` y ${docs.zipsCreated} ZIP listo(s) para descarga.` : ".")
+              )
+            }
+          } catch (docsError) {
+            console.error("No se pudo cerrar la documentación del evento salarial", docsError)
+          }
         } catch (eventError) {
           // El cambio salarial YA se aplicó: el fallo de documentación no debe revertirlo.
           console.error("No se pudo materializar el evento documental del cambio salarial", eventError)

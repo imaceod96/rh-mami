@@ -172,6 +172,49 @@ export async function requestBatchZip(batchId: string): Promise<{
   return { zip_path: String(row.zip_path), zip_file_name: String(row.zip_file_name) }
 }
 
+export interface EventDocumentationResult {
+  generated: number
+  failed: number
+  batchesReady: number
+  zipsCreated: number
+}
+
+/**
+ * Cierre documental automático de un evento masivo (§75).
+ *
+ * 1. Genera con el motor DOCX existente el documento individual de cada Movimiento
+ *    de Nómina pendiente del evento (nunca regenera los ya correctos).
+ * 2. Reconstruye los lotes del evento (aplica la regla > 5 por entidad y tipo).
+ * 3. Empaqueta el ZIP de cada lote listo que aún no lo tenga.
+ *
+ * La generación DOCX es del lado cliente (no hay conversor en servidor), por lo que
+ * este cierre se dispara justo tras materializar el evento, sin intervención del usuario.
+ */
+export async function ensureEventDocumentation(
+  eventId: string
+): Promise<EventDocumentationResult> {
+  const generated = await generateEventMovementDocuments(eventId)
+  await rebuildEventBatches(eventId)
+
+  const batches = (await fetchPendingBatches()).filter((batch) => batch.event_id === eventId)
+  let batchesReady = 0
+  let zipsCreated = 0
+  for (const batch of batches) {
+    if (batch.status !== "READY") continue
+    batchesReady += 1
+    if (!batch.zip_path) {
+      try {
+        await requestBatchZip(batch.id)
+        zipsCreated += 1
+      } catch {
+        // El ZIP es una facilidad de descarga: su fallo no invalida los documentos.
+      }
+    }
+  }
+
+  return { generated: generated.generated, failed: generated.failed, batchesReady, zipsCreated }
+}
+
 /** Enlace temporal (10 min) para descargar un ZIP privado. */
 export async function createBatchZipUrl(zipPath: string): Promise<string | null> {
   const { data, error } = await supabase.storage
