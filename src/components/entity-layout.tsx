@@ -8,23 +8,30 @@ import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import {
   LayoutDashboard,
   Users,
+  UserCheck,
+  Undo2,
   Briefcase,
-  Mail,
   Settings,
   ArrowLeft,
-  LogOut,
   Layers,
   Building,
   Factory,
   CalendarClock,
-    Palmtree,
-    HeartPulse,
-    Calculator,
-  } from "lucide-react"
+  Palmtree,
+  HeartPulse,
+  Calculator,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
-import { ENTITY_INTERNAL_MODULES, hasSiteCorpAccount } from "@/lib/sitecorp-account"
+import {
+  ENTITY_NAV,
+  hasSiteCorpAccount,
+  type EntityNavEntry,
+  type EntityNavGroup,
+  type EntityNavLink,
+} from "@/lib/sitecorp-account"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
-import { useContractAlertAttentionCount } from "@/hooks/use-contract-alerts"
 
 const entityTypeLabels: Record<string, string> = {
   business_group: "Grupo empresarial",
@@ -32,16 +39,18 @@ const entityTypeLabels: Record<string, string> = {
   ueb: "UEB",
 }
 
-/** Iconos de los módulos internos (la lista de módulos es única: ENTITY_INTERNAL_MODULES) */
-const moduleIcons: Record<string, React.ReactNode> = {
+/** Iconos de los elementos del menú (la estructura está en ENTITY_NAV). */
+const navIcons: Record<string, React.ReactNode> = {
   summary: <LayoutDashboard className="h-5 w-5" />,
+  personas: <Users className="h-5 w-5" />,
   candidates: <Users className="h-5 w-5" />,
+  workers: <UserCheck className="h-5 w-5" />,
+  reentries: <Undo2 className="h-5 w-5" />,
   staffing: <Briefcase className="h-5 w-5" />,
-    prenomina: <Calculator className="h-5 w-5" />,
-    "contract-alerts": <CalendarClock className="h-5 w-5" />,
-  hiring: <Mail className="h-5 w-5" />,
+  prenomina: <Calculator className="h-5 w-5" />,
   vacations: <Palmtree className="h-5 w-5" />,
   "medical-certificates": <HeartPulse className="h-5 w-5" />,
+  "contract-alerts": <CalendarClock className="h-5 w-5" />,
   settings: <Settings className="h-5 w-5" />,
 }
 
@@ -51,13 +60,18 @@ const typeIcon = (type: string) => {
   return <Factory className="h-4 w-4" />
 }
 
+const isVisible = (entry: EntityNavEntry, permissions: string[]): boolean => {
+  if (!entry.permissions || entry.permissions.length === 0) return true
+  return entry.permissions.some((code) => permissions.includes(code))
+}
+
 const EntityLayout = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
-  const { user, logout } = useAuth()
+  const { logout } = useAuth()
   const { currentTenant, clearCurrentTenant } = useCurrentTenant()
-  const { currentEntity, setCurrentEntity, clearCurrentEntity } = useCurrentEntity()
+  const { currentEntity, clearCurrentEntity } = useCurrentEntity()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -79,34 +93,61 @@ const EntityLayout = React.forwardRef<
   // Los módulos internos solo existen cuando la entidad es Cuenta SiteCorp
   const modulesEnabled = hasSiteCorpAccount(currentEntity)
 
-  // Cada módulo del menú aparece según el permiso interno REAL del usuario en la
-  // entidad actual (nunca según una lista fija): el mismo motor que usa RLS.
+  // Cada elemento del menú aparece según el permiso interno REAL del usuario en la
+  // entidad actual (mismo motor que usa RLS).
   const { permissions: entityPermissions } = useEntityPermissions(modulesEnabled ? entityId : null)
 
-  const visibleModules = React.useMemo(
-    () =>
-      ENTITY_INTERNAL_MODULES.filter((module) => {
-        if (!module.permissions || module.permissions.length === 0) return true
-        return module.permissions.some((code) => entityPermissions.includes(code))
-      }),
-    [entityPermissions]
-  )
+  // Elementos visibles según permisos reales, preservando el ORDEN definitivo.
+  const visibleNav = React.useMemo(() => {
+    return ENTITY_NAV.map((entry) => {
+      if (entry.kind === "group") {
+        const items = entry.items.filter((item) => isVisible(item, entityPermissions))
+        if (items.length === 0) return null
+        return { ...entry, items } as EntityNavGroup
+      }
+      return isVisible(entry, entityPermissions) ? (entry as EntityNavLink) : null
+    }).filter((entry): entry is EntityNavEntry => entry !== null)
+  }, [entityPermissions])
 
-  // Badge de alertas contractuales: contratos determinados vigentes que requieren
-  // atención (vencidos + hoy + 1–7 + 8–15 + 16–30). Regla ÚNICA compartida con el
-  // módulo de Vencimientos y el Dashboard (`requiresAttention`). No se persiste ni se
-  // cuentan todos los determinados. Solo se consulta con el permiso real del módulo.
-  const canViewAlerts = React.useMemo(
-    () =>
-      entityPermissions.some((code) =>
-        ["contract_alerts.view", "workers.view", "workers.manage"].includes(code)
-      ),
-    [entityPermissions]
-  )
+  // Grupos desplegables: se expanden automáticamente cuando contienen la ruta activa.
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({})
 
-  const attentionCount = useContractAlertAttentionCount(entityId, {
-    enabled: !!entityId && modulesEnabled && canViewAlerts,
-  })
+  React.useEffect(() => {
+    if (!entityId) return
+    setOpenGroups((prev) => {
+      const next = { ...prev }
+      visibleNav.forEach((entry) => {
+        if (entry.kind !== "group") return
+        const containsActive = entry.items.some((item) =>
+          location.pathname.startsWith(item.path(entityId))
+        )
+        if (containsActive) next[entry.key] = true
+      })
+      return next
+    })
+  }, [location.pathname, entityId, visibleNav])
+
+  const toggleGroup = (key: string) =>
+    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  const renderLink = (item: EntityNavLink) => {
+    const active = location.pathname.startsWith(item.path(entityId as string))
+    return (
+      <Link
+        key={item.key}
+        to={item.path(entityId as string)}
+        className={cn(
+          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+          active
+            ? "bg-sitecorp-primary/10 text-sitecorp-primary"
+            : "text-ink hover:bg-muted hover:text-ink"
+        )}
+      >
+        {navIcons[item.key] || <Settings className="h-5 w-5" />}
+        <span className="flex-1">{item.label}</span>
+      </Link>
+    )
+  }
 
   return (
     <div
@@ -132,23 +173,42 @@ const EntityLayout = React.forwardRef<
           <div className="space-y-1">
             {entityId && modulesEnabled && (
               <>
-                {visibleModules.map((module) => (
-                  <Link
-                    key={module.key}
-                    to={module.path(entityId)}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-muted hover:text-ink transition-colors"
-                  >
-                    {moduleIcons[module.key] || <Settings className="h-5 w-5" />}
-                    <span className="flex-1">{module.label}</span>
-                    {module.key === "contract-alerts" &&
-                      attentionCount !== null &&
-                      attentionCount > 0 && (
-                        <span className="rounded-full bg-sitecorp-danger/10 px-2 py-0.5 text-xs font-semibold text-sitecorp-danger">
-                          {attentionCount}
-                        </span>
+                {visibleNav.map((entry) => {
+                  if (entry.kind === "link") return renderLink(entry)
+
+                  const isOpen = !!openGroups[entry.key]
+                  const containsActive = entry.items.some((item) =>
+                    location.pathname.startsWith(item.path(entityId))
+                  )
+                  return (
+                    <div key={entry.key} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(entry.key)}
+                        aria-expanded={isOpen}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                          containsActive
+                            ? "text-sitecorp-primary"
+                            : "text-ink hover:bg-muted hover:text-ink"
+                        )}
+                      >
+                        {navIcons[entry.key] || <Users className="h-5 w-5" />}
+                        <span className="flex-1 text-left">{entry.label}</span>
+                        {isOpen ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                      {isOpen && (
+                        <div className="ml-4 space-y-1 border-l border-border pl-2">
+                          {entry.items.map((item) => renderLink(item))}
+                        </div>
                       )}
-                  </Link>
-                ))}
+                    </div>
+                  )
+                })}
               </>
             )}
 

@@ -570,19 +570,33 @@ const EntityCandidates = () => {
     setFormError(null)
 
     try {
-      // Verificar si ya existe un candidato con la misma identificación
-      const { data: existingCandidates, error: checkError } = await supabase
-        .from("candidates")
-        .select("id")
-        .eq("organization_entity_id", entityId)
-        .eq("identification", formData.identification.trim())
-
+      // UNICIDAD DE PERSONAS (§27–§33): una misma persona (por Número de
+      // Identificación) no puede duplicarse entre Candidatos, Trabajadores y
+      // Reingresos del mismo workspace. La comprobación se resuelve en el backend
+      // (misma autoridad que RLS) y también está protegida por constraints/triggers.
+      const identificationToCheck = formData.identification.trim()
+      const { data: personStatus, error: checkError } = await supabase.rpc(
+        "person_identification_status",
+        { p_entity_id: entityId, p_identification: identificationToCheck }
+      )
       if (checkError) throw checkError
 
-      if (existingCandidates && existingCandidates.length > 0) {
-        // Mostrar advertencia pero no bloquear
-        setFormError(`Advertencia: Ya existe un candidato con la identificación ${formData.identification.trim()}. ¿Desea continuar de todos modos?`)
-        // Continuar con el guardado
+      const existingPerson = (personStatus as any) || {}
+      if (existingPerson.worker_id) {
+        setFormError(
+          existingPerson.worker_status === "active"
+            ? "Esta persona ya está registrada como trabajador. Solo puede actualizar su información."
+            : "Esta persona ya existe y actualmente se encuentra en Reingresos. Debe utilizar el expediente existente."
+        )
+        setFormSubmitting(false)
+        return
+      }
+      if ((existingPerson.candidate_count ?? 0) > 0) {
+        setFormError(
+          "Ya existe una persona con este número de identificación. Solo puede actualizar su información."
+        )
+        setFormSubmitting(false)
+        return
       }
 
       const newCandidate = {

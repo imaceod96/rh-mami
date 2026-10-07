@@ -532,7 +532,36 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
         )
         return
       }
-  
+
+      // UNICIDAD DE PERSONAS (§27–§33): un trabajador NUEVO no puede duplicar a una
+      // persona ya existente (Candidato, Trabajador o Reingreso) por Número de
+      // Identificación. La comprobación se resuelve en el backend.
+      if (!isEditing) {
+        const { data: personStatus, error: checkError } = await supabase.rpc(
+          "person_identification_status",
+          { p_entity_id: entityId, p_identification: form.identification.trim() }
+        )
+        if (checkError) {
+          setFormError("No se pudo verificar la unicidad de la identificación.")
+          return
+        }
+        const existingPerson = (personStatus as any) || {}
+        if (existingPerson.worker_id) {
+          setFormError(
+            existingPerson.worker_status === "active"
+              ? "Esta persona ya está registrada como trabajador. Solo puede actualizar su información."
+              : "Esta persona ya existe y actualmente se encuentra en Reingresos. Debe utilizar el expediente existente."
+          )
+          return
+        }
+        if ((existingPerson.candidate_count ?? 0) > 0) {
+          setFormError(
+            "Ya existe una persona con este número de identificación. Solo puede actualizar su información."
+          )
+          return
+        }
+      }
+
       setSubmitting(true)
 
     try {

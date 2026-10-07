@@ -87,6 +87,27 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
         position_code: "",
         initial_vacation_balance: balance,
       }
+      // UNICIDAD DE PERSONAS (§27–§33): la migración individual no puede duplicar a
+      // una persona ya existente (Candidato, Trabajador o Reingreso) por CI.
+      const { data: personStatus, error: checkError } = await supabase.rpc(
+        "person_identification_status",
+        { p_entity_id: entityId, p_identification: form.identification.trim() }
+      )
+      if (checkError) throw checkError
+      const existingPerson = (personStatus as any) || {}
+      if (existingPerson.worker_id) {
+        throw new Error(
+          existingPerson.worker_status === "active"
+            ? "Esta persona ya está registrada como trabajador. Solo puede actualizar su información."
+            : "Esta persona ya existe y actualmente se encuentra en Reingresos. Debe utilizar el expediente existente."
+        )
+      }
+      if ((existingPerson.candidate_count ?? 0) > 0) {
+        throw new Error(
+          "Ya existe una persona con este número de identificación. Solo puede actualizar su información."
+        )
+      }
+
       const result = await createMigratedWorker(entityId, row)
       onSuccess(result.worker_id)
     } catch (cause) {

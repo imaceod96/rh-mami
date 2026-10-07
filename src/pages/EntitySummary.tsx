@@ -243,6 +243,14 @@ const VistaGeneral: React.FC<VistaGeneralProps> = ({
   const showDistribution = !!summary.distribution
   const hasAnyBlock = showMainBlock || showDistribution || summary.permissions.candidates || summary.permissions.contracts
 
+  // «Próximos a vencer» (§41): contratos de Tiempo Determinado que vencen en los
+  // próximos 30 días (hoy incluido). Se EXCLUYEN los ya vencidos. Reutiliza el mismo
+  // cálculo del módulo de Vencimientos (attention − overdue).
+  const upcomingExpirations =
+    summary.expirations == null
+      ? null
+      : Math.max(0, summary.expirations.attention - summary.expirations.overdue)
+
   return (
     <>
       {summary.scopeLoading && <SiteCorpLoading rows={2} />}
@@ -355,10 +363,10 @@ const VistaGeneral: React.FC<VistaGeneralProps> = ({
           </SiteCorpCard>
         )}
 
-        {/* CONTRATOS */}
+        {/* CONTRATOS — Total vigentes · Tiempo determinado · Tiempo indeterminado · Próximos a vencer */}
         {summary.permissions.contracts && (
           <SiteCorpCard title="Contratos vigentes" className="rounded-2xl">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-xl border border-border p-3">
                 <p className="text-xs text-muted-foreground">Total vigentes</p>
                 <p className="text-2xl font-bold text-ink">
@@ -377,6 +385,26 @@ const VistaGeneral: React.FC<VistaGeneralProps> = ({
                   {formatInt(summary.contracts?.undetermined ?? 0)}
                 </p>
               </div>
+              {/* §42: tarjeta cliqueable → abre la página existente de Vencimientos */}
+              {summary.permissions.alerts ? (
+                <Link
+                  to={`/entity/${entityId}/contracts/alerts`}
+                  className="group flex flex-col rounded-xl border border-sitecorp-primary/30 bg-sitecorp-primary/5 p-3 transition-colors hover:bg-sitecorp-primary/10"
+                >
+                  <p className="text-xs text-muted-foreground">Próximos a vencer</p>
+                  <p className="text-2xl font-bold text-sitecorp-primary">
+                    {upcomingExpirations == null ? "—" : formatInt(upcomingExpirations)}
+                  </p>
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-sitecorp-primary">
+                    Ver vencimientos <ArrowUpRight className="h-3.5 w-3.5" />
+                  </span>
+                </Link>
+              ) : (
+                <div className="rounded-xl border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Próximos a vencer</p>
+                  <p className="text-2xl font-bold text-ink">—</p>
+                </div>
+              )}
             </div>
           </SiteCorpCard>
         )}

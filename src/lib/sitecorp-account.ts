@@ -4,14 +4,10 @@
  * Regla única del sistema:
  *   organization_entities.is_sitecorp_account === true
  *   → la entidad usa los MÓDULOS INTERNOS de gestión de SiteCorp
- *     (Resumen, Candidatos, Plantilla, Vencimientos, Contratación, Ajustes)
  *
  * No significa: otro tenant/workspace, otro régimen, otra jerarquía ni una cuenta de
  * usuario. Es una propiedad estructural de la entidad y NO sustituye a los permisos:
  * el acceso real sigue siendo entidad SiteCorp + acceso a la entidad + permiso RBAC.
- *
- * `is_active` (estado de la entidad) y `is_sitecorp_account` (habilitación de módulos)
- * son conceptos independientes y no se sustituyen entre sí.
  */
 
 export interface EntityInternalModule {
@@ -26,7 +22,10 @@ export interface EntityInternalModule {
   permissions?: string[]
 }
 
-/** Módulos internos disponibles cuando la entidad es Cuenta SiteCorp. */
+/**
+ * Módulos internos enrutables de una Cuenta SiteCorp. Es la lista ÚNICA de rutas y
+ * de permisos por módulo (la navegación se compone a partir de aquí).
+ */
 export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
   { key: "summary", label: "Resumen", path: (id) => `/entity/${id}/summary` },
   {
@@ -36,28 +35,22 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
     permissions: ["candidates.view", "candidates.manage"],
   },
   {
+    key: "workers",
+    label: "Trabajadores",
+    path: (id) => `/entity/${id}/workers`,
+    permissions: ["workers.view", "workers.manage"],
+  },
+  {
+    key: "reentries",
+    label: "Reingresos",
+    path: (id) => `/entity/${id}/reentries`,
+    permissions: ["workers.view", "workers.manage"],
+  },
+  {
     key: "staffing",
     label: "Plantilla",
     path: (id) => `/entity/${id}/staffing`,
     permissions: ["workers.view", "workers.manage"],
-  },
-  {
-      key: "prenomina",
-      label: "Prenómina",
-      path: (id) => `/entity/${id}/payroll-preparation`,
-      permissions: ["prenomina.view", "prenomina.manage"],
-    },
-    {
-      key: "contract-alerts",
-      label: "Vencimientos",
-      path: (id) => `/entity/${id}/contracts/alerts`,
-      permissions: ["contract_alerts.view", "workers.view", "workers.manage"],
-    },
-  {
-    key: "hiring",
-    label: "Contratación",
-    path: (id) => `/entity/${id}/hiring`,
-    permissions: ["hiring.view", "hiring.manage", "workers.view", "workers.manage"],
   },
   {
     key: "vacations",
@@ -67,11 +60,98 @@ export const ENTITY_INTERNAL_MODULES: EntityInternalModule[] = [
   },
   {
     key: "medical-certificates",
-    label: "Licencias / Certificados Médicos",
+    label: "Licencias y certificados",
     path: (id) => `/entity/${id}/medical-certificates`,
     permissions: ["medical_certificates.view", "medical_certificates.manage"],
   },
+  {
+    key: "prenomina",
+    label: "Prenómina",
+    path: (id) => `/entity/${id}/payroll-preparation`,
+    permissions: ["prenomina.view", "prenomina.manage"],
+  },
+  // Vencimientos YA NO es un elemento directo del sidebar (§36): su página y ruta
+  // siguen existiendo y se accede desde Resumen → «Próximos a vencer».
+  {
+    key: "contract-alerts",
+    label: "Vencimientos",
+    path: (id) => `/entity/${id}/contracts/alerts`,
+    permissions: ["contract_alerts.view", "workers.view", "workers.manage"],
+  },
+  {
+    key: "hiring",
+    label: "Contratación",
+    path: (id) => `/entity/${id}/hiring`,
+    permissions: ["hiring.view", "hiring.manage", "workers.view", "workers.manage"],
+  },
   { key: "settings", label: "Ajustes", path: (id) => `/entity/${id}/settings` },
+]
+
+/** Ruta existente de Vencimientos (acceso directo permitido aunque no esté en el menú). */
+export const contractAlertsPath = (entityId: string) => `/entity/${entityId}/contracts/alerts`
+
+/** Elemento simple del menú lateral. */
+export interface EntityNavLink {
+  kind: "link"
+  key: string
+  label: string
+  path: (entityId: string) => string
+  permissions?: string[]
+}
+
+/** Grupo desplegable del menú lateral. */
+export interface EntityNavGroup {
+  kind: "group"
+  key: string
+  label: string
+  permissions?: string[]
+  items: EntityNavLink[]
+}
+
+export type EntityNavEntry = EntityNavLink | EntityNavGroup
+
+const link = (
+  module: EntityInternalModule,
+  overrides: Partial<EntityNavLink> = {}
+): EntityNavLink => ({
+  kind: "link",
+  key: module.key,
+  label: module.label,
+  path: module.path,
+  permissions: module.permissions,
+  ...overrides,
+})
+
+const moduleByKey = (key: string): EntityInternalModule => {
+  const found = ENTITY_INTERNAL_MODULES.find((m) => m.key === key)
+  if (!found) throw new Error(`Módulo interno desconocido: ${key}`)
+  return found
+}
+
+/**
+ * ORDEN DEFINITIVO del menú lateral (§45):
+ *   Resumen · Personas (Candidatos / Trabajadores / Reingresos) · Plantilla ·
+ *   Vacaciones · Licencias y certificados · Prenómina · Ajustes
+ * Ninguna entrada se duplica y Vencimientos no aparece como elemento directo.
+ */
+export const ENTITY_NAV: EntityNavEntry[] = [
+  link(moduleByKey("summary")),
+  {
+    kind: "group",
+    key: "personas",
+    label: "Personas",
+    permissions: ["candidates.view", "candidates.manage", "workers.view", "workers.manage"],
+    items: [
+      link(moduleByKey("candidates")),
+      link(moduleByKey("workers")),
+      link(moduleByKey("reentries")),
+    ],
+  },
+  link(moduleByKey("staffing")),
+  link(moduleByKey("vacations")),
+  link(moduleByKey("medical-certificates")),
+  link(moduleByKey("prenomina")),
+  link(moduleByKey("settings")),
 ]
 
 export const SITECORP_MODULES_DISABLED_TITLE = "Módulos internos no habilitados"
@@ -90,10 +170,6 @@ export function hasSiteCorpAccount(
  * Regla central de acceso a módulos internos:
  *   entidad es Cuenta SiteCorp  (condición estructural)
  *   + el usuario tiene acceso a la entidad y permiso para el módulo (RBAC)
- *
- * `isAuthorized` es el resultado de la verificación de acceso ya existente
- * (`can_view_entity`, permisos de plataforma o SuperAdmin). La Cuenta SiteCorp nunca
- * concede permisos por sí misma.
  */
 export function canUseInternalModules(
   entity: { is_sitecorp_account?: boolean | null } | null | undefined,

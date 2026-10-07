@@ -33,6 +33,8 @@ import EntityPrenomina from "./pages/EntityPrenomina"
 import CandidateDetail from "./pages/CandidateDetail"
 import CandidateEdit from "./pages/CandidateEdit"
 import EntityStaffing from "./pages/EntityStaffing"
+import EntityWorkers from "./pages/EntityWorkers"
+import EntityReentries from "./pages/EntityReentries"
 import EntityHiring from "./pages/EntityHiring"
 import EntityContractAlerts from "./pages/EntityContractAlerts"
 import EntityVacations from "./pages/EntityVacations"
@@ -148,6 +150,9 @@ const AppRoutes = () => {
                     <Route path="/entity/:entityId/payroll-preparation" element={<EntityPrenomina />} />
           <Route path="/entity/:entityId/candidates/:candidateId" element={<CandidateDetail />} />
           <Route path="/entity/:entityId/candidates/:candidateId/edit" element={<CandidateEdit />} />
+          <Route path="/entity/:entityId/workers" element={<EntityWorkers />} />
+          <Route path="/entity/:entityId/workers/:workerId" element={<WorkerDetail />} />
+          <Route path="/entity/:entityId/reentries" element={<EntityReentries />} />
           <Route path="/entity/:entityId/staffing" element={<EntityStaffing />} />
           <Route path="/entity/:entityId/staffing/workers/:workerId" element={<WorkerDetail />} />
           <Route path="/entity/:entityId/hiring" element={<EntityHiring />} />
