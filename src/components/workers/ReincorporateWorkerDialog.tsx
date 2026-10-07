@@ -49,7 +49,14 @@ import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
 } from "@/lib/position-schedule"
-import { AlertTriangle, UserPlus } from "lucide-react"
+import ResolutionForm, {
+  type ResolutionFormValues,
+} from "@/components/resolutions/ResolutionForm"
+import {
+  ensureResolutionDocumentGenerated,
+  updateJobWorkContent,
+} from "@/lib/resolutions"
+import { AlertTriangle, FileSignature, UserPlus } from "lucide-react"
 
 interface PositionRow {
   id: string
@@ -67,6 +74,7 @@ interface PositionRow {
   job: {
     id: string
     name: string
+    is_principal_specialist: boolean
     area: { id: string; name: string } | null
     salary_group: { id: string; salary_scale_id: string; sequence_number: number } | null
   } | null
@@ -95,7 +103,9 @@ const groupLabel = (sequence: number | null | undefined) =>
   sequence == null ? "—" : `Grupo ${toRomanNumeral(sequence)}`
 
 /** Fase 11A.5 — reincorporación: crea nuevo período, puesto y contrato con las
- *  mismas condiciones contractuales que el resto de flujos de contratación. */
+ *  mismas condiciones contractuales que el resto de flujos de contratación.
+ *  §45: si el Cargo destino es Especialista Principal, el documento sustitutivo
+ *  es la RESOLUCIÓN (no se crea contrato). */
 const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   open,
   onOpenChange,
@@ -134,10 +144,13 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   )
   const [canManageOrganization, setCanManageOrganization] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
+  const [processStage, setProcessStage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [segmentsByPosition, setSegmentsByPosition] = React.useState<
     Record<string, PositionScheduleSegment[]>
   >({})
+  // §45: valores del formulario de Resolución cuando el Cargo es Especialista Principal
+  const [resolutionValues, setResolutionValues] = React.useState<ResolutionFormValues | null>(null)
 
   const loadData = React.useCallback(async () => {
     if (!entityId) return
@@ -150,7 +163,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
           `id, name, code, is_active, authorized_quantity,
            work_location, daily_hours, weekly_hours, monthly_hours, break_minutes, schedule_notes,
            job:organization_jobs(
-             id, name, code, is_active, area_id,
+             id, name, code, is_active, area_id, is_principal_specialist,
              area:organization_areas(id, name),
              salary_group:salary_groups(id, salary_scale_id, sequence_number)
            )`
@@ -256,6 +269,8 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     setRepresentatives([])
     setPending(null)
     setRepresentativeAssignmentId(null)
+    setResolutionValues(null)
+    setProcessStage(null)
     setError(null)
     setOccupancy({})
     loadData()
@@ -274,6 +289,9 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
     [positions, positionId]
   )
 
+  /** §45: si el Cargo destino es Especialista Principal, el documento es la Resolución. */
+  const isPrincipalSpecialist = selected?.job?.is_principal_specialist === true
+
   const selectedGroup = selected?.job?.salary_group || null
   const selectedSalary = salaryForGroup(applicableScaleId, selectedGroup, salaryValuesByGroup)
   const selectedType = contractTypes.find((t) => t.id === contractTypeId) || null
@@ -289,9 +307,9 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
   const effectiveContractStart = contractStartDate || reincorporationDate
 
   React.useEffect(() => {
-    if (isDetermined) return
+    if (isPrincipalSpecialist || isDetermined) return
     setContractEndDate("")
-  }, [isDetermined])
+  }, [isDetermined, isPrincipalSpecialist])
 
   const handleSubmit = async () => {
     setError(null)
@@ -304,6 +322,86 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       setError("La fecha de reincorporación es obligatoria.")
       return
     }
+
+    // §45: reincorporación directa hacia un Cargo Especialista Principal → RESOLUCIÓN.
+    if (isPrincipalSpecialist) {
+      if (!resolutionValues || !resolutionValues.valid) {
+        setError(resolutionValues?.error || "Complete la información de la Resolución.")
+        return
+      }
+
+      setSubmitting(true)
+      try {
+        if (resolutionValues.workContentChanged && selected?.job?.id) {
+          try {
+            await updateJobWorkContent(selected.job.id, resolutionValues.workContent || "")
+          } catch {
+            /* best-effort: el snapshot conserva el valor introducido */
+          }
+        }
+
+        const { data: reincData, error: rpcError } = await supabase.rpc("reincorporate_worker", {
+          p_worker_id: workerId,
+          p_new_position_id: positionId,
+          p_reincorporation_date: reincorporationDate,
+          p_contract_type_id: null,
+          p_contract_start_date: null,
+          p_contract_end_date: null,
+          p_notes: null,
+          p_representative_assignment_id: resolutionValues.representativeAssignmentId,
+          p_signature_date: null,
+          p_signature_place: null,
+          p_payment_method_id: null,
+          p_compensation_components: null,
+          p_payment_schedule_text: null,
+          p_resolution_date: resolutionValues.resolutionDate,
+        })
+        if (rpcError) throw rpcError
+
+        const resolutionId = (reincData as { resolution_id?: string } | null)?.resolution_id
+        let documentWarning: string | null = null
+        if (resolutionId) {
+          setProcessStage("Generando Resolución…")
+          try {
+            const doc = await ensureResolutionDocumentGenerated(resolutionId)
+            if (!doc.skipped && !doc.generated) {
+              documentWarning =
+                doc.result?.error || "No se pudo generar la Resolución automáticamente."
+            }
+          } catch (genErr) {
+            documentWarning =
+              genErr instanceof Error
+                ? genErr.message
+                : "No se pudo generar la Resolución automáticamente."
+          }
+        }
+
+        invalidateContractAlertData(queryClient)
+        setProcessStage(null)
+
+        if (documentWarning) {
+          showError(
+            `La reincorporación se realizó, pero la Resolución no se pudo generar: ${documentWarning}. Puede regenerarla desde la pestaña Documentos del trabajador.`
+          )
+        } else {
+          showSuccess(
+            "Reincorporación completada. Resolución generada y archivada en los Documentos del trabajador."
+          )
+        }
+        onOpenChange(false)
+        onSuccess()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : ""
+        const friendly = msg || "No se pudo completar la reincorporación."
+        setError(friendly)
+        showError(friendly)
+      } finally {
+        setSubmitting(false)
+        setProcessStage(null)
+      }
+      return
+    }
+
     if (!contractTypeId) {
       setError("Selecciona un tipo de contrato.")
       return
@@ -441,8 +539,9 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Reincorporar trabajador</DialogTitle>
           <DialogDescription>
-            Se creará un nuevo período laboral, un nuevo puesto y un nuevo contrato para el
-            mismo trabajador. Su historial anterior se conserva.
+            {isPrincipalSpecialist
+              ? "El Cargo destino es Especialista Principal: se reactivará al trabajador y se emitirá una Resolución como documento sustitutivo, sin contrato. Su historial anterior se conserva."
+              : "Se creará un nuevo período laboral, un nuevo puesto y un nuevo contrato para el mismo trabajador. Su historial anterior se conserva."}
           </DialogDescription>
         </DialogHeader>
 
@@ -541,6 +640,14 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
                 </p>
               )}
 
+              {isPrincipalSpecialist && (
+                <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-sitecorp-primary/10 px-3 py-2 text-xs font-medium text-sitecorp-primary">
+                  <FileSignature className="h-3.5 w-3.5" />
+                  Cargo Especialista Principal: el documento sustitutivo será una Resolución (sin
+                  contrato).
+                </p>
+              )}
+
               {/* Fase 11A.3: configuración estructural del puesto (solo lectura) */}
               <PositionWorkInfoReadOnly
                 className="mt-3"
@@ -555,128 +662,147 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
             </div>
           )}
 
-          {/* 3. Contrato: vigencia */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Fecha de reincorporación *</Label>
-              <SiteCorpInput
-                type="date"
-                value={reincorporationDate}
-                onChange={(e) => {
-                  setReincorporationDate(e.target.value)
-                  if (!contractStartDate) setContractStartDate(e.target.value)
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo de contrato *</Label>
-              <SiteCorpSelect value={contractTypeId} onValueChange={setContractTypeId}>
-                <option value="">Seleccionar tipo</option>
-                {contractTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </SiteCorpSelect>
-            </div>
+          {/* 3. Fecha de reincorporación (aplica a ambos caminos) */}
+          <div className="space-y-2">
+            <Label>Fecha de reincorporación *</Label>
+            <SiteCorpInput
+              type="date"
+              value={reincorporationDate}
+              onChange={(e) => {
+                setReincorporationDate(e.target.value)
+                if (!contractStartDate) setContractStartDate(e.target.value)
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Inicio del nuevo período laboral. Debe ser posterior al fin del período anterior.
+            </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Inicio del contrato *</Label>
-              <SiteCorpInput
-                type="date"
-                value={contractStartDate || reincorporationDate}
-                onChange={(e) => setContractStartDate(e.target.value)}
+          {isPrincipalSpecialist ? (
+            /* §45: Resolución para Cargo destino Especialista Principal */
+            <ResolutionForm
+              key={`${positionId}-${reincorporationDate}`}
+              entityId={entityId}
+              positionId={positionId}
+              workerId={workerId}
+              personName={worker?.fullName || null}
+              initialResolutionDate={reincorporationDate}
+              canManageContractData={canManageOrganization}
+              onValuesChange={setResolutionValues}
+            />
+          ) : (
+            <>
+              {/* 4. Contrato: vigencia */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Tipo de contrato *</Label>
+                  <SiteCorpSelect value={contractTypeId} onValueChange={setContractTypeId}>
+                    <option value="">Seleccionar tipo</option>
+                    {contractTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </SiteCorpSelect>
+                </div>
+                <div className="space-y-2">
+                  <Label>Inicio del contrato *</Label>
+                  <SiteCorpInput
+                    type="date"
+                    value={contractStartDate || reincorporationDate}
+                    onChange={(e) => setContractStartDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Fin del contrato{isDetermined ? " *" : ""}</Label>
+                <SiteCorpInput
+                  type="date"
+                  value={contractEndDate}
+                  onChange={(e) => setContractEndDate(e.target.value)}
+                  disabled={!isDetermined}
+                  min={effectiveContractStart || undefined}
+                />
+                {!isDetermined && (
+                  <p className="text-xs text-muted-foreground">
+                    La modalidad de tiempo indeterminado no requiere fecha de fin.
+                  </p>
+                )}
+              </div>
+
+              <ContractSignatureFields
+                signatureDate={signatureDate}
+                onSignatureDateChange={setSignatureDate}
+                signaturePlace={signaturePlace}
+                onSignaturePlaceChange={setSignaturePlace}
+                paymentMethodId={paymentMethodId}
+                onPaymentMethodIdChange={setPaymentMethodId}
+                paymentMethods={paymentMethods}
+                paymentSchedule={paymentSchedule}
+                onPaymentScheduleChange={setPaymentSchedule}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Fin del contrato{isDetermined ? " *" : ""}</Label>
-              <SiteCorpInput
-                type="date"
-                value={contractEndDate}
-                onChange={(e) => setContractEndDate(e.target.value)}
-                disabled={!isDetermined}
-                min={effectiveContractStart || undefined}
+
+              <ContractFormalizationAlerts
+                entityId={entityId}
+                positionId={positionId || null}
+                signatureDate={signatureDate || null}
+                signaturePlace={signaturePlace || null}
+                paymentMethodId={paymentMethodId || null}
+                representativeAssignmentId={representativeAssignmentId}
+                canManage={canManageOrganization}
+                onPendingChange={setPending}
               />
-              {!isDetermined && (
-                <p className="text-xs text-muted-foreground">
-                  La modalidad de tiempo indeterminado no requiere fecha de fin.
-                </p>
-              )}
-            </div>
-          </div>
 
-          <ContractSignatureFields
-            signatureDate={signatureDate}
-            onSignatureDateChange={setSignatureDate}
-            signaturePlace={signaturePlace}
-            onSignaturePlaceChange={setSignaturePlace}
-            paymentMethodId={paymentMethodId}
-            onPaymentMethodIdChange={setPaymentMethodId}
-            paymentMethods={paymentMethods}
-            paymentSchedule={paymentSchedule}
-            onPaymentScheduleChange={setPaymentSchedule}
-          />
+              {/* Representante (resuelto por la fecha de firma) */}
+              <RepresentativeSelect
+                entityId={entityId}
+                onDate={contractReferenceDate}
+                value={representativeAssignmentId}
+                onChange={setRepresentativeAssignmentId}
+                canManage={canManageOrganization}
+                label="Representante que suscribe el contrato *"
+                dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
+                  signatureDate
+                )}). Los cambios posteriores de representante no modifican este contrato.`}
+                onOptionsChange={setRepresentatives}
+              />
 
-          <ContractFormalizationAlerts
-            entityId={entityId}
-            positionId={positionId || null}
-            signatureDate={signatureDate || null}
-            signaturePlace={signaturePlace || null}
-            paymentMethodId={paymentMethodId || null}
-            representativeAssignmentId={representativeAssignmentId}
-            canManage={canManageOrganization}
-            onPendingChange={setPending}
-          />
+              {/* Condiciones retributivas */}
+              <ContractRetributionFields
+                components={components}
+                onComponentsChange={setComponents}
+                baseSalaryAmount={baseSalaryAmount}
+                baseSalaryCurrency={baseSalaryCurrency}
+                salaryGroupSequence={selectedGroup?.sequence_number ?? null}
+                disabled={!selected}
+              />
 
-          {/* 4. Representante (resuelto por la fecha de firma) */}
-          <RepresentativeSelect
-            entityId={entityId}
-            onDate={contractReferenceDate}
-            value={representativeAssignmentId}
-            onChange={setRepresentativeAssignmentId}
-            canManage={canManageOrganization}
-            label="Representante que suscribe el contrato *"
-            dateHint={`Representante vigente en la fecha de firma (${formatConditionDate(
-              signatureDate
-            )}). Los cambios posteriores de representante no modifican este contrato.`}
-            onOptionsChange={setRepresentatives}
-          />
-
-          {/* 5. Condiciones retributivas */}
-          <ContractRetributionFields
-            components={components}
-            onComponentsChange={setComponents}
-            baseSalaryAmount={baseSalaryAmount}
-            baseSalaryCurrency={baseSalaryCurrency}
-            salaryGroupSequence={selectedGroup?.sequence_number ?? null}
-            disabled={!selected}
-          />
-
-          {/* 6. Resumen */}
-          <ContractFormalizationSummary
-            title="Resumen de la reincorporación"
-            workerName={worker?.fullName || ""}
-            personIdentification={worker?.identification || null}
-            positionName={selected?.name || ""}
-            jobName={selected?.job?.name || null}
-            areaName={selected?.job?.area?.name || null}
-            contractTypeName={selectedType?.name || null}
-            startDate={effectiveContractStart}
-            endDate={isDetermined ? contractEndDate || null : null}
-            signatureDate={signatureDate}
-            signaturePlace={signaturePlace}
-            paymentMethodName={
-              paymentMethods.find((method) => method.id === paymentMethodId)?.name || null
-            }
-            representativeName={selectedRepresentative?.person_name || null}
-            representativeTitle={selectedRepresentative?.title || null}
-            baseSalaryAmount={baseSalaryAmount}
-            baseSalaryCurrency={baseSalaryCurrency}
-            salaryGroupSequence={selectedGroup?.sequence_number ?? null}
-            components={components}
-          />
+              {/* Resumen */}
+              <ContractFormalizationSummary
+                title="Resumen de la reincorporación"
+                workerName={worker?.fullName || ""}
+                personIdentification={worker?.identification || null}
+                positionName={selected?.name || ""}
+                jobName={selected?.job?.name || null}
+                areaName={selected?.job?.area?.name || null}
+                contractTypeName={selectedType?.name || null}
+                startDate={effectiveContractStart}
+                endDate={isDetermined ? contractEndDate || null : null}
+                signatureDate={signatureDate}
+                signaturePlace={signaturePlace}
+                paymentMethodName={
+                  paymentMethods.find((method) => method.id === paymentMethodId)?.name || null
+                }
+                representativeName={selectedRepresentative?.person_name || null}
+                representativeTitle={selectedRepresentative?.title || null}
+                baseSalaryAmount={baseSalaryAmount}
+                baseSalaryCurrency={baseSalaryCurrency}
+                salaryGroupSequence={selectedGroup?.sequence_number ?? null}
+                components={components}
+              />
+            </>
+          )}
 
           {error && <SiteCorpAlert type="danger">{error}</SiteCorpAlert>}
         </div>
@@ -693,17 +819,25 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
               loading ||
               selectable.length === 0 ||
               !positionId ||
-              !contractTypeId ||
-              !signatureDate ||
-              !signaturePlace.trim() ||
-              !paymentMethodId ||
-              hasInvalidComponent(components) ||
-              formalizationBlocked ||
-              !representativeAssignmentId
+              (isPrincipalSpecialist
+                ? !reincorporationDate || !resolutionValues || !resolutionValues.valid
+                : !contractTypeId ||
+                  !signatureDate ||
+                  !signaturePlace.trim() ||
+                  !paymentMethodId ||
+                  hasInvalidComponent(components) ||
+                  formalizationBlocked ||
+                  !representativeAssignmentId)
             }
           >
             <UserPlus className="mr-2 h-4 w-4" />
-            {submitting ? "Procesando…" : "Confirmar reincorporación"}
+            {processStage
+              ? processStage
+              : submitting
+                ? "Procesando…"
+                : isPrincipalSpecialist
+                  ? "Confirmar reincorporación y Resolución"
+                  : "Confirmar reincorporación"}
           </SiteCorpButton>
         </div>
       </DialogContent>
