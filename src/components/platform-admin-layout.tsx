@@ -14,6 +14,8 @@ import {
   ArrowLeft,
   Scale,
   Settings,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react"
 
 const PlatformAdminLayout = React.forwardRef<
@@ -54,6 +56,18 @@ const PlatformAdminLayout = React.forwardRef<
     )
   }
 
+  // Sección "Ajustes" desplegable: oculta por defecto, se abre al pulsar la
+  // pestaña y se expande sola cuando la ruta activa pertenece al grupo.
+  const ajustesRoutes = ["/admin/users", "/admin/roles", "/admin/settings"]
+  const ajustesContainsActive = ajustesRoutes.some((route) =>
+    location.pathname.startsWith(route)
+  )
+  const [ajustesOpen, setAjustesOpen] = React.useState(ajustesContainsActive)
+
+  React.useEffect(() => {
+    if (ajustesContainsActive) setAjustesOpen(true)
+  }, [ajustesContainsActive])
+
   return (
     <div
       ref={ref}
@@ -85,21 +99,38 @@ const PlatformAdminLayout = React.forwardRef<
               "Clientes / Organizaciones"
             )}
 
-            {/* Sección Ajustes: configuración de la administración global de SiteCorp. */}
-            <div className="pt-3">
-              <p className="flex items-center gap-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <Settings className="h-3.5 w-3.5" />
-                Ajustes
-              </p>
-              <div className="ml-3 space-y-1 border-l border-border pl-2">
-                {navItem("/admin/users", <Users className="h-5 w-5" />, "Usuarios")}
-                {navItem("/admin/roles", <Shield className="h-5 w-5" />, "Roles y permisos")}
-                {navItem(
-                  "/admin/settings/salary-scale",
-                  <Scale className="h-5 w-5" />,
-                  "Escala salarial presupuestada"
+            {/* Sección Ajustes: desplegable que se oculta cuando no se usa. */}
+            <div className="space-y-1 pt-3">
+              <button
+                type="button"
+                onClick={() => setAjustesOpen((open) => !open)}
+                aria-expanded={ajustesOpen}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  ajustesContainsActive
+                    ? "text-sitecorp-primary"
+                    : "text-ink hover:bg-muted hover:text-ink"
                 )}
-              </div>
+              >
+                <Settings className="h-5 w-5" />
+                <span className="flex-1 text-left">Ajustes</span>
+                {ajustesOpen ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </button>
+              {ajustesOpen && (
+                <div className="ml-4 space-y-1 border-l border-border pl-2">
+                  {navItem("/admin/users", <Users className="h-5 w-5" />, "Usuarios")}
+                  {navItem("/admin/roles", <Shield className="h-5 w-5" />, "Roles y permisos")}
+                  {navItem(
+                    "/admin/settings/salary-scale",
+                    <Scale className="h-5 w-5" />,
+                    "Escala salarial presupuestada"
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </nav>
