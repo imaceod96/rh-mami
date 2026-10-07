@@ -39,6 +39,7 @@ import {
   type CatalogOption,
 } from "@/lib/catalogs"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
+import { AcademicDegreeCheckboxes } from "@/components/person/AcademicDegreeCheckboxes"
 
 /**
  * Subir documento de verificación y crear el registro en worker_documents.
@@ -116,6 +117,9 @@ export interface WorkerEditingData {
   marital_status_id: string | null
   education_level_id: string | null
   specialty: string | null
+  // Formación académica adicional (indicadores independientes, no excluyentes)
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
   profession_or_trade: string | null
   skin_color_id: string | null
   address: string | null
@@ -160,6 +164,8 @@ interface WorkerFormState {
   marital_status_id: string
   education_level_id: string
   specialty: string
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
   profession_or_trade: string
   skin_color_id: string
   address: string
@@ -184,6 +190,8 @@ const emptyForm: WorkerFormState = {
   marital_status_id: "",
   education_level_id: "",
   specialty: "",
+  has_masters_degree: false,
+  has_doctorate_degree: false,
   profession_or_trade: "",
   skin_color_id: "",
   address: "",
@@ -224,6 +232,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           marital_status_id: editingWorker.marital_status_id || "",
           education_level_id: editingWorker.education_level_id || "",
           specialty: editingWorker.specialty || "",
+          has_masters_degree: editingWorker.has_masters_degree || false,
+          has_doctorate_degree: editingWorker.has_doctorate_degree || false,
           profession_or_trade: editingWorker.profession_or_trade || "",
           skin_color_id: editingWorker.skin_color_id || "",
           address: editingWorker.address || "",
@@ -247,6 +257,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           marital_status_id: "",
           education_level_id: "",
           specialty: "",
+          has_masters_degree: false,
+          has_doctorate_degree: false,
           profession_or_trade: "",
           skin_color_id: "",
           address: "",
@@ -534,6 +546,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             marital_status_id: form.marital_status_id || null,
             education_level_id: form.education_level_id || null,
             specialty: form.specialty.trim() || null,
+            has_masters_degree: form.has_masters_degree,
+            has_doctorate_degree: form.has_doctorate_degree,
             profession_or_trade: form.profession_or_trade.trim() || null,
             skin_color_id: form.skin_color_id || null,
             address: form.address.trim() || null,
@@ -564,6 +578,8 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
                       marital_status_id: form.marital_status_id,
                       education_level_id: form.education_level_id,
                       specialty: form.specialty.trim(),
+                      has_masters_degree: form.has_masters_degree,
+                      has_doctorate_degree: form.has_doctorate_degree,
                       profession_or_trade: form.profession_or_trade.trim(),
                       skin_color_id: form.skin_color_id,
                       address: form.address.trim(),
@@ -728,6 +744,27 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
             />
           )}
         </div>
+      </div>
+
+      {/* Formación académica adicional: indicadores independientes (no excluyentes) */}
+      <div className="space-y-3 border-t border-border pt-4">
+        <div>
+          <p className="text-sm font-medium text-ink">Formación académica adicional</p>
+          <p className="text-xs text-muted-foreground">
+            Marque los estudios de postgrado obtenidos. Puede marcar ambos.
+          </p>
+        </div>
+        <AcademicDegreeCheckboxes
+          hasMastersDegree={form.has_masters_degree}
+          hasDoctorateDegree={form.has_doctorate_degree}
+          onMastersChange={(checked) =>
+            setForm((prev) => ({ ...prev, has_masters_degree: checked }))
+          }
+          onDoctorateChange={(checked) =>
+            setForm((prev) => ({ ...prev, has_doctorate_degree: checked }))
+          }
+          disabled={submitting}
+        />
       </div>
 
       <div className="space-y-2">

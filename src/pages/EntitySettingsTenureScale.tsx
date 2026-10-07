@@ -31,6 +31,7 @@ import {
   ChevronDown,
 } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
+import AcademicCategoryPaymentSection from "@/components/settings/AcademicCategoryPaymentSection"
 
 interface TenureScaleRange {
   id: string
@@ -294,6 +295,7 @@ const EntitySettingsTenureScale = () => {
         <SiteCorpButton variant="outline" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Volver
         </SiteCorpButton>
+        {entityId && <AcademicCategoryPaymentSection entityId={entityId} />}
       </div>
     )
   }
@@ -379,6 +381,21 @@ const EntitySettingsTenureScale = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Sección independiente: pago por categoría académica (Máster / Doctor).
+          Presupuestada → configuración global; Empresarial → configuración de la entidad. */}
+      {entityId && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Pago por categoría académica
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <AcademicCategoryPaymentSection entityId={entityId} />
         </div>
       )}
 

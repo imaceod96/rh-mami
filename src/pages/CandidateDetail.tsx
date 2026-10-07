@@ -43,6 +43,7 @@ import {
   UserPlus,
 } from "lucide-react"
 import HireCandidateDialog from "@/components/candidates/HireCandidateDialog"
+import { AcademicBadges } from "@/components/person/AcademicBadges"
 import {
   drivingLicenseLabels,
   fetchCandidateDrivingLicenseIds,
@@ -68,6 +69,9 @@ interface Candidate {
   province: string | null
   education_level_id: string | null
   specialty: string | null
+  // Formación académica adicional (indicadores independientes, no excluyentes)
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
   profession_or_trade: string | null
   skin_color_id: string | null
   political_affiliation: string | null
@@ -1162,6 +1166,13 @@ const CandidateDetail = () => {
               <span className="font-medium text-ink">{getSpecialtyDisplay(candidate)}</span>
             </div>
             <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Formación académica adicional:</span>
+              <AcademicBadges
+                hasMastersDegree={candidate.has_masters_degree}
+                hasDoctorateDegree={candidate.has_doctorate_degree}
+              />
+            </div>
+            <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Afiliación política:</span>
               <span className="font-medium text-ink">{candidate.political_affiliation || "—"}</span>
             </div>
@@ -1310,6 +1321,13 @@ const CandidateDetail = () => {
                     </span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Formación académica adicional:</span>
+                    <AcademicBadges
+                      hasMastersDegree={candidate.has_masters_degree}
+                      hasDoctorateDegree={candidate.has_doctorate_degree}
+                    />
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Experiencia laboral total:</span>
                     <span className="font-medium text-ink">{totalExperience || "—"}</span>
                   </div>
@@ -1421,6 +1439,13 @@ const CandidateDetail = () => {
                   <div className="flex justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Especialidad:</span>
                     <span className="font-medium text-ink">{getSpecialtyDisplay(candidate)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-4 py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Formación académica adicional:</span>
+                    <AcademicBadges
+                      hasMastersDegree={candidate.has_masters_degree}
+                      hasDoctorateDegree={candidate.has_doctorate_degree}
+                    />
                   </div>
                   <div className="flex items-start justify-between gap-4 py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Licencias de conducción:</span>

@@ -1,0 +1,47 @@
+-- ============================================================================
+-- FASE — TRANSFERENCIA DE INDICADORES ACADÉMICOS CANDIDATO → TRABAJADOR
+-- Migración incremental, aplicada mediante CREATE OR REPLACE de funciones ya
+-- existentes (no se crean funciones nuevas ni tablas nuevas en este archivo).
+--
+-- Problema: los indicadores has_masters_degree / has_doctorate_degree declarados
+-- en el Candidato debían conservarse al contratar (Candidato → Contratar →
+-- Trabajador), sin pedir al usuario que los introduzca de nuevo.
+--
+-- Cambios aplicados (ver definiciones vigentes en la base de datos):
+--
+-- 1. public.create_worker_with_position(...)
+--    - Se añaden las columnas has_masters_degree y has_doctorate_degree a la lista
+--      de columnas del INSERT en public.workers.
+--    - Los valores se leen del jsonb de la persona:
+--        coalesce((p_worker->>'has_masters_degree')::boolean, false)
+--        coalesce((p_worker->>'has_doctorate_degree')::boolean, false)
+--    - Todo el resto de la función (validación de integridad contractual, control
+--      de capacidad, licencias, asignación de puesto, contrato, snapshots) queda
+--      exactamente igual.
+--
+-- 2. public.hire_candidate(...)
+--    - Alta nueva: el jsonb que se pasa a create_worker_with_position incluye ambos
+--      indicadores del candidato:
+--        'has_masters_degree', coalesce(v_candidate.has_masters_degree, false)
+--        'has_doctorate_degree', coalesce(v_candidate.has_doctorate_degree, false)
+--    - Reincorporación: el UPDATE de fusión del trabajador vinculado incorpora ambos
+--      indicadores con OR, de modo que se conserva lo ya registrado en el trabajador
+--      y se añade lo declarado en el candidato, sin sobrescribir datos con false:
+--        has_masters_degree   = coalesce(w.has_masters_degree, false)
+--                               OR coalesce(v_candidate.has_masters_degree, false)
+--        has_doctorate_degree = coalesce(w.has_doctorate_degree, false)
+--                               OR coalesce(v_candidate.has_doctorate_degree, false)
+--      y la condición de ejecución del UPDATE (WHERE w.id = ... AND (...)) incorpora
+--      los dos casos en que el valor del candidato aporta información nueva.
+--    - El resto del flujo (readiness contractual, reincorporate_worker, transferencia
+--      de documentos) queda igual.
+--
+-- NO se modifica en esta migración:
+--   - employment_start_date ni ninguna regla de antigüedad.
+--   - La plantilla Excel de carga inicial de trabajadores ni su RPC de migración:
+--     los trabajadores migrados completarán estos datos desde su ficha.
+--   - Prenómina (tablas, cálculos, snapshots, Excel y cierre).
+--   - El Anexo 14 ni ninguna exportación existente.
+--   - Las políticas RLS: los campos viajan dentro del propio registro del
+--     trabajador y del candidato, que ya están protegidos por sus políticas.
+-- ============================================================================

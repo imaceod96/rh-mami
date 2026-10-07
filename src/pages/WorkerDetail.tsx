@@ -47,6 +47,13 @@ import {
   type CatalogOption,
 } from "@/lib/catalogs"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
+import { AcademicDegreeCheckboxes } from "@/components/person/AcademicDegreeCheckboxes"
+import {
+  resolveAcademicCategoryPayment,
+  academicCategoryLabel,
+  formatAcademicAmount,
+  type AcademicCategoryPaymentResolution,
+} from "@/lib/academic-payment"
 import ChangePositionDialog, {
   type WorkerCurrentSituation,
 } from "@/components/workers/ChangePositionDialog"
@@ -136,6 +143,9 @@ interface WorkerDetail {
   marital_status_id: string | null
   education_level_id: string | null
   specialty: string | null
+  // Formación académica adicional (indicadores independientes, no excluyentes)
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
   profession_or_trade: string | null
   skin_color_id: string | null
   address: string | null
@@ -250,6 +260,9 @@ const WorkerDetail = () => {
     const [tenure, setTenure] = React.useState<{ years: number; months: number; totalMonths: number; humanDescription: string } | null>(null)
     // Pago por antigüedad aplicable
     const [tenurePayment, setTenurePayment] = React.useState<{ amount: number; from_months: number; to_months: number | null } | null>(null)
+    // Pago por categoría académica (Máster / Doctor) resuelto por la función central
+    const [academicPayment, setAcademicPayment] =
+      React.useState<AcademicCategoryPaymentResolution | null>(null)
     const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [canManage, setCanManage] = React.useState(false)
@@ -475,6 +488,16 @@ const WorkerDetail = () => {
                   } catch {
                     setTenurePayment(null)
                   }
+
+                  // Pago por categoría académica (Máster / Doctor). Se resuelve con la
+                  // única fuente de verdad del servidor: Doctor tiene prioridad y los
+                  // importes nunca se suman. Sin fallback entre regímenes.
+                  try {
+                    setAcademicPayment(await resolveAcademicCategoryPayment(entityId, workerId))
+                  } catch (academicErr) {
+                    console.error("Error resolving academic category payment:", academicErr)
+                    setAcademicPayment(null)
+                  }
             
                   // Fase 11A.3: horario habitual del puesto vigente (o del último puesto si está inactivo)
       const requestedPositionId =
@@ -683,6 +706,8 @@ const WorkerDetail = () => {
         marital_status_id: editForm.marital_status_id || null,
         education_level_id: editForm.education_level_id || null,
         specialty: editForm.specialty || null,
+        has_masters_degree: !!editForm.has_masters_degree,
+        has_doctorate_degree: !!editForm.has_doctorate_degree,
         profession_or_trade: editForm.profession_or_trade || null,
         skin_color_id: editForm.skin_color_id || null,
         address: editForm.address || null,
@@ -1054,6 +1079,27 @@ const WorkerDetail = () => {
                 </div>
               )}
               <div>
+                <dt className="text-xs text-muted-foreground">Formación académica adicional</dt>
+                <dd className="mt-1 flex flex-wrap gap-1.5">
+                  {worker.has_masters_degree || worker.has_doctorate_degree ? (
+                    <>
+                      {worker.has_masters_degree && (
+                        <span className="inline-flex items-center rounded-full border border-sitecorp-primary/30 bg-sitecorp-primary/5 px-2.5 py-1 text-xs font-semibold text-sitecorp-primary">
+                          Máster
+                        </span>
+                      )}
+                      {worker.has_doctorate_degree && (
+                        <span className="inline-flex items-center rounded-full border border-sitecorp-primary/30 bg-sitecorp-primary/5 px-2.5 py-1 text-xs font-semibold text-sitecorp-primary">
+                          Doctor
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-sm text-ink">Ninguna</span>
+                  )}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs text-muted-foreground">Color de piel</dt>
                 <dd className="text-sm text-ink">
                   {worker.skin_color_id
@@ -1214,6 +1260,24 @@ const WorkerDetail = () => {
                                 </dd>
                               ) : null}
                             </div>
+
+                            {academicPayment && (
+                              <div>
+                                <dt className="text-xs text-muted-foreground">
+                                  Pago por categoría académica
+                                </dt>
+                                <dd className="text-sm text-ink">
+                                  {academicCategoryLabel(academicPayment.category)}
+                                </dd>
+                                <dd className="text-xs text-muted-foreground">
+                                  {academicPayment.category === null
+                                    ? "Importe: 0.00 CUP"
+                                    : academicPayment.configured
+                                      ? `Importe: ${formatAcademicAmount(academicPayment.amount)}`
+                                      : "Importe: No configurado"}
+                                </dd>
+                              </div>
+                            )}
               
                             {position ? (
                 <>
@@ -1874,6 +1938,26 @@ const WorkerDetail = () => {
               <SiteCorpInput
                 value={editForm.specialty || ""}
                 onChange={(e) => setEditForm(f => ({ ...f, specialty: e.target.value }))}
+              />
+            </div>
+
+            {/* Formación académica adicional: indicadores independientes (no excluyentes) */}
+            <div className="space-y-3 border-t border-border pt-4">
+              <div>
+                <p className="text-sm font-medium text-ink">Formación académica adicional</p>
+                <p className="text-xs text-muted-foreground">
+                  Marque los estudios de postgrado obtenidos. Puede marcar ambos.
+                </p>
+              </div>
+              <AcademicDegreeCheckboxes
+                hasMastersDegree={!!editForm.has_masters_degree}
+                hasDoctorateDegree={!!editForm.has_doctorate_degree}
+                onMastersChange={(checked) =>
+                  setEditForm((f) => ({ ...f, has_masters_degree: checked }))
+                }
+                onDoctorateChange={(checked) =>
+                  setEditForm((f) => ({ ...f, has_doctorate_degree: checked }))
+                }
               />
             </div>
 

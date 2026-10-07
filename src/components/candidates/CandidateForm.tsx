@@ -22,6 +22,7 @@ import {
   type CatalogOption,
 } from "@/lib/catalogs"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
+import { AcademicDegreeCheckboxes } from "@/components/person/AcademicDegreeCheckboxes"
 
 export interface Candidate {
   id: string
@@ -41,6 +42,9 @@ export interface Candidate {
   province: string | null
   education_level_id: string | null
   specialty: string | null
+  // Formación académica adicional (indicadores independientes, no excluyentes)
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
   profession_or_trade: string | null
   political_affiliation: string | null
   is_retired_or_rehired: boolean | null
@@ -81,6 +85,8 @@ export interface CandidateFormData {
   province: string
   education_level_id: string
   specialty: string
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
   profession_or_trade: string
   political_affiliation: string
   is_retired_or_rehired: string
@@ -111,6 +117,8 @@ export const emptyFormData: CandidateFormData = {
   province: "",
   education_level_id: "",
   specialty: "",
+  has_masters_degree: false,
+  has_doctorate_degree: false,
   profession_or_trade: "",
   political_affiliation: "",
   is_retired_or_rehired: "",
@@ -364,6 +372,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
           province: data.province || "",
           education_level_id: data.education_level_id || "",
           specialty: data.specialty || "",
+          has_masters_degree: data.has_masters_degree || false,
+          has_doctorate_degree: data.has_doctorate_degree || false,
           profession_or_trade: data.profession_or_trade || "",
           political_affiliation: data.political_affiliation || "",
           is_retired_or_rehired: data.is_retired_or_rehired ? "yes" : "",
@@ -520,6 +530,8 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
                 )
                   ? (formData.specialty.trim() || null)
                   : null,
+                has_masters_degree: formData.has_masters_degree,
+                has_doctorate_degree: formData.has_doctorate_degree,
                 profession_or_trade: formData.profession_or_trade.trim() || null,
         political_affiliation: formData.political_affiliation || null,
         is_retired_or_rehired: formData.is_retired_or_rehired === "yes",
@@ -793,6 +805,23 @@ const CandidateForm = ({ candidateId, entityId: propEntityId, mode = "edit", onS
                   <SiteCorpInput type="text" placeholder="Especialidad" value={formData.specialty} onChange={(e) => handleFormChange("specialty", e.target.value)} required />
                 </div>
               )}
+            </div>
+
+            {/* Formación académica adicional: indicadores independientes (no excluyentes) */}
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <p className="text-sm font-medium text-ink">Formación académica adicional</p>
+                <p className="text-xs text-muted-foreground">
+                  Marque los estudios de postgrado obtenidos. Puede marcar ambos.
+                </p>
+              </div>
+              <AcademicDegreeCheckboxes
+                hasMastersDegree={formData.has_masters_degree}
+                hasDoctorateDegree={formData.has_doctorate_degree}
+                onMastersChange={(checked) => handleFormChange("has_masters_degree", checked)}
+                onDoctorateChange={(checked) => handleFormChange("has_doctorate_degree", checked)}
+                disabled={formSubmitting}
+              />
             </div>
           </div>
         </SiteCorpCard>
