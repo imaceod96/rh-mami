@@ -8,15 +8,20 @@ import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 import { ArrowLeft, Search, Users, UserCheck, AlertTriangle } from "lucide-react"
 
 /**
- * PERSONAS → TRABAJADORES (§16–§19).
+ * PERSONAS → TRABAJADORES.
  *
  * Directorio de las personas que ACTUALMENTE pertenecen a la entidad
  * (estado laboral activo). Es independiente de la Plantilla: un trabajador
  * aparece aunque no tenga Puesto/Assignment (p. ej. migrado sin vincular).
  * NO muestra información estructural (Área, Cargo, Puesto, salario, Grupo).
+ *
+ * Filtros: criterios personales y de vinculación (aunque el listado no muestre
+ * Cargo/Puesto, se puede filtrar por ellos cuando sea útil).
  */
 
 interface WorkerRow {
@@ -27,13 +32,23 @@ interface WorkerRow {
   second_surname: string | null
   identification: string
   gender_id: string | null
+  marital_status_id: string | null
+  skin_color_id: string | null
+  education_level_id: string | null
   phone: string | null
   email: string | null
   birth_date: string | null
-  marital_status_id: string | null
-  skin_color_id: string | null
+  province: string | null
+  municipality: string | null
   address: string | null
   employment_start_date: string | null
+  has_masters_degree: boolean | null
+  has_doctorate_degree: boolean | null
+}
+
+interface CatalogRow {
+  id: string
+  name: string
 }
 
 const fullName = (w: WorkerRow) =>
@@ -50,12 +65,16 @@ const missingFields = (w: WorkerRow): string[] => {
   return fields
 }
 
+const toOptions = (rows: CatalogRow[]) =>
+  rows.map((row) => ({ value: row.id, label: row.name })).sort((a, b) => a.label.localeCompare(b.label))
+
 const EntityWorkers = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const navigate = useNavigate()
 
   const [workers, setWorkers] = React.useState<WorkerRow[]>([])
-  const [genderNames, setGenderNames] = React.useState<Record<string, string>>({})
+  const [catalogs, setCatalogs] = React.useState<Record<string, CatalogRow[]>>({})
+  const [linkedWorkerIds, setLinkedWorkerIds] = React.useState<Set<string>>(new Set())
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -86,22 +105,47 @@ const EntityWorkers = () => {
         .from("workers")
         .select(
           `id, code, first_name, first_surname, second_surname, identification,
-           gender_id, phone, email, birth_date, marital_status_id, skin_color_id,
-           address, employment_start_date`
+           gender_id, marital_status_id, skin_color_id, education_level_id,
+           phone, email, birth_date, province, municipality, address,
+           employment_start_date, has_masters_degree, has_doctorate_degree`
         )
         .eq("organization_entity_id", entityId)
         .eq("employment_status", "active")
         .order("first_surname", { ascending: true })
         .order("first_name", { ascending: true })
       if (workersError) throw workersError
-      setWorkers((data as WorkerRow[]) || [])
+      const rows = (data as WorkerRow[]) || []
+      setWorkers(rows)
 
-      const { data: genders } = await supabase.from("genders").select("id, name")
-      const map: Record<string, string> = {}
-      ;(genders as { id: string; name: string }[] | null)?.forEach((g) => {
-        map[g.id] = g.name
+      const [genders, marital, skins, education] = await Promise.all([
+        supabase.from("genders").select("id, name").order("name"),
+        supabase.from("marital_statuses").select("id, name").order("name"),
+        supabase.from("skin_colors").select("id, name").order("name"),
+        supabase.from("education_levels").select("id, name").order("name"),
+      ])
+      setCatalogs({
+        gender: (genders.data as CatalogRow[]) || [],
+        marital: (marital.data as CatalogRow[]) || [],
+        skin: (skins.data as CatalogRow[]) || [],
+        education: (education.data as CatalogRow[]) || [],
       })
-      setGenderNames(map)
+
+      // Vinculación: trabajadores con Assignment actual (para el filtro
+      // Vinculado / Pendiente). No se muestra como columna; solo se usa para filtrar.
+      const ids = rows.map((row) => row.id)
+      if (ids.length > 0) {
+        const { data: assignments } = await supabase
+          .from("worker_position_assignments")
+          .select("worker_id, is_current, end_date")
+          .in("worker_id", ids)
+          .eq("is_current", true)
+          .is("end_date", null)
+        const linked = new Set<string>()
+        ;((assignments as { worker_id: string }[] | null) || []).forEach((a) => linked.add(a.worker_id))
+        setLinkedWorkerIds(linked)
+      } else {
+        setLinkedWorkerIds(new Set())
+      }
     } catch (err) {
       console.error("Error loading workers directory:", err)
       setError(err instanceof Error ? err.message : "Error al cargar los trabajadores")
@@ -114,17 +158,95 @@ const EntityWorkers = () => {
     loadData()
   }, [loadData])
 
+  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(
+    () => [
+      {
+        key: "gender",
+        label: "Sexo",
+        type: "select",
+        options: toOptions(catalogs.gender || []),
+        getValue: (w: WorkerRow) => w.gender_id,
+      },
+      {
+        key: "marital",
+        label: "Estado civil",
+        type: "select",
+        options: toOptions(catalogs.marital || []),
+        getValue: (w: WorkerRow) => w.marital_status_id,
+      },
+      {
+        key: "skin",
+        label: "Color de piel",
+        type: "select",
+        options: toOptions(catalogs.skin || []),
+        getValue: (w: WorkerRow) => w.skin_color_id,
+      },
+      {
+        key: "education",
+        label: "Nivel educacional",
+        type: "select",
+        options: toOptions(catalogs.education || []),
+        getValue: (w: WorkerRow) => w.education_level_id,
+      },
+      {
+        key: "province",
+        label: "Provincia",
+        type: "text",
+        placeholder: "Provincia",
+        getValue: (w: WorkerRow) => w.province,
+      },
+      {
+        key: "municipality",
+        label: "Municipio",
+        type: "text",
+        placeholder: "Municipio",
+        getValue: (w: WorkerRow) => w.municipality,
+      },
+      {
+        key: "masters",
+        label: "Máster",
+        type: "boolean",
+        getValue: (w: WorkerRow) => w.has_masters_degree,
+      },
+      {
+        key: "doctorate",
+        label: "Doctorado",
+        type: "boolean",
+        getValue: (w: WorkerRow) => w.has_doctorate_degree,
+      },
+      {
+        key: "complete",
+        label: "Ficha completa",
+        type: "boolean",
+        getValue: (w: WorkerRow) => missingFields(w).length === 0,
+      },
+      {
+        key: "linked",
+        label: "Vinculación",
+        type: "select",
+        options: [
+          { value: "linked", label: "Vinculado a plantilla" },
+          { value: "pending", label: "Pendiente de vinculación" },
+        ],
+        getValue: (w: WorkerRow) => (linkedWorkerIds.has(w.id) ? "linked" : "pending"),
+      },
+    ],
+    [catalogs, linkedWorkerIds]
+  )
+
+  const filters = useEntityFilters(workers, filterDefinitions)
+
   const filtered = React.useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return workers
-    return workers.filter((w) =>
+    if (!term) return filters.result
+    return filters.result.filter((w) =>
       [w.first_name, w.first_surname, w.second_surname, w.identification, w.code]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(term)
     )
-  }, [workers, search])
+  }, [filters.result, search])
 
   if (loading) {
     return (
@@ -173,10 +295,19 @@ const EntityWorkers = () => {
                 className="pl-9"
               />
             </div>
-            <span className="whitespace-nowrap text-sm text-muted-foreground">
-              {filtered.length} de {workers.length}
-            </span>
           </div>
+
+          <FilterBuilder
+            definitions={filters.definitions}
+            active={filters.active}
+            available={filters.available}
+            onAdd={filters.add}
+            onRemove={filters.remove}
+            onSetValues={filters.setValues}
+            onClear={filters.clear}
+            resultCount={filtered.length}
+            totalCount={workers.length}
+          />
 
           {workers.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
@@ -194,7 +325,7 @@ const EntityWorkers = () => {
               <UserCheck className="mb-4 h-12 w-12 text-muted-foreground" />
               <h4 className="mb-1 text-base font-semibold text-ink">Sin resultados</h4>
               <p className="text-sm text-muted-foreground">
-                Ninguna persona coincide con la búsqueda.
+                Ninguna persona coincide con la búsqueda o los filtros aplicados.
               </p>
             </div>
           ) : (
@@ -215,11 +346,6 @@ const EntityWorkers = () => {
                       <span className="font-mono text-xs text-muted-foreground">
                         CI: {w.identification}
                       </span>
-                      {w.gender_id && genderNames[w.gender_id] && (
-                        <span className="text-xs text-muted-foreground">
-                          {genderNames[w.gender_id]}
-                        </span>
-                      )}
                       {w.phone && (
                         <span className="text-xs text-muted-foreground">Tel: {w.phone}</span>
                       )}
@@ -229,6 +355,11 @@ const EntityWorkers = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      {linkedWorkerIds.has(w.id) ? (
+                        <SiteCorpStatusBadge status="neutral">Vinculado a plantilla</SiteCorpStatusBadge>
+                      ) : (
+                        <SiteCorpStatusBadge status="warning">Pendiente de vinculación</SiteCorpStatusBadge>
+                      )}
                       {missing.length > 0 ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-sitecorp-warning/40 bg-sitecorp-warning/10 px-2.5 py-0.5 text-xs font-medium text-sitecorp-warning">
                           <AlertTriangle className="h-3 w-3" />

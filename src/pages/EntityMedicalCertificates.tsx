@@ -26,6 +26,8 @@ import {
 } from "@/hooks/use-medical-certificates"
 import { getCertificateSignedUrl } from "@/lib/rpc/medical-certificates"
 import MedicalCertificateFormDialog from "@/components/medical-certificates/MedicalCertificateFormDialog"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 import { useToast } from "@/hooks/use-toast"
 import { useSc404Generation } from "@/hooks/use-sc404"
 import {
@@ -57,7 +59,6 @@ const EntityMedicalCertificates = () => {
 
   const [selectedYear, setSelectedYear] = React.useState<number>(new Date().getFullYear())
   const [search, setSearch] = React.useState("")
-  const [areaFilter, setAreaFilter] = React.useState("ALL")
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const { generate: generateSc404, generatingId: generatingSc404Id } = useSc404Generation()
 
@@ -70,23 +71,45 @@ const EntityMedicalCertificates = () => {
   const rows = React.useMemo(() => query.data?.certificates ?? [], [query.data])
   const loading = permissionsLoading || (canView && query.isLoading)
 
-  const areas = React.useMemo(
-    () =>
-      Array.from(new Set(rows.map((r) => r.area_name).filter((v): v is string => !!v))).sort(),
+  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(
+    () => [
+      {
+        key: "area",
+        label: "Área",
+        type: "select",
+        options: Array.from(new Set(rows.map((r) => r.area_name).filter((v): v is string => !!v)))
+          .sort()
+          .map((value) => ({ value, label: value })),
+        getValue: (r: any) => r.area_name,
+      },
+      { key: "worker", label: "Trabajador", type: "text", placeholder: "Nombre o CI", getValue: (r: any) => `${r.worker_full_name} ${r.worker_identification}` },
+      { key: "startDate", label: "Fecha de salida", type: "daterange", getValue: (r: any) => r.start_date },
+      { key: "returnDate", label: "Reincorporación", type: "daterange", getValue: (r: any) => r.return_date },
+      { key: "hasDocument", label: "Con documento", type: "boolean", getValue: (r: any) => !!r.document?.storage_path },
+      {
+        key: "days",
+        label: "Cantidad de días",
+        type: "select",
+        options: Array.from(new Set(rows.map((r) => r.days).filter((v) => v !== null && v !== undefined)))
+          .sort((a, b) => (a as number) - (b as number))
+          .map((value) => ({ value: String(value), label: `${value} día(s)` })),
+        getValue: (r: any) => (r.days === null || r.days === undefined ? null : String(r.days)),
+      },
+    ],
     [rows]
   )
 
+  const filters = useEntityFilters(rows, filterDefinitions)
+
   const visibleRows = React.useMemo(() => {
     const term = search.trim().toLowerCase()
-    return rows.filter((row) => {
-      if (areaFilter !== "ALL" && row.area_name !== areaFilter) return false
-      if (!term) return true
-      return (
+    if (!term) return filters.result
+    return filters.result.filter(
+      (row) =>
         row.worker_full_name.toLowerCase().includes(term) ||
         row.worker_identification.toLowerCase().includes(term)
-      )
-    })
-  }, [rows, search, areaFilter])
+    )
+  }, [filters.result, search])
 
   const error = !permissionsLoading && !canView
     ? "No tiene permiso para ver los certificados médicos de esta entidad"
@@ -208,43 +231,45 @@ const EntityMedicalCertificates = () => {
 
           {/* Filtros */}
           <SiteCorpCard>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Año</label>
-                <SiteCorpSelect
-                  value={String(selectedYear)}
-                  onValueChange={(v) => setSelectedYear(parseInt(v, 10))}
-                >
-                  {yearOptions.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </SiteCorpSelect>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Buscar trabajador</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <SiteCorpInput
-                    className="pl-9"
-                    placeholder="Nombre o carné de identidad"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Año</label>
+                  <SiteCorpSelect
+                    value={String(selectedYear)}
+                    onValueChange={(v) => setSelectedYear(parseInt(v, 10))}
+                  >
+                    {yearOptions.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </SiteCorpSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Buscar trabajador</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <SiteCorpInput
+                      className="pl-9"
+                      placeholder="Nombre o carné de identidad"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Área</label>
-                <SiteCorpSelect value={areaFilter} onValueChange={setAreaFilter}>
-                  <option value="ALL">Todas las áreas</option>
-                  {areas.map((area) => (
-                    <option key={area} value={area}>
-                      {area}
-                    </option>
-                  ))}
-                </SiteCorpSelect>
-              </div>
+              <FilterBuilder
+                definitions={filters.definitions}
+                active={filters.active}
+                available={filters.available}
+                onAdd={filters.add}
+                onRemove={filters.remove}
+                onSetValues={filters.setValues}
+                onClear={filters.clear}
+                resultCount={visibleRows.length}
+                totalCount={rows.length}
+              />
             </div>
           </SiteCorpCard>
 

@@ -12,7 +12,7 @@ import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from "@/components/ui/pagination"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
-import { Users, Search, Edit3, Plus, Upload, Eye } from "lucide-react"
+import { Users, Edit3, Plus, Upload, Eye } from "lucide-react"
 import { SelectItem } from "@/components/ui/select"
 import {
   Dialog,
@@ -29,6 +29,8 @@ import {
   saveCandidateDrivingLicenseIds,
   type CatalogOption,
 } from "@/lib/catalogs"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 import { DrivingLicenseSelector } from "@/components/person/DrivingLicenseSelector"
 import { AcademicDegreeCheckboxes } from "@/components/person/AcademicDegreeCheckboxes"
 import { isValidIdentification, IDENTIFICATION_ERROR_MESSAGE } from "@/utils/ci"
@@ -51,6 +53,10 @@ interface Candidate {
   province: string | null
   education_level_id: string | null
   specialty: string | null
+  skin_color_id: string | null
+  profession_or_trade: string | null
+  has_masters_degree: boolean | null
+  has_doctorate_degree: boolean | null
   political_affiliation: string | null
   is_retired_or_rehired: boolean | null
   has_disciplinary_measures: boolean | null
@@ -224,15 +230,10 @@ const EntityCandidates = () => {
   const [municipalities, setMunicipalities] = React.useState<Municipality[]>([])
 
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [selectedGender, setSelectedGender] = React.useState<string | null>(null)
-  const [selectedMaritalStatus, setSelectedMaritalStatus] = React.useState<string | null>(null)
-  const [selectedEducationLevel, setSelectedEducationLevel] = React.useState<string | null>(null)
-  const [selectedSpecialty, setSelectedSpecialty] = React.useState<string | null>(null)
-  const [selectedStatus, setSelectedStatus] = React.useState<string | null>(null)
+  const [candidatesWithLicense, setCandidatesWithLicense] = React.useState<Set<string>>(new Set())
 
   const [page, setPage] = React.useState(1)
   const [rowsPerPage, setRowsPerPage] = React.useState(10)
-  const [totalRows, setTotalRows] = React.useState(0)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -289,7 +290,7 @@ const EntityCandidates = () => {
     const fetchCandidates = async () => {
       if (!entityId) {
         setCandidates([])
-        setTotalRows(0)
+        setCandidatesWithLicense(new Set())
         return
       }
 
@@ -297,51 +298,38 @@ const EntityCandidates = () => {
       setError(null)
 
       try {
-        let query = supabase
+        // Se cargan los candidatos de la entidad y se filtran en el cliente con el
+        // constructor de filtros común (filtros acumulativos). La búsqueda textual
+        // también se resuelve aquí para que filtros + búsqueda sean consistentes.
+        const { data, error } = await supabase
           .from("candidates")
-          .select("*", { count: "exact" })
+          .select("*")
           .eq("organization_entity_id", entityId)
-
-        // Apply search
-        if (searchTerm.trim()) {
-          const search = searchTerm.trim().toLowerCase()
-          query = query.or(
-            `first_name.ilike.%${search}%,first_surname.ilike.%${search}%,second_surname.ilike.%${search}%,identification.ilike.%${search}%`
-          )
-        }
-
-        // Apply filters
-        if (selectedGender) {
-          query = query.eq("gender_id", selectedGender)
-        }
-        if (selectedMaritalStatus) {
-          query = query.eq("marital_status_id", selectedMaritalStatus)
-        }
-        if (selectedEducationLevel) {
-          query = query.eq("education_level_id", selectedEducationLevel)
-        }
-        if (selectedSpecialty) {
-          query = query.eq("specialty", selectedSpecialty)
-        }
-        if (selectedStatus) {
-          query = query.eq("status", selectedStatus)
-        }
-
-        // Apply pagination
-        const from = (page - 1) * rowsPerPage
-        const to = from + rowsPerPage - 1
-        query = query.range(from, to).order("created_at", { ascending: false })
-
-        const { data, error, count } = await query
+          .order("created_at", { ascending: false })
 
         if (error) throw error
-        setCandidates(data || [])
-        setTotalRows(count || 0)
+        const rows = (data as Candidate[]) || []
+        setCandidates(rows)
+
+        // Licencia de conducción (criterio booleano): qué candidatos tienen al
+        // menos una categoría de licencia registrada.
+        const ids = rows.map((c) => c.id)
+        if (ids.length > 0) {
+          const { data: licenses } = await supabase
+            .from("candidate_driving_license_categories")
+            .select("candidate_id")
+            .in("candidate_id", ids)
+          const set = new Set<string>()
+          ;((licenses as { candidate_id: string }[] | null) || []).forEach((l) => set.add(l.candidate_id))
+          setCandidatesWithLicense(set)
+        } else {
+          setCandidatesWithLicense(new Set())
+        }
       } catch (err) {
         console.error("Error fetching candidates:", err)
         setError("Error al cargar los candidatos")
         setCandidates([])
-        setTotalRows(0)
+        setCandidatesWithLicense(new Set())
       } finally {
         setLoading(false)
       }
@@ -350,29 +338,84 @@ const EntityCandidates = () => {
     if (entityId) {
       fetchCandidates()
     }
-  }, [
-    entityId,
-    searchTerm,
-    selectedGender,
-    selectedMaritalStatus,
-    selectedEducationLevel,
-    selectedSpecialty,
-    selectedStatus,
-    page,
-    rowsPerPage
-  ])
+  }, [entityId])
 
-  // Reset page when filters change
+  // ---------- Filtros (constructor común, criterios reales de Candidato) ----------
+  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(
+    () => [
+      {
+        key: "gender",
+        label: "Sexo",
+        type: "select",
+        options: genders.map((g) => ({ value: g.id, label: g.name })),
+        getValue: (c: Candidate) => c.gender_id,
+      },
+      {
+        key: "marital",
+        label: "Estado civil",
+        type: "select",
+        options: maritalStatuses.map((m) => ({ value: m.id, label: m.name })),
+        getValue: (c: Candidate) => c.marital_status_id,
+      },
+      {
+        key: "skin",
+        label: "Color de piel",
+        type: "select",
+        options: skinColors.map((s) => ({ value: s.id, label: s.name })),
+        getValue: (c: Candidate) => c.skin_color_id,
+      },
+      {
+        key: "education",
+        label: "Nivel educacional",
+        type: "select",
+        options: educationLevels.map((e) => ({ value: e.id, label: e.name })),
+        getValue: (c: Candidate) => c.education_level_id,
+      },
+      { key: "specialty", label: "Especialidad", type: "text", placeholder: "Especialidad", getValue: (c: Candidate) => c.specialty },
+      { key: "profession", label: "Profesión u oficio", type: "text", placeholder: "Profesión u oficio", getValue: (c: Candidate) => c.profession_or_trade },
+      { key: "province", label: "Provincia", type: "text", placeholder: "Provincia", getValue: (c: Candidate) => c.province },
+      { key: "municipality", label: "Municipio", type: "text", placeholder: "Municipio", getValue: (c: Candidate) => c.municipality },
+      { key: "license", label: "Licencia de conducción", type: "boolean", getValue: (c: Candidate) => candidatesWithLicense.has(c.id) },
+      { key: "masters", label: "Máster", type: "boolean", getValue: (c: Candidate) => c.has_masters_degree },
+      { key: "doctorate", label: "Doctorado", type: "boolean", getValue: (c: Candidate) => c.has_doctorate_degree },
+      {
+        key: "status",
+        label: "Estado",
+        type: "select",
+        options: [
+          { value: "active", label: "Activo" },
+          { value: "archived", label: "Archivado" },
+        ],
+        getValue: (c: Candidate) => c.status,
+      },
+    ],
+    [genders, maritalStatuses, educationLevels, skinColors, candidatesWithLicense]
+  )
+
+  const filters = useEntityFilters(candidates, filterDefinitions)
+
+  const searchedCandidates = React.useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return filters.result
+    return filters.result.filter((c) =>
+      [c.first_name, c.first_surname, c.second_surname, c.identification]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    )
+  }, [filters.result, searchTerm])
+
   React.useEffect(() => {
     setPage(1)
-  }, [
-    searchTerm,
-    selectedGender,
-    selectedMaritalStatus,
-    selectedEducationLevel,
-    selectedSpecialty,
-    selectedStatus
-  ])
+  }, [searchTerm, filters.active])
+
+  const totalPages = Math.ceil(searchedCandidates.length / rowsPerPage)
+
+  const pagedCandidates = React.useMemo(() => {
+    const from = (page - 1) * rowsPerPage
+    return searchedCandidates.slice(from, from + rowsPerPage)
+  }, [searchedCandidates, page, rowsPerPage])
 
   // Form handlers
       const handleFormChange = (field: keyof CandidateFormData, value: string | boolean | File | null) => {
@@ -742,15 +785,6 @@ const EntityCandidates = () => {
     setSearchTerm(e.target.value)
   }
 
-  const handleResetFilters = () => {
-    setSearchTerm("")
-    setSelectedGender(null)
-    setSelectedMaritalStatus(null)
-    setSelectedEducationLevel(null)
-    setSelectedSpecialty(null)
-    setSelectedStatus(null)
-  }
-
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
   }
@@ -784,8 +818,6 @@ const EntityCandidates = () => {
     )
   }
 
-  const totalPages = Math.ceil(totalRows / rowsPerPage)
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -806,132 +838,33 @@ const EntityCandidates = () => {
         </SiteCorpAlert>
       )}
 
-      {/* Search and Filters */}
+      {/* Búsqueda + filtros acumulativos */}
       <SiteCorpCard>
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-            {/* Search */}
-            <div>
-              <label className="text-sm font-medium text-ink">Buscar</label>
-              <SiteCorpInput
-                type="text"
-                placeholder="Nombre, apellidos o identificación"
-                value={searchTerm}
-                onChange={handleSearchChange}
-              />
-            </div>
-
-            {/* Gender filter */}
-                        <div>
-                          <label className="text-sm font-medium text-ink">Sexo</label>
-                          <SiteCorpSelect
-                            value={selectedGender || undefined}
-                            onValueChange={(value) => setSelectedGender(value === "__placeholder__" ? null : value)}
-                          >
-                            <SelectItem value="__placeholder__">
-                              Todas
-                            </SelectItem>
-                            {genders.map(gender => (
-                              <SelectItem
-                                key={gender.id}
-                                value={gender.id}
-                              >
-                                {gender.name}
-                              </SelectItem>
-                            ))}
-                          </SiteCorpSelect>
-                        </div>
-
-            {/* Marital status filter */}
-                        <div>
-                          <label className="text-sm font-medium text-ink">Estado civil</label>
-                          <SiteCorpSelect
-                            value={selectedMaritalStatus || undefined}
-                            onValueChange={(value) => setSelectedMaritalStatus(value === "__placeholder__" ? null : value)}
-                          >
-                            <SelectItem value="__placeholder__">
-                              Todos
-                            </SelectItem>
-                            {maritalStatuses.map(status => (
-                              <SelectItem
-                                key={status.id}
-                                value={status.id}
-                              >
-                                {status.name}
-                              </SelectItem>
-                            ))}
-                          </SiteCorpSelect>
-                        </div>
-
-            {/* Education level filter */}
-                                    <div>
-                                      <label className="text-sm font-medium text-ink">Nivel educacional</label>
-                                      <SiteCorpSelect
-                                        value={selectedEducationLevel || undefined}
-                                        onValueChange={(value) => setSelectedEducationLevel(value === "__placeholder__" ? null : value)}
-                                      >
-                                        <SelectItem value="__placeholder__">
-                                          Todos
-                                        </SelectItem>
-                                        {educationLevels
-                                                                      .filter(level => ["Primaria", "Secundaria", "Obrero Calificado", "Media", "Técnico Medio", "Superior"].includes(level.name))
-                                                                      .map(level => (
-                                                                        <SelectItem
-                                                                          key={level.id}
-                                                                          value={level.id}
-                                                                        >
-                                                                          {level.name}
-                                                                        </SelectItem>
-                                                                      ))}
-                                      </SiteCorpSelect>
-                                    </div>
-
-            {/* Specialty filter */}
-            <div>
-              <label className="text-sm font-medium text-ink">Especialidad</label>
-              <SiteCorpInput
-                type="text"
-                placeholder="Especialidad"
-                value={selectedSpecialty || ""}
-                onChange={(e) => setSelectedSpecialty(e.target.value || null)}
-              />
-            </div>
-
-            {/* Status filter */}
-                        <div>
-                          <label className="text-sm font-medium text-ink">Estado</label>
-                          <SiteCorpSelect
-                            value={selectedStatus || undefined}
-                            onValueChange={(value) => setSelectedStatus(value === "__placeholder__" ? null : value)}
-                          >
-                            <SelectItem value="__placeholder__">
-                              Todos
-                            </SelectItem>
-                            <SelectItem value="active">
-                              Activo
-                            </SelectItem>
-                            <SelectItem value="archived">
-                              Archivado
-                            </SelectItem>
-                          </SiteCorpSelect>
-                        </div>
-
-            {/* Actions */}
-            <div className="flex items-end">
-              <SiteCorpButton
-                variant="outline"
-                onClick={handleResetFilters}
-                size="sm"
-              >
-                <Search className="mr-1 h-3 w-3" /> Limpiar
-              </SiteCorpButton>
-            </div>
+          <div className="max-w-md">
+            <SiteCorpInput
+              type="text"
+              placeholder="Buscar por nombre, apellidos o identificación"
+              value={searchTerm}
+              onChange={handleSearchChange}
+            />
           </div>
+          <FilterBuilder
+            definitions={filters.definitions}
+            active={filters.active}
+            available={filters.available}
+            onAdd={filters.add}
+            onRemove={filters.remove}
+            onSetValues={filters.setValues}
+            onClear={filters.clear}
+            resultCount={searchedCandidates.length}
+            totalCount={candidates.length}
+          />
         </div>
       </SiteCorpCard>
 
       {/* Candidates Table */}
-      {candidates.length === 0 ? (
+      {pagedCandidates.length === 0 ? (
         <SiteCorpCard>
           <SiteCorpAlert type="info">
             No se encontraron candidatos con los criterios especificados
@@ -958,7 +891,7 @@ const EntityCandidates = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {candidates.map((candidate) => (
+                  {pagedCandidates.map((candidate) => (
                     <TableRow key={candidate.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -1123,7 +1056,7 @@ const EntityCandidates = () => {
           {/* Info bar */}
           <div className="flex justify-between items-center mt-4 text-sm text-muted-foreground">
             <p>
-              Mostrando {candidates.length} de {totalRows} candidatos
+              Mostrando {pagedCandidates.length} de {searchedCandidates.length} candidatos
             </p>
             <div className="flex items-center gap-4">
               <label>

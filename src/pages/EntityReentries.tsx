@@ -8,6 +8,8 @@ import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import ReincorporateWorkerDialog from "@/components/workers/ReincorporateWorkerDialog"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 import { ArrowLeft, Search, Undo2, UserPlus } from "lucide-react"
 
 /**
@@ -25,9 +27,16 @@ interface ReentryRow {
   first_surname: string
   second_surname: string | null
   identification: string
+  gender_id: string | null
+  education_level_id: string | null
   employment_status: string
   hire_date: string
   employment_start_date: string | null
+}
+
+interface CatalogRow {
+  id: string
+  name: string
 }
 
 interface BajaInfo {
@@ -49,6 +58,7 @@ const EntityReentries = () => {
   const [canManage, setCanManage] = React.useState(false)
   const [search, setSearch] = React.useState("")
   const [reentryWorkerId, setReentryWorkerId] = React.useState<string | null>(null)
+  const [catalogs, setCatalogs] = React.useState<Record<string, CatalogRow[]>>({})
 
   const loadData = React.useCallback(async () => {
     if (!entityId) {
@@ -77,6 +87,7 @@ const EntityReentries = () => {
         .from("workers")
         .select(
           `id, code, first_name, first_surname, second_surname, identification,
+           gender_id, education_level_id,
            employment_status, hire_date, employment_start_date`
         )
         .eq("organization_entity_id", entityId)
@@ -87,6 +98,15 @@ const EntityReentries = () => {
 
       const rows = (data as ReentryRow[]) || []
       setWorkers(rows)
+
+      const [genders, education] = await Promise.all([
+        supabase.from("genders").select("id, name").order("name"),
+        supabase.from("education_levels").select("id, name").order("name"),
+      ])
+      setCatalogs({
+        gender: (genders.data as CatalogRow[]) || [],
+        education: (education.data as CatalogRow[]) || [],
+      })
 
       // Última baja registrada por trabajador (bitácora de movimientos).
       if (rows.length > 0) {
@@ -130,17 +150,57 @@ const EntityReentries = () => {
     loadData()
   }, [loadData])
 
+  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(() => {
+    const reasonOptions = Array.from(
+      new Set(Object.values(bajas).map((b) => b.reason).filter((v): v is string => !!v))
+    )
+      .sort()
+      .map((reason) => ({ value: reason, label: reason }))
+
+    return [
+      {
+        key: "gender",
+        label: "Sexo",
+        type: "select",
+        options: (catalogs.gender || []).map((row) => ({ value: row.id, label: row.name })),
+        getValue: (w: ReentryRow) => w.gender_id,
+      },
+      {
+        key: "education",
+        label: "Nivel educacional",
+        type: "select",
+        options: (catalogs.education || []).map((row) => ({ value: row.id, label: row.name })),
+        getValue: (w: ReentryRow) => w.education_level_id,
+      },
+      {
+        key: "bajaDate",
+        label: "Fecha de baja",
+        type: "daterange",
+        getValue: (w: ReentryRow) => bajas[w.id]?.effective_date ?? null,
+      },
+      {
+        key: "bajaReason",
+        label: "Motivo de baja",
+        type: "select",
+        options: reasonOptions,
+        getValue: (w: ReentryRow) => bajas[w.id]?.reason ?? null,
+      },
+    ]
+  }, [catalogs, bajas])
+
+  const filters = useEntityFilters(workers, filterDefinitions)
+
   const filtered = React.useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return workers
-    return workers.filter((w) =>
+    if (!term) return filters.result
+    return filters.result.filter((w) =>
       [w.first_name, w.first_surname, w.second_surname, w.identification, w.code]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(term)
     )
-  }, [workers, search])
+  }, [filters.result, search])
 
   if (loading) {
     return (
@@ -189,10 +249,19 @@ const EntityReentries = () => {
                 className="pl-9"
               />
             </div>
-            <span className="whitespace-nowrap text-sm text-muted-foreground">
-              {filtered.length} de {workers.length}
-            </span>
           </div>
+
+          <FilterBuilder
+            definitions={filters.definitions}
+            active={filters.active}
+            available={filters.available}
+            onAdd={filters.add}
+            onRemove={filters.remove}
+            onSetValues={filters.setValues}
+            onClear={filters.clear}
+            resultCount={filtered.length}
+            totalCount={workers.length}
+          />
 
           {workers.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">

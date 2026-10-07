@@ -14,6 +14,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Label } from "@/components/ui/label"
 import { FileSpreadsheet, RefreshCw, Lock, Unlock, Eye, ChevronDown, ChevronRight } from "lucide-react"
 import WorkerPrenominaDialog from "@/components/prenomina/WorkerPrenominaDialog"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 import {
   MONTH_LABELS,
   PRENOMINA_STATUS_LABELS,
@@ -376,6 +378,59 @@ const EntityPrenomina = () => {
     [entries]
   )
 
+  const uniqueText = (values: (string | null | undefined)[]) =>
+    Array.from(new Set(values.filter((v): v is string => !!v)))
+      .sort()
+      .map((value) => ({ value, label: value }))
+
+  const periodFilters = useEntityFilters(periods, [
+    {
+      key: "year",
+      label: "Año",
+      type: "select",
+      options: Array.from(new Set(periods.map((p) => p.period_year)))
+        .sort((a, b) => b - a)
+        .map((year) => ({ value: String(year), label: String(year) })),
+      getValue: (p: PrenominaPeriod) => String(p.period_year),
+    },
+    {
+      key: "month",
+      label: "Mes",
+      type: "select",
+      options: MONTH_LABELS.map((label, index) => ({ value: String(index + 1), label })),
+      getValue: (p: PrenominaPeriod) => String(p.period_month),
+    },
+    {
+      key: "status",
+      label: "Estado",
+      type: "select",
+      options: [
+        { value: "BORRADOR", label: PRENOMINA_STATUS_LABELS["BORRADOR"] },
+        { value: "CERRADA", label: PRENOMINA_STATUS_LABELS["CERRADA"] },
+      ],
+      getValue: (p: PrenominaPeriod) => p.status,
+    },
+  ])
+
+  const entryFilters = useEntityFilters(entries, [
+    { key: "worker", label: "Trabajador", type: "text", placeholder: "Nombre", getValue: (e: PrenominaWorkerEntry) => e.worker_name_snapshot },
+    { key: "job", label: "Cargo", type: "select", options: uniqueText(entries.map((e) => e.job_name_snapshot)), getValue: (e: PrenominaWorkerEntry) => e.job_name_snapshot },
+    { key: "position", label: "Puesto", type: "select", options: uniqueText(entries.map((e) => e.position_name_snapshot)), getValue: (e: PrenominaWorkerEntry) => e.position_name_snapshot },
+    {
+      key: "group",
+      label: "Grupo escala",
+      type: "select",
+      options: Array.from(new Set(entries.map((e) => e.salary_group_sequence).filter((v): v is number => v !== null && v !== undefined)))
+        .sort((a, b) => a - b)
+        .map((value) => ({ value: String(value), label: String(value) })),
+      getValue: (e: PrenominaWorkerEntry) => (e.salary_group_sequence === null || e.salary_group_sequence === undefined ? null : String(e.salary_group_sequence)),
+    },
+    { key: "cla", label: "Con CLA", type: "boolean", getValue: (e: PrenominaWorkerEntry) => e.cla_applied },
+    { key: "night", label: "Con Nocturnidad", type: "boolean", getValue: (e: PrenominaWorkerEntry) => Number(e.total_night_payment || 0) > 0 },
+    { key: "tenure", label: "Con pago por antigüedad", type: "boolean", getValue: (e: PrenominaWorkerEntry) => Number(e.tenure_payment || 0) > 0 },
+    { key: "academic", label: "Con categoría académica", type: "boolean", getValue: (e: PrenominaWorkerEntry) => Number(e.academic_payment || 0) > 0 },
+  ])
+
   if (permissionsLoading || loading) {
     return <SiteCorpLoading />
   }
@@ -436,6 +491,18 @@ const EntityPrenomina = () => {
           {periods.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay períodos de prenómina.</p>
           ) : (
+            <>
+            <FilterBuilder
+              definitions={periodFilters.definitions}
+              active={periodFilters.active}
+              available={periodFilters.available}
+              onAdd={periodFilters.add}
+              onRemove={periodFilters.remove}
+              onSetValues={periodFilters.setValues}
+              onClear={periodFilters.clear}
+              resultCount={periodFilters.result.length}
+              totalCount={periods.length}
+            />
             <Table>
               <TableHeader>
                 <TableRow>
@@ -448,7 +515,7 @@ const EntityPrenomina = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {periods.map((p) => (
+                {periodFilters.result.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>{MONTH_LABELS[p.period_month - 1]}</TableCell>
                     <TableCell>{p.period_year}</TableCell>
@@ -474,6 +541,7 @@ const EntityPrenomina = () => {
                 ))}
               </TableBody>
             </Table>
+            </>
           )}
         </div>
       </SiteCorpCard>
@@ -537,6 +605,18 @@ const EntityPrenomina = () => {
                   </SiteCorpAlert>
                 )}
 
+                <FilterBuilder
+                  definitions={entryFilters.definitions}
+                  active={entryFilters.active}
+                  available={entryFilters.available}
+                  onAdd={entryFilters.add}
+                  onRemove={entryFilters.remove}
+                  onSetValues={entryFilters.setValues}
+                  onClear={entryFilters.clear}
+                  resultCount={entryFilters.result.length}
+                  totalCount={entries.length}
+                />
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -565,7 +645,7 @@ const EntityPrenomina = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {entries.map((entry) => {
+                    {entryFilters.result.map((entry) => {
                       const isExpanded = expandedEntryId === entry.id
                       return (
                       <React.Fragment key={entry.id}>

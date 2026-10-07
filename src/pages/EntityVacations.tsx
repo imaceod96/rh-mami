@@ -8,8 +8,9 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
-import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import RegisterVacationDialog from "@/components/vacations/RegisterVacationDialog"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import { useEntityVacationOverview } from "@/hooks/use-vacations"
 import {
@@ -56,20 +57,39 @@ const EntityVacations = () => {
   const loading = permissionsLoading || (canView && overviewQuery.isLoading)
 
   const [search, setSearch] = React.useState("")
-  const [areaFilter, setAreaFilter] = React.useState("ALL")
-  const [jobFilter, setJobFilter] = React.useState("ALL")
-  const [statusFilter, setStatusFilter] = React.useState("ALL")
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [dialogWorker, setDialogWorker] = React.useState<VacationOverviewRow | null>(null)
 
-  const filterOptions = React.useMemo(
-    () => ({
-      areas: Array.from(new Set(rows.map((r) => r.area_name).filter((v): v is string => !!v))).sort(),
-      jobs: Array.from(new Set(rows.map((r) => r.job_name).filter((v): v is string => !!v))).sort(),
-    }),
+  const optionsFrom = (pick: (row: VacationOverviewRow) => string | null | undefined) =>
+    Array.from(new Set(rows.map(pick).filter((v): v is string => !!v)))
+      .sort()
+      .map((value) => ({ value, label: value }))
+
+  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(
+    () => [
+      { key: "area", label: "Área", type: "select", options: optionsFrom((r) => r.area_name), getValue: (r: VacationOverviewRow) => r.area_name },
+      { key: "job", label: "Cargo", type: "select", options: optionsFrom((r) => r.job_name), getValue: (r: VacationOverviewRow) => r.job_name },
+      { key: "position", label: "Puesto", type: "select", options: optionsFrom((r) => r.position_name), getValue: (r: VacationOverviewRow) => r.position_name },
+      {
+        key: "status",
+        label: "Estado de saldo",
+        type: "select",
+        options: [
+          { value: "NORMAL", label: "Normal" },
+          { value: "NEAR_LIMIT", label: "Próximo al límite" },
+          { value: "LIMIT_REACHED", label: "Límite alcanzado" },
+        ],
+        getValue: (r: VacationOverviewRow) => r.status,
+      },
+      { key: "onVacation", label: "De vacaciones", type: "boolean", getValue: (r: VacationOverviewRow) => r.active_vacation },
+      { key: "noSchedule", label: "Sin horario", type: "boolean", getValue: (r: VacationOverviewRow) => !r.has_schedule },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows]
   )
+
+  const filters = useEntityFilters(rows, filterDefinitions)
 
   const kpis = React.useMemo(() => {
     const avg = rows.length > 0 ? rows.reduce((sum, r) => sum + r.balance, 0) / rows.length : 0
@@ -84,14 +104,9 @@ const EntityVacations = () => {
 
   const visibleRows = React.useMemo(() => {
     const term = search.trim().toLowerCase()
-    return rows.filter((row) => {
-      if (areaFilter !== "ALL" && row.area_name !== areaFilter) return false
-      if (jobFilter !== "ALL" && row.job_name !== jobFilter) return false
-      if (statusFilter !== "ALL" && row.status !== statusFilter) return false
-      if (!term) return true
-      return row.full_name.toLowerCase().includes(term)
-    })
-  }, [rows, search, areaFilter, jobFilter, statusFilter])
+    if (!term) return filters.result
+    return filters.result.filter((row) => row.full_name.toLowerCase().includes(term))
+  }, [filters.result, search])
 
   const alerts = React.useMemo(
     () => rows.filter((r) => r.status === "NEAR_LIMIT" || r.status === "LIMIT_REACHED"),
@@ -239,50 +254,27 @@ const EntityVacations = () => {
 
           {/* Filtros */}
           <SiteCorpCard>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Buscar trabajador</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <SiteCorpInput
-                    className="pl-9"
-                    placeholder="Nombre o apellidos"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
+            <div className="space-y-3">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <SiteCorpInput
+                  className="pl-9"
+                  placeholder="Buscar trabajador por nombre o apellidos"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Área</label>
-                <SiteCorpSelect value={areaFilter} onValueChange={setAreaFilter}>
-                  <option value="ALL">Todas las áreas</option>
-                  {filterOptions.areas.map((area) => (
-                    <option key={area} value={area}>
-                      {area}
-                    </option>
-                  ))}
-                </SiteCorpSelect>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Cargo</label>
-                <SiteCorpSelect value={jobFilter} onValueChange={setJobFilter}>
-                  <option value="ALL">Todos los cargos</option>
-                  {filterOptions.jobs.map((job) => (
-                    <option key={job} value={job}>
-                      {job}
-                    </option>
-                  ))}
-                </SiteCorpSelect>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Estado de saldo</label>
-                <SiteCorpSelect value={statusFilter} onValueChange={setStatusFilter}>
-                  <option value="ALL">Todos los estados</option>
-                  <option value="NORMAL">Normal</option>
-                  <option value="NEAR_LIMIT">Próximo al límite</option>
-                  <option value="LIMIT_REACHED">Límite alcanzado</option>
-                </SiteCorpSelect>
-              </div>
+              <FilterBuilder
+                definitions={filters.definitions}
+                active={filters.active}
+                available={filters.available}
+                onAdd={filters.add}
+                onRemove={filters.remove}
+                onSetValues={filters.setValues}
+                onClear={filters.clear}
+                resultCount={visibleRows.length}
+                totalCount={rows.length}
+              />
             </div>
           </SiteCorpCard>
 

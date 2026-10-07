@@ -5,13 +5,17 @@ import { differenceInYears } from "date-fns"
  * Módulos de informes demográficos del Resumen (pestaña Reportes).
  *
  * Principios (nunca se rompen):
- *   - La fuente de verdad son los TRABAJADORES. Cada informe consulta agregaciones
- *     reales, nunca una tabla completa para calcular `array.length`.
- *   - Cada informe se consulta SOLO cuando el usuario tiene el permiso real
- *     `workers.view` o `workers.manage` (permiso → query enabled). El backend (RLS)
- *     sigue siendo la autoridad final.
+ *   - La fuente de verdad son los TRABAJADORES ACTIVOS. Ni Candidates, ni Workers
+ *     dados de baja (Reingresos).
+ *   - Un Worker activo SIN Assignment (pendiente de vinculación) CUENTA en los
+ *     informes personales (sexo, color de piel, nivel académico, edad).
+ *   - El ámbito respeta el scope (Esta entidad / + descendientes vía `entityIds`).
  *   - Las tablas de catálogo (sexo, color de piel, nivel académico) se consultan
  *     una sola vez y se reutilizan en todas las consultas.
+ *
+ * NOTA: postgREST no soporta GROUP BY. Los informes descargan el campo a agrupar
+ * (una sola columna) de los trabajadores activos del ámbito y agregan en el
+ * cliente. Nunca se trae la fila completa ni se usa `array.length` como total.
  */
 
 export type ReportSlice = {
@@ -20,43 +24,47 @@ export type ReportSlice = {
   value: number
 }
 
-/** Tramos de edad utilizados en todos los informes de edad. */
+/** Código de la rebanada para los trabajadores sin el dato cargado. */
+export const NO_INFO_KEY = "no-info"
+
+/**
+ * Tramos de edad utilizados en todos los informes de edad.
+ * Incluye explícitamente el tramo «Sin información» (fecha de nacimiento ausente).
+ */
 export const AGE_BUCKETS = [
-  { key: "under18", label: "Menos de 18 años" },
-  { key: "18-25", label: "18-25 años" },
-  { key: "26-35", label: "26-35 años" },
-  { key: "36-45", label: "36-45 años" },
-  { key: "46-55", label: "46-55 años" },
-  { key: "56-65", label: "56-65 años" },
-  { key: "over65", label: "Más de 65 años" },
+  { key: "under20", label: "Menos de 20 años" },
+  { key: "20-29", label: "20-29 años" },
+  { key: "30-39", label: "30-39 años" },
+  { key: "40-49", label: "40-49 años" },
+  { key: "50-59", label: "50-59 años" },
+  { key: "60plus", label: "60 años o más" },
+  { key: NO_INFO_KEY, label: "Sin información" },
 ] as const
 
 export type AgeBucketKey = (typeof AGE_BUCKETS)[number]["key"]
 
-/** Un trabajador activo (sin datos personales cargados). */
-export interface ActiveWorkerRef {
-  id: string
-}
-
 /** Informe: trabajadores según edad (agrupados por tramo de edad). */
 export interface AgeReport {
-  /** Trabajadores activos del ámbito. */
+  /** Trabajadores activos del ámbito (con o sin fecha de nacimiento). */
   total: number
   byAgeGroup: ReportSlice[]
 }
 
 /** Informe: trabajadores según sexo. */
 export interface SexReport {
+  total: number
   bySex: ReportSlice[]
 }
 
 /** Informe: trabajadores según color de piel. */
 export interface SkinColorReport {
+  total: number
   bySkinColor: ReportSlice[]
 }
 
 /** Informe: trabajadores según nivel académico. */
 export interface EducationLevelReport {
+  total: number
   byEducation: ReportSlice[]
 }
 
@@ -80,16 +88,15 @@ export function ageFromBirthDate(birthDate: string | null): number | null {
   return differenceInYears(today(), new Date(birthDate))
 }
 
-/** Asigna una edad (años) al tramo correspondiente. */
-export function ageBucketKey(age: number | null): AgeBucketKey | null {
-  if (age === null) return null
-  if (age < 18) return "under18"
-  if (age <= 25) return "18-25"
-  if (age <= 35) return "26-35"
-  if (age <= 45) return "36-45"
-  if (age <= 55) return "46-55"
-  if (age <= 65) return "56-65"
-  return "over65"
+/** Asigna una edad (años) al tramo correspondiente. Sin fecha → «Sin información». */
+export function ageBucketKey(age: number | null): AgeBucketKey {
+  if (age === null || Number.isNaN(age)) return NO_INFO_KEY
+  if (age < 20) return "under20"
+  if (age <= 29) return "20-29"
+  if (age <= 39) return "30-39"
+  if (age <= 49) return "40-49"
+  if (age <= 59) return "50-59"
+  return "60plus"
 }
 
 /** Convierte un mapa de contadores en rebanadas ordenadas (mayor a menor). */
@@ -153,35 +160,46 @@ export interface CatalogRefs {
   genderNameById: Record<string, string>
   skinColorNameById: Record<string, string>
   educationNameById: Record<string, string>
-  genderCodes: string[]
-  skinColorCodes: string[]
-  educationCodes: string[]
 }
 
-/** Carga una sola vez los catálogos de referencia y sus códigos válidos. */
+/** Carga una sola vez los catálogos de referencia globales (nombre real, no código). */
 export async function fetchCatalogRefs(): Promise<CatalogRefs> {
   const [genders, skinColors, educationLevels] = await Promise.all([
-    supabase.from("genders").select("id, code").eq("is_active", true),
-    supabase.from("skin_colors").select("id, code").eq("is_active", true),
-    supabase.from("education_levels").select("id, code").eq("is_active", true),
+    supabase.from("genders").select("id, name, code").order("name"),
+    supabase.from("skin_colors").select("id, name, code").order("name"),
+    supabase.from("education_levels").select("id, name, code").order("name"),
   ])
 
   if (genders.error || skinColors.error || educationLevels.error) {
     throw genders.error ?? skinColors.error ?? educationLevels.error
   }
 
-  const genderRows = (genders.data as { id: string; code: string }[]) || []
-  const skinColorRows = (skinColors.data as { id: string; code: string }[]) || []
-  const educationRows = (educationLevels.data as { id: string; code: string }[]) || []
+  const label = (rows: { id: string; name: string | null; code: string | null }[] | null) =>
+    Object.fromEntries(
+      (rows || []).map((row) => [row.id, row.name || row.code || "—"])
+    )
 
   return {
-    genderNameById: Object.fromEntries(genderRows.map((r) => [r.id, r.code])),
-    skinColorNameById: Object.fromEntries(skinColorRows.map((r) => [r.id, r.code])),
-    educationNameById: Object.fromEntries(educationRows.map((r) => [r.id, r.code])),
-    genderCodes: genderRows.map((r) => r.id),
-    skinColorCodes: skinColorRows.map((r) => r.id),
-    educationCodes: educationRows.map((r) => r.id),
+    genderNameById: label(genders.data as any),
+    skinColorNameById: label(skinColors.data as any),
+    educationNameById: label(educationLevels.data as any),
   }
+}
+
+const SIN_INFORMACION = "Sin información"
+
+/** Lee una columna simple de los trabajadores ACTIVOS del ámbito. */
+async function fetchActiveWorkerColumn(
+  entityIds: string[],
+  column: string
+): Promise<{ rows: Record<string, unknown>[]; total: number }> {
+  const { data, error, count } = await supabase
+    .from("workers")
+    .select(column, { count: "exact" })
+    .in("organization_entity_id", entityIds)
+    .eq("employment_status", "active")
+  if (error) throw error
+  return { rows: (data as unknown as Record<string, unknown>[]) || [], total: count ?? 0 }
 }
 
 // ---------------------------------------------------------------------------
@@ -195,47 +213,25 @@ export interface WorkersByAgeData {
 
 /**
  * Trabajadores según edad. Requiere `workers.view` o `workers.manage`.
- *
- * La edad se deriva de `birth_date`, que no es una columna agrupable directamente
- * en postgREST. Por ello se consultan SOLO las fechas de nacimiento (un campo) de
- * los trabajadores activos y se agrupan en tramos client-side. El total se obtiene
- * con una consulta `count` dedicada (nunca `array.length`).
+ * La edad se deriva de `birth_date` (persistida, derivada de la identificación
+ * cuando aplica). El total son TODOS los trabajadores activos del ámbito; los
+ * que no tienen fecha de nacimiento van al tramo «Sin información».
  */
-export async function fetchWorkersByAge(
-  entityIds: string[]
-): Promise<WorkersByAgeData> {
-  if (entityIds.length === 0) {
-    return {
-      total: 0,
-      byAgeGroup: AGE_BUCKETS.map((b) => ({ key: b.key, label: b.label, value: 0 })),
-    }
+export async function fetchWorkersByAge(entityIds: string[]): Promise<WorkersByAgeData> {
+  const empty: WorkersByAgeData = {
+    total: 0,
+    byAgeGroup: AGE_BUCKETS.map((b) => ({ key: b.key, label: b.label, value: 0 })),
   }
+  if (entityIds.length === 0) return empty
 
-  const [birthRows, countResult] = await Promise.all([
-    supabase
-      .from("workers")
-      .select("birth_date")
-      .in("organization_entity_id", entityIds)
-      .eq("employment_status", "active")
-      .not("birth_date", "is", null),
-    supabase
-      .from("workers")
-      .select("*", { count: "exact", head: true })
-      .in("organization_entity_id", entityIds)
-      .eq("employment_status", "active")
-      .not("birth_date", "is", null),
-  ])
-
-  if (birthRows.error) throw birthRows.error
+  const { rows, total } = await fetchActiveWorkerColumn(entityIds, "birth_date")
 
   const counts = new Map<AgeBucketKey, number>()
   AGE_BUCKETS.forEach((b) => counts.set(b.key, 0))
 
-  ;((birthRows.data as { birth_date: string | null }[]) || []).forEach((row) => {
-    const bucket = ageBucketKey(ageFromBirthDate(row.birth_date))
-    if (bucket !== null) {
-      counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
-    }
+  rows.forEach((row) => {
+    const bucket = ageBucketKey(ageFromBirthDate((row.birth_date as string) ?? null))
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
   })
 
   const byAgeGroup: ReportSlice[] = AGE_BUCKETS.map((b) => ({
@@ -244,184 +240,68 @@ export async function fetchWorkersByAge(
     value: counts.get(b.key) ?? 0,
   }))
 
-  const total = countResult.count ?? 0
-
   return { total, byAgeGroup }
 }
 
 // ---------------------------------------------------------------------------
-// INFORME: TRABAJADORES SEGÚN SEXO
+// INFORMES: SEXO / COLOR DE PIEL / NIVEL ACADÉMICO
 // ---------------------------------------------------------------------------
 
-export interface WorkersBySexData {
-  total: number
-  bySex: ReportSlice[]
+/**
+ * Agrupa una columna de catálogo de los trabajadores activos. Descarga SOLO esa
+ * columna, cuenta en el cliente (postgREST no soporta GROUP BY) e incluye
+ * «Sin información» para los trabajadores sin el dato.
+ */
+async function buildCatalogReport(
+  entityIds: string[],
+  column: string,
+  nameById: Record<string, string>
+): Promise<{ total: number; slices: ReportSlice[]; countKey: string }> {
+  if (entityIds.length === 0) {
+    return { total: 0, slices: [], countKey: "" }
+  }
+  const { rows, total } = await fetchActiveWorkerColumn(entityIds, column)
+  const counts = new Map<string, number>()
+  rows.forEach((row) => {
+    const key = (row[column] as string) ?? NO_INFO_KEY
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  })
+  const slices = countsToSlices(counts, nameById, SIN_INFORMACION)
+  return { total, slices, countKey: column }
 }
 
-/**
- * Trabajadores según sexo. Requiere `workers.view` o `workers.manage`.
- *
- * Agregación SQL con `GROUP BY gender_id`: no se descarga ninguna fila individual.
- * Los códigos de género del catálogo (campo `code`, p. ej. "H"/"M") se usan como
- * etiqueta. Los trabajadores sin sexo asignado se agrupan en "Sin especificar".
- */
 export async function fetchWorkersBySex(
   entityIds: string[],
   catalogRefs: CatalogRefs
-): Promise<WorkersBySexData> {
-  if (entityIds.length === 0) {
-    return { total: 0, bySex: [] }
-  }
-
-  const q = (supabase
-    .from("workers")
-    .select("gender_id", { count: "exact" })
-    .in("organization_entity_id", entityIds)
-    .eq("employment_status", "active") as any)
-    .group("gender_id")
-    .order("gender_id")
-
-  const [result, countResult] = await Promise.all([
-    q,
-    supabase
-      .from("workers")
-      .select("*", { count: "exact", head: true })
-      .in("organization_entity_id", entityIds)
-      .eq("employment_status", "active"),
-  ])
-
-  if (result.error) throw result.error
-
-  const counts = new Map<string, number>()
-  ;((result.data as { gender_id: string | null }[]) || []).forEach((row) => {
-    const key = row.gender_id ?? "sin-especificar"
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  })
-
-  const bySex: ReportSlice[] = countsToSlices(
-    counts,
-    catalogRefs.genderNameById,
-    "Sin especificar"
+): Promise<SexReport> {
+  const { total, slices } = await buildCatalogReport(
+    entityIds,
+    "gender_id",
+    catalogRefs.genderNameById
   )
-
-  const total = countResult.count ?? 0
-  return { total, bySex }
+  return { total, bySex: slices }
 }
 
-// ---------------------------------------------------------------------------
-// INFORME: TRABAJADORES SEGÚN COLOR DE PIEL
-// ---------------------------------------------------------------------------
-
-export interface WorkersBySkinColorData {
-  total: number
-  bySkinColor: ReportSlice[]
-}
-
-/**
- * Trabajadores según color de piel. Requiere `workers.view` o `workers.manage`.
- *
- * Agregación SQL con `GROUP BY skin_color_id`: no se descarga ninguna fila
- * individual. Etiquetas tomadas del catálogo `skin_colors` (su campo `code`).
- * Los trabajadores sin color de piel asignado se agrupan en "Sin especificar".
- */
 export async function fetchWorkersBySkinColor(
   entityIds: string[],
   catalogRefs: CatalogRefs
-): Promise<WorkersBySkinColorData> {
-  if (entityIds.length === 0) {
-    return { total: 0, bySkinColor: [] }
-  }
-
-  const q = (supabase
-    .from("workers")
-    .select("skin_color_id", { count: "exact" })
-    .in("organization_entity_id", entityIds)
-    .eq("employment_status", "active") as any)
-    .group("skin_color_id")
-    .order("skin_color_id")
-
-  const [result, countResult] = await Promise.all([
-    q,
-    supabase
-      .from("workers")
-      .select("*", { count: "exact", head: true })
-      .in("organization_entity_id", entityIds)
-      .eq("employment_status", "active"),
-  ])
-
-  if (result.error) throw result.error
-
-  const counts = new Map<string, number>()
-  ;((result.data as { skin_color_id: string | null }[]) || []).forEach((row) => {
-    const key = row.skin_color_id ?? "sin-especificar"
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  })
-
-  const bySkinColor: ReportSlice[] = countsToSlices(
-    counts,
-    catalogRefs.skinColorNameById,
-    "Sin especificar"
+): Promise<SkinColorReport> {
+  const { total, slices } = await buildCatalogReport(
+    entityIds,
+    "skin_color_id",
+    catalogRefs.skinColorNameById
   )
-
-  const total = countResult.count ?? 0
-  return { total, bySkinColor }
+  return { total, bySkinColor: slices }
 }
 
-// ---------------------------------------------------------------------------
-// INFORME: TRABAJADORES SEGÚN NIVEL ACADÉMICO
-// ---------------------------------------------------------------------------
-
-export interface WorkersByEducationLevelData {
-  total: number
-  byEducation: ReportSlice[]
-}
-
-/**
- * Trabajadores según nivel académico. Requiere `workers.view` o `workers.manage`.
- *
- * Agregación SQL con `GROUP BY education_level_id`: no se descarga ninguna fila
- * individual. Etiquetas tomadas del catálogo `education_levels` (su campo `code`).
- * Los trabajadores sin nivel académico asignado se agrupan en "Sin especificar".
- */
 export async function fetchWorkersByEducationLevel(
   entityIds: string[],
   catalogRefs: CatalogRefs
-): Promise<WorkersByEducationLevelData> {
-  if (entityIds.length === 0) {
-    return { total: 0, byEducation: [] }
-  }
-
-  const q = (supabase
-      .from("workers")
-      .select("education_level_id", { count: "exact" })
-      .in("organization_entity_id", entityIds)
-      .eq("employment_status", "active") as any)
-      .group("education_level_id")
-      .order("education_level_id")
-
-  const [result, countResult] = await Promise.all([
-    q,
-    supabase
-      .from("workers")
-      .select("*", { count: "exact", head: true })
-      .in("organization_entity_id", entityIds)
-      .eq("employment_status", "active"),
-  ])
-
-  if (result.error) throw result.error
-
-  const counts = new Map<string, number>()
-  ;((result.data as { education_level_id: string | null }[]) || []).forEach((row) => {
-    const key = row.education_level_id ?? "sin-especificar"
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  })
-
-  const byEducation: ReportSlice[] = countsToSlices(
-    counts,
-    catalogRefs.educationNameById,
-    "Sin especificar"
+): Promise<EducationLevelReport> {
+  const { total, slices } = await buildCatalogReport(
+    entityIds,
+    "education_level_id",
+    catalogRefs.educationNameById
   )
-
-  const total = countResult.count ?? 0
-  return { total, byEducation }
+  return { total, byEducation: slices }
 }

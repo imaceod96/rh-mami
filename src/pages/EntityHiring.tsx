@@ -8,9 +8,7 @@ import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
 import { Button as SiteCorpButton } from "@/components/ui/sitecorp-button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
-import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
-import { SelectItem } from "@/components/ui/select"
 import {
   ArrowLeft,
   ArrowRight,
@@ -34,6 +32,8 @@ import {
   type SalaryValue,
 } from "@/lib/salary"
 import HireCandidateDialog from "@/components/candidates/HireCandidateDialog"
+import { FilterBuilder } from "@/components/filters/filter-builder"
+import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
 
 interface JobRef {
   id: string
@@ -66,8 +66,6 @@ interface Occupant {
   code: string
 }
 
-type CoverageFilter = "with-vacancies" | "covered" | "all"
-
 const fullName = (w: WorkerRow) =>
   [w.first_name, w.first_surname, w.second_surname].filter(Boolean).join(" ")
 
@@ -88,9 +86,6 @@ const EntityHiring = () => {
   const [hiredWorkerId, setHiredWorkerId] = React.useState<string | null>(null)
 
   const [search, setSearch] = React.useState("")
-  const [areaFilter, setAreaFilter] = React.useState("all")
-  const [jobFilter, setJobFilter] = React.useState("all")
-  const [coverageFilter, setCoverageFilter] = React.useState<CoverageFilter>("with-vacancies")
   const [expandedPositionId, setExpandedPositionId] = React.useState<string | null>(null)
 
   const [hirePositionId, setHirePositionId] = React.useState<string | null>(null)
@@ -212,37 +207,59 @@ const EntityHiring = () => {
     )
   }, [positions])
 
-  const jobFilterOptions = React.useMemo(() => {
+  const jobOptions = React.useMemo(() => {
     const map = new Map<string, string>()
     positions.forEach((p) => {
-      const job = p.job
-      if (!job?.id) return
-      if (areaFilter !== "all" && job.area?.id !== areaFilter) return
-      map.set(job.id, job.name)
+      if (p.job?.id) map.set(p.job.id, p.job.name)
     })
-    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name)
+    return Array.from(map, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label)
     )
-  }, [positions, areaFilter])
+  }, [positions])
+
+  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(
+    () => [
+      {
+        key: "area",
+        label: "Área",
+        type: "select",
+        options: areas.map((a) => ({ value: a.id, label: a.name })),
+        getValue: (p: PositionRow) => p.job?.area?.id,
+      },
+      {
+        key: "job",
+        label: "Cargo",
+        type: "select",
+        options: jobOptions,
+        getValue: (p: PositionRow) => p.job?.id,
+      },
+      {
+        key: "coverage",
+        label: "Estado",
+        type: "select",
+        options: [
+          { value: "with-vacancies", label: "Con vacantes" },
+          { value: "covered", label: "Cubiertos" },
+        ],
+        getValue: (p: PositionRow) => (vacanciesOf(p) > 0 ? "with-vacancies" : "covered"),
+      },
+    ],
+    [areas, jobOptions, vacanciesOf]
+  )
+
+  const filters = useEntityFilters(positions, filterDefinitions)
 
   const filteredPositions = React.useMemo(() => {
     const term = search.trim().toLowerCase()
-    return positions.filter((p) => {
-      const vacancies = vacanciesOf(p)
-      if (coverageFilter === "with-vacancies" && vacancies <= 0) return false
-      if (coverageFilter === "covered" && vacancies > 0) return false
-      if (areaFilter !== "all" && p.job?.area?.id !== areaFilter) return false
-      if (jobFilter !== "all" && p.job?.id !== jobFilter) return false
-      if (term) {
-        const haystack = [p.name, p.code, p.job?.name, p.job?.area?.name]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-        if (!haystack.includes(term)) return false
-      }
-      return true
+    if (!term) return filters.result
+    return filters.result.filter((p) => {
+      const haystack = [p.name, p.code, p.job?.name, p.job?.area?.name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+      return haystack.includes(term)
     })
-  }, [positions, search, areaFilter, jobFilter, coverageFilter, vacanciesOf])
+  }, [filters.result, search])
 
   const kpis = React.useMemo(() => {
     let withVacancies = 0
@@ -380,37 +397,19 @@ const EntityHiring = () => {
                   className="pl-9"
                 />
               </div>
-              <SiteCorpSelect
-                value={areaFilter}
-                onValueChange={(v) => {
-                  setAreaFilter(v)
-                  setJobFilter("all")
-                }}
-              >
-                <SelectItem value="all">Todas las áreas</SelectItem>
-                {areas.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SiteCorpSelect>
-              <SiteCorpSelect value={jobFilter} onValueChange={setJobFilter}>
-                <SelectItem value="all">Todos los cargos</SelectItem>
-                {jobFilterOptions.map((j) => (
-                  <SelectItem key={j.id} value={j.id}>
-                    {j.name}
-                  </SelectItem>
-                ))}
-              </SiteCorpSelect>
-              <SiteCorpSelect
-                value={coverageFilter}
-                onValueChange={(v) => setCoverageFilter(v as CoverageFilter)}
-              >
-                <SelectItem value="with-vacancies">Con vacantes</SelectItem>
-                <SelectItem value="covered">Cubiertos</SelectItem>
-                <SelectItem value="all">Todos</SelectItem>
-              </SiteCorpSelect>
             </div>
+
+            <FilterBuilder
+              definitions={filters.definitions}
+              active={filters.active}
+              available={filters.available}
+              onAdd={filters.add}
+              onRemove={filters.remove}
+              onSetValues={filters.setValues}
+              onClear={filters.clear}
+              resultCount={filteredPositions.length}
+              totalCount={positions.length}
+            />
 
             {filteredPositions.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">

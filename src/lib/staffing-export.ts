@@ -21,10 +21,14 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
  */
 
 export interface StaffingExportRow {
+  area_id: string | null
   area_name: string | null
+  job_id: string | null
   job_name: string | null
+  position_id: string | null
   position_name: string | null
   occupational_category: string | null
+  worker_id: string | null
   worker_name: string | null
   gender_code: string | null
   identification: string | null
@@ -35,6 +39,8 @@ export interface StaffingExportRow {
   academic_amount: number | null
   academic_category: string | null
   service_start: string | null
+  has_masters_degree: boolean | null
+  has_doctorate_degree: boolean | null
 }
 
 /** Cabecera de las 15 informaciones del modelo oficial. */
