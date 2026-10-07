@@ -27,12 +27,6 @@ import { supabase } from "@/lib/supabase"
 
 export type AcademicCategory = "MASTER" | "DOCTOR"
 
-/** Catálogo de categorías académicas (orden de prioridad salarial descendente). */
-export const ACADEMIC_CATEGORIES: { value: AcademicCategory; label: string }[] = [
-  { value: "DOCTOR", label: "Doctor" },
-  { value: "MASTER", label: "Máster" },
-]
-
 export interface AcademicCategoryPaymentResolution {
   /** Categoría académica efectiva (DOCTOR tiene prioridad sobre MASTER). */
   category: AcademicCategory | null
