@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase"
 import {
   DOCUMENT_TEMPLATES_BUCKET,
   DOCX_MIME,
+  XLSX_MIME,
 } from "@/lib/document-templates"
 import {
   DOCUMENT_VARIABLES,
@@ -18,6 +19,7 @@ import {
   type Sc404SourceType,
 } from "@/lib/document-data"
 import { renderDocx } from "@/lib/docx-render"
+import { renderXlsxTemplate } from "@/lib/xlsx-render"
 
 /**
  * Fase 11B.2 — Servicio central de generación documental.
@@ -362,7 +364,10 @@ const loadVersion = async (versionId: string): Promise<TemplateResolution & { re
     versionId: text(row.id),
     versionNumber: num(row.version_number),
     versionStatus: text(row.status),
-    versionUsable: format === "DOCX" && text(row.configured_file_path) != null,
+    // El documento configurado debe ser un paquete OOXML analizable: Word (.docx)
+    // o Excel (.xlsx, sólo Movimiento de Nómina).
+    versionUsable:
+      (format === "DOCX" || format === "XLSX") && text(row.configured_file_path) != null,
     templateName: text(record(row.document_templates).name),
     effectiveFrom: text(row.effective_from),
     effectiveTo: text(row.effective_to),
@@ -568,7 +573,8 @@ const slug = (value: string | null | undefined): string => {
 
 export const buildGeneratedDocumentName = (
   precheck: DocumentGenerationPrecheck,
-  dateIso: string
+  dateIso: string,
+  extension: string = "docx"
 ): string => {
   const workerName = slug(precheck.documentData.worker.full_name)
   const base =
@@ -577,7 +583,7 @@ export const buildGeneratedDocumentName = (
       : isResolutionKind(precheck.kind)
         ? ["Resolucion", workerName]
         : isPayrollMovementKind(precheck.kind)
-        ? ["Movimiento", "Nomina", workerName]
+        ? [workerName, "Movimiento", "Nomina"]
         : isSc404Kind(precheck.kind)
         ? precheck.kind === "VACATION"
           ? ["Modelo SC-4-04 - Vacaciones", workerName]
@@ -592,7 +598,7 @@ export const buildGeneratedDocumentName = (
           workerName,
         ]
   const parts = base.map((part) => slug(part ?? "")).filter((part) => part !== "")
-  return `${parts.join("_")}_${dateIso}.docx`
+  return `${parts.join("_")}_${dateIso}.${extension}`
 }
 
 /* ------------------------------------------------------------------ */
@@ -680,9 +686,23 @@ const runGeneration = async (
         ...precheck.resolvedValues,
       }
     : precheck.resolvedValues
-  let rendered
+  // Selección del renderizador SEGÚN EL FORMATO REAL de la plantilla:
+  //    Word (.docx) → motor OOXML existente; Excel (.xlsx) → motor Excel.
+  //    Movimiento de Nómina usa plantilla Excel y NUNCA pasa por renderDocx.
+  const configuredFormat = (precheck.template.configuredFileFormat ?? "").toUpperCase()
+  const isXlsxTemplate = configuredFormat === "XLSX"
+  const outputMimeType = isXlsxTemplate ? XLSX_MIME : DOCX_MIME
+  const outputExtension = isXlsxTemplate ? "xlsx" : "docx"
+
+  let rendered: {
+    bytes: Uint8Array
+    unknownKeys: string[]
+    leftoverKeys: string[]
+  }
   try {
-    rendered = await renderDocx(sourceBytes, renderValues, knownKeys)
+    rendered = isXlsxTemplate
+      ? await renderXlsxTemplate(sourceBytes, renderValues, knownKeys)
+      : await renderDocx(sourceBytes, renderValues, knownKeys)
   } catch (err) {
     return failed(err instanceof Error ? err.message : "No se pudo procesar el documento de la plantilla")
   }
@@ -749,11 +769,11 @@ const runGeneration = async (
     return failed(err instanceof Error ? err.message : "No se pudo reservar la generación del documento")
   }
 
-  // 5) Subir el DOCX final al expediente del trabajador.
-  const docxBlob = new Blob([rendered.bytes], { type: DOCX_MIME })
+  // 5) Subir el documento final (Word o Excel, según la plantilla) al expediente.
+  const outputBlob = new Blob([rendered.bytes], { type: outputMimeType })
   const { error: uploadError } = await supabase.storage
     .from(WORKER_DOCUMENTS_BUCKET)
-    .upload(reservation.storage_path, docxBlob, { contentType: DOCX_MIME, upsert: false })
+    .upload(reservation.storage_path, outputBlob, { contentType: outputMimeType, upsert: false })
 
   if (uploadError) {
     await supabase.rpc("fail_document_generation", {
@@ -764,12 +784,16 @@ const runGeneration = async (
   }
 
   // 6) Registrar el documento y relacionarlo con el contrato/anexo.
-  const fileName = buildGeneratedDocumentName(precheck, precheck.template.referenceDate)
+  const fileName = buildGeneratedDocumentName(
+    precheck,
+    precheck.template.referenceDate,
+    outputExtension
+  )
   const { error: completeError } = await supabase.rpc("complete_document_generation", {
     p_worker_document_id: reservation.worker_document_id,
     p_file_name: fileName,
     p_file_size: rendered.bytes.byteLength,
-    p_mime_type: DOCX_MIME,
+    p_mime_type: outputMimeType,
   })
 
   if (completeError) {
@@ -802,7 +826,7 @@ export const BLOCKED_MESSAGES: Record<string, string> = {
   TEMPLATE_AMBIGUOUS:
     "Existe más de una versión de plantilla aplicable a la fecha de este documento. Revise la vigencia de las plantillas.",
   TEMPLATE_UNUSABLE:
-    "La versión de plantilla aplicable no tiene un documento Word configurado en formato .docx.",
+    "La versión de plantilla aplicable no tiene un documento configurado en un formato analizable (.docx o .xlsx).",
   NO_ANALYSIS: "La versión de plantilla aplicable no tiene un análisis de variables válido.",
   MISSING_DATA: "Faltan datos requeridos por esta plantilla.",
 }

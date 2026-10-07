@@ -21,12 +21,25 @@ export const DOCUMENT_TEMPLATES_BUCKET = "document-templates"
 export const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 export const DOC_MIME = "application/msword"
+export const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 /** Atributo `accept` para cualquier input de plantillas (§19). */
 export const WORD_ACCEPT = `.doc,.docx,${DOC_MIME},${DOCX_MIME}`
 
+/**
+ * Tipos documentales cuya plantilla oficial es una hoja de cálculo Excel (.xlsx)
+ * en lugar de un documento Word. Sólo Movimiento de Nómina.
+ */
+export const TEMPLATE_TYPE_USES_XLSX = (typeCode: string | null | undefined): boolean =>
+  typeCode === "PAYROLL_MOVEMENT"
+
+/** Atributo `accept` para plantillas según el tipo documental. */
+export const templateAcceptForType = (typeCode: string | null | undefined): string =>
+  TEMPLATE_TYPE_USES_XLSX(typeCode) ? `.xlsx,${XLSX_MIME}` : WORD_ACCEPT
+
 /** Formatos admitidos que el detector central puede reconocer. */
-export type WordDocumentFormat = "DOC" | "DOCX" | "UNSUPPORTED"
+export type WordDocumentFormat = "DOC" | "DOCX" | "XLSX" | "UNSUPPORTED"
 
 /** Límite de tamaño por archivo (10 MB). */
 export const MAX_TEMPLATE_FILE_BYTES = 10485760
@@ -369,7 +382,10 @@ export const detectWordDocumentFormat = async (file: File): Promise<WordDocument
 export const inspectTemplateFile = async (file: File): Promise<TemplateFileInspection> => {
   const name = file.name.toLowerCase()
   const declaredExtension = name.includes(".") ? name.split(".").pop() ?? "" : ""
-  const extensionHint = declaredExtension === "doc" || declaredExtension === "docx" ? declaredExtension : ""
+  const extensionHint =
+    declaredExtension === "doc" || declaredExtension === "docx" || declaredExtension === "xlsx"
+      ? declaredExtension
+      : ""
 
   if (file.size === 0) {
     return { format: "UNSUPPORTED", extension: extensionHint, mimeType: "", problem: "El archivo está vacío." }
@@ -391,6 +407,11 @@ export const inspectTemplateFile = async (file: File): Promise<TemplateFileInspe
   }
 
   if (startsWithBytes(bytes, [0x50, 0x4b])) {
+    // Paquete OOXML (ZIP): Excel .xlsx o Word .docx. La pista fiable es la
+    // extensión declarada; el analizador central confirma el formato real.
+    if (declaredExtension === "xlsx") {
+      return { format: "XLSX", extension: "xlsx", mimeType: XLSX_MIME, problem: null }
+    }
     return { format: "DOCX", extension: "docx", mimeType: DOCX_MIME, problem: null }
   }
 
@@ -669,6 +690,7 @@ export const getTemplateFileUrl = async (path: string): Promise<string | null> =
 export const templateFileFormatLabel = (format: string | null | undefined): string => {
   if (format === "DOC") return "Word 97-2003 (.doc)"
   if (format === "DOCX") return "Word (.docx)"
+  if (format === "XLSX") return "Excel (.xlsx)"
   return "Formato no identificado"
 }
 

@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
-  WORD_ACCEPT,
+  templateAcceptForType,
+  TEMPLATE_TYPE_USES_XLSX,
   createDocumentTemplate,
   describeTemplateFileProblem,
   fetchDocumentTemplateTypes,
@@ -45,6 +46,7 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [progress, setProgress] = React.useState<string | null>(null)
+  const usesXlsx = TEMPLATE_TYPE_USES_XLSX(documentTypeCode)
 
   React.useEffect(() => {
     if (!open) return
@@ -86,7 +88,11 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
       return
     }
     if (!file) {
-      setError("Adjunte el documento Word de la plantilla (.doc o .docx).")
+      setError(
+        usesXlsx
+          ? "Adjunte la plantilla Excel (.xlsx)."
+          : "Adjunte el documento Word de la plantilla (.doc o .docx)."
+      )
       return
     }
 
@@ -121,6 +127,8 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
         )
       } else if (registered.analysis?.valid_docx) {
         showSuccess("Plantilla creada y analizada correctamente.")
+      } else if (usesXlsx) {
+        showError("La plantilla se creó, pero la hoja de cálculo no es un .xlsx válido.")
       } else {
         showError("La plantilla se creó, pero el documento no es un paquete Word (.docx) válido.")
       }
@@ -201,29 +209,30 @@ const CreateDocumentTemplateDialog = ({ open, onOpenChange, entityId, onCreated 
           </div>
 
           <div className="space-y-2">
-            <Label>Documento Word original *</Label>
+            <Label>{usesXlsx ? "Plantilla Excel original *" : "Documento Word original *"}</Label>
             <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3 text-sm">
               <span className="flex items-center gap-2 text-ink">
                 <FileUp className="h-4 w-4 text-sitecorp-primary" />
-                {file ? file.name : "Subir documento Word"}
+                {file ? file.name : usesXlsx ? "Subir plantilla Excel" : "Subir documento Word"}
               </span>
               <span className="text-xs text-muted-foreground">Máx. 10 MB</span>
               <input
                 type="file"
-                accept={WORD_ACCEPT}
+                accept={templateAcceptForType(documentTypeCode)}
                 className="hidden"
                 disabled={saving}
                 onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              Formatos admitidos: .doc y .docx. Se recomienda .docx para que SiteCorp pueda analizar
-              automáticamente los marcadores.
+              {usesXlsx
+                ? "Formato admitido: .xlsx. SiteCorp analizará automáticamente los marcadores de las celdas."
+                : "Formatos admitidos: .doc y .docx. Se recomienda .docx para que SiteCorp pueda analizar automáticamente los marcadores."}
             </p>
             <p className="text-xs text-muted-foreground">
-              Suba el modelo oficial tal cual. No se modifica ni se sobrescribe: en el detalle de la
-              plantilla podrá descargarlo, insertar en Word los marcadores ({"{{worker.full_name}}"}) y
-              subirlo como documento configurado.
+              {usesXlsx
+                ? "Suba la hoja de cálculo oficial tal cual. No se modifica ni se sobrescribe: en el detalle de la plantilla podrá descargarla, insertar en las celdas los marcadores ({{m.nom}}) y subirla como plantilla configurada."
+                : "Suba el modelo oficial tal cual. No se modifica ni se sobrescribe: en el detalle de la plantilla podrá descargarlo, insertar en Word los marcadores ({{worker.full_name}}) y subirlo como documento configurado."}
             </p>
           </div>
 

@@ -195,7 +195,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
             : "Documento original cargado y analizado."
         )
       } else {
-        showError("El archivo se cargó, pero no es un paquete Word (.docx) válido.")
+        showError("El archivo se cargó, pero no es un paquete OOXML válido (.docx o .xlsx).")
       }
 
       setBusyLabel(null)
@@ -224,7 +224,7 @@ const EntitySettingsDocumentTemplateDetail = () => {
       if (!result.supported) {
         showError(
           result.issue ||
-            "El documento no puede analizarse: sustitúyalo por un documento Word en formato .docx."
+            "El documento no puede analizarse: sustitúyalo por un documento en formato .docx o .xlsx."
         )
       } else {
         showSuccess("Análisis actualizado.")

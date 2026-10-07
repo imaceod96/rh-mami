@@ -28,7 +28,13 @@ interface Props {
 
 /** Etiqueta corta del formato real del archivo de cada versión (§6/§27). */
 const formatShortLabel = (format: string | null): string =>
-  format === "DOC" ? ".doc (Word 97-2003)" : format === "DOCX" ? ".docx" : "formato desconocido"
+  format === "DOC"
+    ? ".doc (Word 97-2003)"
+    : format === "DOCX"
+      ? ".docx"
+      : format === "XLSX"
+        ? ".xlsx (Excel)"
+        : "formato desconocido"
 
 const statusBadge = (status: DocumentTemplateVersion["status"]) => {
   if (status === "ACTIVE") return <SiteCorpStatusBadge status="success">Activa</SiteCorpStatusBadge>

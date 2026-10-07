@@ -114,9 +114,15 @@ serve(async (req) => {
         .download(doc.storage_path)
       if (downloadError || !file) continue
       const bytes = new Uint8Array(await file.arrayBuffer())
-      // Nombre legible y seguro; evita colisiones con un sufijo corto del id.
-      const base = sanitize(String(doc.file_name || "documento").replace(/\.docx$/i, ""))
-      const name = `${base || "documento"}_${String(doc.id).slice(0, 8)}.docx`
+      // Nombre legible y seguro; conserva la extensión REAL del documento
+      // (.docx para Word, .xlsx para el Movimiento de Nómina) y evita colisiones
+      // con un sufijo corto del id.
+      const rawName = String(doc.file_name || "")
+      const extMatch =
+        rawName.match(/\.([a-z0-9]+)$/i) || String(doc.storage_path || "").match(/\.([a-z0-9]+)$/i)
+      const extension = extMatch ? extMatch[1].toLowerCase() : "docx"
+      const base = sanitize(rawName.replace(/\.[a-z0-9]+$/i, ""))
+      const name = `${base || "documento"}_${String(doc.id).slice(0, 8)}.${extension}`
       zip.file(name, bytes)
       added += 1
     }

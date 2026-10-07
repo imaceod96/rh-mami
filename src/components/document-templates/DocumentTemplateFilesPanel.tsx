@@ -1,7 +1,7 @@
 import * as React from "react"
 import { formatDocumentDate } from "@/lib/document-variables"
 import {
-  WORD_ACCEPT,
+  templateAcceptForType,
   formatTemplateFileSize,
   getTemplateFileUrl,
   templateFileFormatLabel,
@@ -73,7 +73,9 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
             <FileText className="h-4 w-4 text-sitecorp-primary" />
             <p className="text-sm font-semibold text-ink">{title}</p>
             {path && (
-              <SiteCorpStatusBadge status={format === "DOCX" ? "success" : "neutral"}>
+              <SiteCorpStatusBadge
+                status={format === "DOCX" || format === "XLSX" ? "success" : "neutral"}
+              >
                 {templateFileFormatLabel(format)}
               </SiteCorpStatusBadge>
             )}
@@ -107,7 +109,7 @@ const DocumentTemplateFilesPanel = ({ version, canManage, busy, onUpload, onRean
               {path ? "Reemplazar" : "Subir"}
               <input
                 type="file"
-                accept={WORD_ACCEPT}
+                accept={templateAcceptForType(version.document_type_code)}
                 className="hidden"
                 disabled={busy}
                 onChange={(event) => {

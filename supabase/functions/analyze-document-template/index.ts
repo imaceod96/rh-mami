@@ -38,6 +38,7 @@ const MAX_MALFORMED = 20
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 const DOC_MIME = "application/msword"
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 const FORMAT_ISSUE: Record<string, string> = {
   DOC:
@@ -102,6 +103,33 @@ const readParagraph = (paragraphXml: string): { text: string; runs: RunRange[] }
 
 const isSplitAcrossRuns = (runs: RunRange[], start: number, end: number): boolean =>
   runs.some((run) => run.start > start && run.start < end)
+
+/**
+ * Extrae los textos de celda de un XML de Excel.
+ *
+ * - `xl/sharedStrings.xml`: cada celda de texto apunta a un `<si>`; dentro de un
+ *   `<si>` puede haber varios `<t>` (texto enriquecido), así que se CONCATENAN
+ *   antes de buscar, igual que se hace con los «runs» de Word.
+ * - `xl/worksheets/sheetN.xml`: sólo se consideran las cadenas en línea `<is>`.
+ *
+ * Devuelve la lista de textos de celda ya decodificados.
+ */
+const readXlsxCellTexts = (xml: string, containerTag: "si" | "is"): string[] => {
+  const texts: string[] = []
+  const containerPattern = new RegExp(`<${containerTag}(?:\\s[^>]*)?>[\\s\\S]*?<\\/${containerTag}>`, "g")
+  const textPattern = /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g
+  let container: RegExpExecArray | null
+  while ((container = containerPattern.exec(xml)) !== null) {
+    let text = ""
+    let piece: RegExpExecArray | null
+    textPattern.lastIndex = 0
+    while ((piece = textPattern.exec(container[0])) !== null) {
+      text += decodeXml(piece[1])
+    }
+    texts.push(text)
+  }
+  return texts
+}
 
 const startsWith = (bytes: Uint8Array, sequence: number[], offset = 0): boolean =>
   sequence.every((byte, index) => bytes[offset + index] === byte)
@@ -375,6 +403,112 @@ serve(async (req) => {
           analysis_supported: false,
           issue: FORMAT_ISSUE.ODT,
           analysis: null,
+        })
+      }
+
+      // ── XLSX (Excel): plantilla de hoja de cálculo (Movimiento de Nómina) ──
+      // Se reconoce por la parte propia de un libro de Excel (xl/workbook.xml).
+      if (names.some((name) => name === "xl/workbook.xml")) {
+        const xlsxWarnings: string[] = []
+        const xlsxMalformed: Malformed[] = []
+        const xlsxOccurrences = new Map<string, Occurrence>()
+        const xlsxScannedParts: string[] = []
+        let cellsScanned = 0
+        let xlsxOrder = 0
+
+        const scanXlsxText = (text: string, partName: string) => {
+          if (!text || !text.includes("{")) return
+          cellsScanned += 1
+          VALID_PLACEHOLDER.lastIndex = 0
+          let match: RegExpExecArray | null
+          while ((match = VALID_PLACEHOLDER.exec(text)) !== null) {
+            const key = match[1].trim()
+            if (!key) continue
+            const current = xlsxOccurrences.get(key)
+            if (current) {
+              current.count += 1
+            } else {
+              xlsxOrder += 1
+              xlsxOccurrences.set(key, { key, count: 1, split_runs: 0 })
+            }
+          }
+          const remainder = text.replace(VALID_PLACEHOLDER, "")
+          VALID_PLACEHOLDER.lastIndex = 0
+          const singleBrace = remainder.match(SINGLE_BRACE)
+          if (
+            (remainder.includes("{{") || remainder.includes("}}")) &&
+            xlsxMalformed.length < MAX_MALFORMED
+          ) {
+            xlsxMalformed.push({ part: partName, snippet: remainder.trim().slice(0, 120) })
+          } else if (singleBrace && xlsxMalformed.length < MAX_MALFORMED) {
+            xlsxMalformed.push({ part: partName, snippet: singleBrace[0].trim().slice(0, 120) })
+          }
+        }
+
+        const sharedStrings = zip.file("xl/sharedStrings.xml")
+        if (sharedStrings) {
+          const xml = await sharedStrings.async("string")
+          xlsxScannedParts.push("xl/sharedStrings.xml")
+          for (const text of readXlsxCellTexts(xml, "si")) scanXlsxText(text, "xl/sharedStrings.xml")
+        }
+
+        const sheetNames = names
+          .filter((name) => /^xl\/worksheets\/sheet\d*\.xml$/.test(name))
+          .sort()
+        for (const sheetName of sheetNames) {
+          const xml = await zip.file(sheetName)!.async("string")
+          xlsxScannedParts.push(sheetName)
+          for (const text of readXlsxCellTexts(xml, "is")) scanXlsxText(text, sheetName)
+        }
+
+        if (xlsxOccurrences.size === 0) {
+          xlsxWarnings.push("La plantilla no contiene ningún marcador {{variable}}.")
+        }
+
+        const orderedOccurrences = Array.from(xlsxOccurrences.values()).map((occurrence, index) => ({
+          key: occurrence.key,
+          count: occurrence.count,
+          split_runs: 0,
+          sort_order: index + 1,
+        }))
+
+        console.log("[analyze-document-template] análisis XLSX completado", {
+          filePath,
+          placeholders: orderedOccurrences.length,
+          malformed: xlsxMalformed.length,
+        })
+
+        return jsonResponse({
+          ...common,
+          detected_format: "XLSX",
+          mime_type: XLSX_MIME,
+          analysis_supported: true,
+          issue: null,
+          valid_docx: true,
+          zip_signature_ok: true,
+          has_document_xml: true,
+          scanned_parts: xlsxScannedParts,
+          paragraphs_scanned: cellsScanned,
+          occurrences: orderedOccurrences,
+          malformed_placeholders: xlsxMalformed,
+          split_run_placeholders: 0,
+          warnings: xlsxWarnings,
+          analysis: {
+            file_path: filePath,
+            file_sha256: fileSha256,
+            file_size: bytes.length,
+            format: "XLSX",
+            valid_docx: true,
+            zip_signature_ok: true,
+            has_document_xml: true,
+            scanned_parts: xlsxScannedParts,
+            paragraphs_scanned: cellsScanned,
+            occurrences: orderedOccurrences,
+            malformed_placeholders: xlsxMalformed,
+            split_run_placeholders: 0,
+            warnings: xlsxWarnings,
+            analyzed_at: new Date().toISOString(),
+          },
         })
       }
 

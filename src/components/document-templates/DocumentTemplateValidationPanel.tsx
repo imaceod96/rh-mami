@@ -34,11 +34,11 @@ interface CheckDescriptor {
 }
 
 const CHECKS: CheckDescriptor[] = [
-  { key: "original_file_present", label: "Documento Word original cargado", blocking: true },
+  { key: "original_file_present", label: "Documento original cargado", blocking: true },
   { key: "configured_file_present", label: "Documento configurado (con variables) cargado", blocking: true },
   {
     key: "configured_format_analyzable",
-    label: "El documento configurado puede prepararse para análisis (.docx)",
+    label: "El documento configurado puede prepararse para análisis (.docx o .xlsx)",
     blocking: true,
   },
   { key: "analysis_present", label: "Análisis del documento registrado", blocking: true },
@@ -50,7 +50,7 @@ const CHECKS: CheckDescriptor[] = [
   },
   {
     key: "valid_docx",
-    label: "El documento analizado es un paquete Word (.docx) válido",
+    label: "El documento analizado es un paquete OOXML válido (.docx o .xlsx)",
     blocking: true,
     requiresAnalysis: true,
   },
