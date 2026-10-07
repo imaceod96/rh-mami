@@ -475,8 +475,8 @@ const EntitySettingsTenureScale = () => {
                                         setFormData((d) => ({
                                           ...d,
                                           to_limit: !!checked,
-                                          to_amount: !!checked ? "" : formData.to_amount,
-                                          to_unit: !!checked ? "Meses" : formData.to_unit,
+                                          to_amount: checked ? "" : formData.to_amount,
+                                          to_unit: checked ? "Meses" : formData.to_unit,
                                         }))
                                       }
                                       disabled={false}
