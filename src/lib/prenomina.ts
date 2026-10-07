@@ -6,8 +6,13 @@ export { academicCategoryLabel }
 /**
  * PRENÓMINA (Fase 1) — preparación mensual del pago de los trabajadores activos.
  *
- * Conceptos incluidos en esta fase: Salario Escala + Nocturnidad.
- * CLA queda explícitamente FUERA: no se inventa su fórmula.
+ * Conceptos incluidos: Salario Escala + Antigüedad + Categoría académica +
+ * Nocturnidad + CLA (Condiciones Laborales Anormales).
+ *
+ * CLA y Nocturnidad son conceptos DISTINTOS e independientes y ambos coexisten:
+ *   * Nocturnidad → tramos fijos 19:00–23:00 / 23:00–07:00 (prenomina_night_entries).
+ *   * CLA         → tarifas por hora configuradas en el Cargo (diurno + dos tramos
+ *                   nocturnos configurables) × minutos capturados por trabajador.
  *
  * El cálculo definitivo vive en la base de datos (RPC `prenomina_*`). Este módulo
  * reutiliza las MISMAS constantes de dominio para previsualizar en la UI y para

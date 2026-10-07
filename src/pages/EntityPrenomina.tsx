@@ -33,7 +33,7 @@ import {
   fetchPrenominaPeriods,
   formatHours,
   formatMoney,
-  formatMinutesToHours,
+  formatMoneyWithCurrency,
   refreshPrenominaWorkers,
   reopenPrenominaPeriod,
   savePrenominaCla,
@@ -47,6 +47,66 @@ interface SaveNightInput {
   start: string
   end: string
   nights: number
+}
+
+/**
+ * Detalle desplegable del CLA de un trabajador. Muestra explícitamente la
+ * conversión minutos → horas, la tarifa del tramo y el importe, para que RRHH
+ * pueda auditar el cálculo. Usa el SNAPSHOT del período (no la config actual).
+ */
+const ClaDetail = ({ entry, currency }: { entry: PrenominaWorkerEntry; currency: string }) => {
+  if (!entry.cla_applied) {
+    return <p className="text-sm text-muted-foreground">CLA no aplicada en este período.</p>
+  }
+  return (
+    <div className="space-y-3 py-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Condiciones Laborales Anormales
+      </p>
+
+      {entry.cla_day_enabled && (
+        <div className="text-sm">
+          <p className="font-medium text-ink">DIURNO</p>
+          <p className="text-muted-foreground">
+            Minutos trabajados: {entry.cla_day_minutes} min · Horas calculadas:{" "}
+            {formatHours(entry.cla_day_hours)} h · Tarifa:{" "}
+            {formatMoneyWithCurrency(entry.cla_day_hourly_rate, currency)} ·
+            <span className="ml-1 font-medium text-ink">
+              Importe: {formatMoneyWithCurrency(entry.cla_day_payment, currency)}
+            </span>
+          </p>
+        </div>
+      )}
+
+      {entry.cla_night_enabled && (
+        <div className="space-y-1 text-sm">
+          <p className="font-medium text-ink">NOCTURNO</p>
+          <p className="text-muted-foreground">
+            {String(entry.cla_night1_start || "").slice(0, 5)} –{" "}
+            {String(entry.cla_night1_end || "").slice(0, 5)} · Minutos: {entry.cla_night1_minutes} min
+            · Horas: {formatHours(entry.cla_night1_hours)} h · Tarifa:{" "}
+            {formatMoneyWithCurrency(entry.cla_night1_hourly_rate, currency)} ·
+            <span className="ml-1 font-medium text-ink">
+              Importe: {formatMoneyWithCurrency(entry.cla_night1_payment, currency)}
+            </span>
+          </p>
+          <p className="text-muted-foreground">
+            {String(entry.cla_night2_start || "").slice(0, 5)} –{" "}
+            {String(entry.cla_night2_end || "").slice(0, 5)} · Minutos: {entry.cla_night2_minutes} min
+            · Horas: {formatHours(entry.cla_night2_hours)} h · Tarifa:{" "}
+            {formatMoneyWithCurrency(entry.cla_night2_hourly_rate, currency)} ·
+            <span className="ml-1 font-medium text-ink">
+              Importe: {formatMoneyWithCurrency(entry.cla_night2_payment, currency)}
+            </span>
+          </p>
+        </div>
+      )}
+
+      <p className="text-sm font-semibold text-ink">
+        TOTAL CLA: {formatMoneyWithCurrency(entry.cla_total_payment, currency)}
+      </p>
+    </div>
+  )
 }
 
 const EntityPrenomina = () => {
@@ -75,6 +135,8 @@ const EntityPrenomina = () => {
 
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [activeEntry, setActiveEntry] = React.useState<PrenominaWorkerEntry | null>(null)
+  // Detalle CLA desplegable por trabajador (minutos → horas → tarifa → importe).
+  const [expandedEntryId, setExpandedEntryId] = React.useState<string | null>(null)
 
   const entityName = currentEntity?.name || ""
 
@@ -280,6 +342,11 @@ const EntityPrenomina = () => {
     [entries]
   )
 
+  const grandCla = React.useMemo(
+    () => entries.reduce((acc, e) => acc + Number(e.cla_total_payment || 0), 0),
+    [entries]
+  )
+
   if (permissionsLoading || loading) {
     return <SiteCorpLoading />
   }
@@ -458,14 +525,22 @@ const EntityPrenomina = () => {
                           Pago categoría académica
                         </span>
                       </TableHead>
+                      <TableHead>
+                        <span title="Condiciones Laborales Anormales (concepto independiente de la Nocturnidad). Pulsa el importe para ver el detalle.">
+                          CLA
+                        </span>
+                      </TableHead>
                       <TableHead>Nocturnidad</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead className="text-right">Detalle</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {entries.map((entry) => (
-                      <TableRow key={entry.id}>
+                    {entries.map((entry) => {
+                      const isExpanded = expandedEntryId === entry.id
+                      return (
+                      <React.Fragment key={entry.id}>
+                      <TableRow>
                         <TableCell className="font-medium text-ink">{entry.worker_name_snapshot}</TableCell>
                         <TableCell>{entry.job_name_snapshot || "—"}</TableCell>
                         <TableCell>{entry.position_name_snapshot || "—"}</TableCell>
@@ -516,6 +591,27 @@ const EntityPrenomina = () => {
                             </span>
                           )}
                         </TableCell>
+                        <TableCell>
+                          {entry.cla_applied ? (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedEntryId(isExpanded ? null : entry.id)}
+                              className="inline-flex items-center gap-1 font-medium text-sitecorp-primary hover:opacity-80"
+                              title="Ver detalle de CLA"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              )}
+                              {formatMoney(entry.cla_total_payment)}
+                            </button>
+                          ) : entry.cla_day_enabled || entry.cla_night_enabled ? (
+                            <span className="text-xs text-muted-foreground">No aplicada</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No aplica</span>
+                          )}
+                        </TableCell>
                         <TableCell>{formatMoney(entry.total_night_payment)}</TableCell>
                         <TableCell className="font-medium text-ink">{formatMoney(entry.total_payment)}</TableCell>
                         <TableCell className="text-right">
@@ -530,7 +626,16 @@ const EntityPrenomina = () => {
                           </SiteCorpButton>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      {isExpanded && (
+                        <TableRow>
+                          <TableCell colSpan={14} className="bg-muted/20">
+                            <ClaDetail entry={entry} currency={entry.salary_currency || "CUP"} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </React.Fragment>
+                      )
+                    })}
                   </TableBody>
                 </Table>
 
@@ -545,6 +650,12 @@ const EntityPrenomina = () => {
                     <span className="text-sm text-muted-foreground">Total categoría académica: </span>
                     <span className="text-base font-semibold text-ink">
                       {formatMoney(grandAcademic)} {entries[0]?.salary_currency || "CUP"}
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-border px-5 py-3">
+                    <span className="text-sm text-muted-foreground">Total CLA: </span>
+                    <span className="text-base font-semibold text-ink">
+                      {formatMoney(grandCla)} {entries[0]?.salary_currency || "CUP"}
                     </span>
                   </div>
                   <div className="rounded-xl border-2 border-sitecorp-primary/30 bg-sitecorp-primary/5 px-5 py-3">
