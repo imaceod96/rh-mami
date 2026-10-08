@@ -47,6 +47,11 @@ export interface SalaryGroupCurrentValue {
   effective_to: string | null
 }
 
+/** Fila devuelta por la RPC resolve_salary_group_values (vigencia temporal por grupo). */
+export interface ResolvedSalaryGroupValue extends SalaryGroupCurrentValue {
+  salary_group_id: string
+}
+
 export interface SalaryGroupWithCurrent {
   group: SalaryGroup
   /** Importe vigente HOY (resolución temporal por effective_from / effective_to) */
@@ -156,7 +161,7 @@ export const SalaryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         )
         if (valuesError) throw valuesError
-        ;((valuesData as any[]) || []).forEach(v => {
+        ;((valuesData as ResolvedSalaryGroupValue[]) || []).forEach(v => {
           valuesByGroup[v.salary_group_id] = {
             amount: v.amount,
             currency_code: v.currency_code,
