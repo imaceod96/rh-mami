@@ -163,6 +163,16 @@ export interface ContractAddendum {
   changes: AddendumChange[]
 }
 
+/**
+ * Fila cruda de `contract_addendums` tal como la devuelve Supabase: sin tipos
+ * generados, la relación embebida con `payment_methods` se infiere como array
+ * (aunque la FK es to-one) y el código la normaliza a objeto antes de exponerla
+ * como `ContractAddendum`.
+ */
+interface ContractAddendumRow extends Omit<ContractAddendum, "payment_method"> {
+  payment_method: { name: string } | { name: string }[] | null
+}
+
 export interface AddendumPending {
   blocking: string[]
   warnings: string[]
@@ -327,7 +337,7 @@ export const fetchWorkerAddendums = async (workerId: string): Promise<ContractAd
 
   if (error) throw error
 
-  return ((data as ContractAddendum[]) || []).map((row) => ({
+  return ((data as ContractAddendumRow[]) || []).map((row) => ({
     ...row,
     addendum_number: toNumber(row.addendum_number),
     previous_amount: toNumber(row.previous_amount),
