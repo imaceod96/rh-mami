@@ -251,6 +251,71 @@ const fullNameOf = (row: {
 }
 
 /**
+ * Relaciones incrustadas en las consultas del SC-4-04 y de la asignación vigente.
+ * Las relaciones to-one de PostgREST llegan como objeto; se admiten arrays porque
+ * el código normaliza ambos casos.
+ */
+interface Sc404EntityRelation {
+  name: string | null
+  code: string | null
+}
+
+interface Sc404WorkerRelation {
+  id: string
+  first_name: string | null
+  first_surname: string | null
+  second_surname: string | null
+  identification: string | null
+  organization_entity_id: string
+  entity: Sc404EntityRelation | Sc404EntityRelation[] | null
+}
+
+/** Fila de `worker_vacations` con el trabajador y su entidad incrustados. */
+interface VacationDocumentRow {
+  id: string
+  worker_id: string
+  start_date: string
+  end_date: string
+  natural_days: number
+  charged_days: number
+  status: string
+  worker: Sc404WorkerRelation | Sc404WorkerRelation[] | null
+}
+
+/** Fila de `worker_medical_certificates` con el trabajador y su entidad incrustados. */
+interface MedicalCertificateDocumentRow {
+  id: string
+  worker_id: string
+  start_date: string
+  return_date: string
+  days: number
+  worker: Sc404WorkerRelation | Sc404WorkerRelation[] | null
+}
+
+interface AssignmentAreaRelation {
+  name: string | null
+}
+
+interface AssignmentJobRelation {
+  id: string
+  area: AssignmentAreaRelation | AssignmentAreaRelation[] | null
+}
+
+interface AssignmentPositionRelation {
+  id: string
+  job: AssignmentJobRelation | AssignmentJobRelation[] | null
+}
+
+/** Fila de `worker_position_assignments` con puesto, cargo y área incrustados. */
+interface WorkerAssignmentRow {
+  id: string
+  start_date: string
+  end_date: string | null
+  is_current: boolean
+  position: AssignmentPositionRelation | AssignmentPositionRelation[] | null
+}
+
+/**
  * Datos documentales del SC-4-04. La entidad y el área se resuelven desde la
  * relación REAL del trabajador del registro (§30/§31/§32), nunca desde la
  * entidad seleccionada en el frontend.
@@ -274,7 +339,7 @@ export async function getSc404DocumentData(
       .eq("id", sourceId)
       .maybeSingle()
     if (error) throw new Error(error.message)
-    const row = (data ?? {}) as any
+    const row = (data ?? {}) as VacationDocumentRow
     if (!row?.id) throw new Error("Período de vacaciones no encontrado")
     if (row.status === "CANCELLED") throw new Error("No se puede generar el documento de un período cancelado")
 
@@ -332,7 +397,7 @@ export async function getSc404DocumentData(
     .eq("id", sourceId)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  const row = (data ?? {}) as any
+  const row = (data ?? {}) as MedicalCertificateDocumentRow
   if (!row?.id) throw new Error("Certificado médico no encontrado")
 
   const worker = Array.isArray(row.worker) ? row.worker[0] : row.worker
@@ -397,7 +462,7 @@ async function fetchWorkerAssignmentContext(
     .eq("worker_id", workerId)
     .order("start_date", { ascending: false })
 
-  const rows = ((data || []) as any[]).map((a) => ({
+  const rows = ((data || []) as WorkerAssignmentRow[]).map((a) => ({
     position:
       a.position && (Array.isArray(a.position) ? a.position[0] : a.position) || null,
     start_date: String(a.start_date ?? ""),

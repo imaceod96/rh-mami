@@ -79,6 +79,11 @@ export interface ContractCompensationComponent {
   display_order: number
 }
 
+/** Concepto persistido con el contrato al que pertenece (historial por contrato). */
+interface CompensationComponentWithContract extends ContractCompensationComponent {
+  employment_contract_id: string
+}
+
 export interface ContractConditionsSnapshot {
   id: string
   signature_date: string | null
@@ -97,6 +102,24 @@ export interface ContractConditionsSnapshot {
 export interface ContractFormalizationPending {
   blocking: string[]
   warnings: string[]
+}
+
+/**
+ * Fila de `employment_contracts` + `payment_methods` tal como la devuelve la
+ * consulta del snapshot. La relación to-one con `payment_methods` llega como
+ * objeto; se admite también array porque el código normaliza ambos casos.
+ */
+interface ContractConditionsRow {
+  id: string
+  signature_date: string | null
+  signature_place: string | null
+  payment_method_id: string | null
+  payment_schedule_text: string | null
+  salary_amount: number | null
+  salary_currency_code: string | null
+  salary_snapshot_status: string
+  total_compensation_snapshot: number | null
+  payment_method: { name: string; code: string } | { name: string; code: string }[] | null
 }
 
 /** Catálogo global de formas de pago (A tiempo / A rendimiento). */
@@ -151,7 +174,7 @@ export const fetchContractCompensationComponents = async (
     .order("display_order")
 
   if (error) throw error
-  return ((data as any[]) || []).map((row) => ({
+  return ((data as ContractCompensationComponent[]) || []).map((row) => ({
     ...row,
     amount: Number(row.amount),
   })) as ContractCompensationComponent[]
@@ -175,7 +198,7 @@ export const fetchComponentsByContract = async (
     .order("display_order")
 
   if (error) throw error
-  ;((data as any[]) || []).forEach((row) => {
+  ;((data as CompensationComponentWithContract[]) || []).forEach((row) => {
     const list =
       map[row.employment_contract_id] || (map[row.employment_contract_id] = [])
     list.push({
@@ -208,7 +231,7 @@ export const fetchContractConditions = async (
   if (error) throw error
   if (!data) return null
 
-  const row = data as any
+  const row = data as ContractConditionsRow
   const payment = Array.isArray(row.payment_method) ? row.payment_method[0] : row.payment_method
 
   return {
