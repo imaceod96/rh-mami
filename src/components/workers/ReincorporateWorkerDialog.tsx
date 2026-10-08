@@ -198,8 +198,10 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       if (workersError) throw workersError
 
       const counts: Record<string, number> = {}
-      ;((workersData as any[]) || []).forEach((w: any) => {
-        ;((w.assignments as any[]) || []).forEach((a: any) => {
+      ;((workersData as {
+        assignments: { position_id: string; is_current: boolean; end_date: string | null }[] | null
+      }[]) || []).forEach((w) => {
+        ;(w.assignments || []).forEach((a) => {
           if (a.is_current && !a.end_date) {
             counts[a.position_id] = (counts[a.position_id] || 0) + 1
           }
@@ -223,7 +225,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         .maybeSingle()
       if (workerError) throw workerError
       if (workerRow) {
-        const row = workerRow as any
+        const row = workerRow as { first_name: string; first_surname: string; second_surname: string | null; identification: string }
         setWorker({
           fullName: [row.first_name, row.first_surname, row.second_surname]
             .filter(Boolean)

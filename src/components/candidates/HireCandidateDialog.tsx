@@ -255,8 +255,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       if (workersError) throw workersError
 
       const counts: Record<string, number> = {}
-      ;((workersData as any[]) || []).forEach((w: any) => {
-        ;((w.assignments as any[]) || []).forEach((a: any) => {
+      ;((workersData as {
+        assignments: { position_id: string; is_current: boolean; end_date: string | null }[] | null
+      }[]) || []).forEach((w) => {
+        ;(w.assignments || []).forEach((a) => {
           if (a.is_current && !a.end_date) {
             counts[a.position_id] = (counts[a.position_id] || 0) + 1
           }
@@ -276,7 +278,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         .order("first_name")
       if (candidatesError) throw candidatesError
       setCandidates(
-        (((candidatesData as any[]) || []).map((c: any) => ({
+        (((candidatesData as (Omit<CandidateRow, "worker"> & { worker: LinkedWorker | LinkedWorker[] | null })[]) || []).map((c) => ({
           ...c,
           worker: Array.isArray(c.worker) ? c.worker[0] || null : c.worker || null,
         })) as CandidateRow[]) || []
@@ -543,7 +545,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         })
         if (rpcError) throw rpcError
 
-        const payload = (data as any) || {}
+        const payload = (data || {}) as { worker_id?: string | null; resolution_id?: string | null; contract_id?: string | null }
         const workerId = payload.worker_id as string | undefined
         const resolutionId = payload.resolution_id as string | undefined
 
@@ -676,7 +678,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
-      const payload = (data as any) || {}
+      const payload = (data || {}) as { worker_id?: string | null; resolution_id?: string | null; contract_id?: string | null }
       const workerId = payload.worker_id as string | undefined
       const contractId = payload.contract_id as string | undefined
 

@@ -201,8 +201,10 @@ const ChangePositionDialog: React.FC<ChangePositionDialogProps> = ({
       if (workersError) throw workersError
 
       const counts: Record<string, number> = {}
-      ;((workersData as any[]) || []).forEach((w: any) => {
-        ;((w.assignments as any[]) || []).forEach((a: any) => {
+      ;((workersData as {
+        assignments: { position_id: string; is_current: boolean; end_date: string | null }[] | null
+      }[]) || []).forEach((w) => {
+        ;(w.assignments || []).forEach((a) => {
           if (a.is_current && !a.end_date) {
             counts[a.position_id] = (counts[a.position_id] || 0) + 1
           }

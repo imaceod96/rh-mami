@@ -153,7 +153,7 @@ export const RegisterVacationDialog = ({
       setSubmitting(false)
       onOpenChange(false)
       if (onSuccess) onSuccess()
-    } catch (e: any) {
+    } catch (e) {
       setError(e.message || "Error desconocido al registrar vacaciones")
       setSubmitting(false)
     }
