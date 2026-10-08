@@ -29,15 +29,15 @@ export interface EntityFilterOption {
   label: string
 }
 
-export interface EntityFilterDefinition {
+export interface EntityFilterDefinition<T = unknown> {
   key: string
   label: string
   type: EntityFilterType
   options?: EntityFilterOption[]
   /** Valor simple del registro (se compara como texto). */
-  getValue?: (item: unknown) => unknown
+  getValue?: (item: T) => unknown
   /** Valores múltiples del registro (OR dentro del mismo criterio). */
-  getValues?: (item: unknown) => string[]
+  getValues?: (item: T) => string[]
   /** Marcador de posición del control de texto/fecha. */
   placeholder?: string
 }

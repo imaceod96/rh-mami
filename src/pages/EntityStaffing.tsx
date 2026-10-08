@@ -396,7 +396,7 @@ const EntityStaffing = () => {
 
   // ---------- Filtros de Plantilla (criterios del módulo) ----------
 
-  const filterDefinitions = React.useMemo<EntityFilterDefinition[]>(
+  const filterDefinitions = React.useMemo<EntityFilterDefinition<StaffingExportRow>[]>(
     () => [
       {
         key: "area",
