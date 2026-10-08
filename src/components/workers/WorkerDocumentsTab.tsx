@@ -128,7 +128,7 @@ export const WorkerDocumentsTab: React.FC<WorkerDocumentsTabProps> = ({ workerId
           .select("id, start_date, contract_type:employment_contract_types(name)")
           .in("id", contractIds)
         const map: Record<string, ContractRef> = {}
-        ;(contracts || []).forEach((c: any) => {
+        ;(contracts || []).forEach((c: { id: string; start_date: string; contract_type: { name: string } | { name: string }[] | null }) => {
           map[c.id] = {
             id: c.id,
             start_date: c.start_date,

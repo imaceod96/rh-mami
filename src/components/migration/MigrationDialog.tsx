@@ -79,7 +79,7 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [migrationType, setMigrationType] = useState<'basic' | 'complete'>('basic')
   const [batchId, setBatchId] = useState<string>(`MIG-${Date.now()}`)
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<{ successful: number; failed: number; total_rows: number } | null>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]

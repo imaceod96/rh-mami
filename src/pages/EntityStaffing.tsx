@@ -92,6 +92,21 @@ interface WorkerRow {
   hire_date: string
   employment_start_date?: string | null
   employment_status: string
+  // Campos personales opcionales (la consulta usa `*`; no están en el resumen de plantilla)
+  birth_date?: string | null
+  gender_id?: string | null
+  marital_status_id?: string | null
+  education_level_id?: string | null
+  specialty?: string | null
+  has_masters_degree?: boolean | null
+  has_doctorate_degree?: boolean | null
+  profession_or_trade?: string | null
+  skin_color_id?: string | null
+  address?: string | null
+  province?: string | null
+  municipality?: string | null
+  phone?: string | null
+  email?: string | null
   assignments: {
     id: string
     position_id: string
@@ -538,20 +553,20 @@ const EntityStaffing = () => {
       first_surname: w.first_surname,
       second_surname: w.second_surname,
       identification: w.identification,
-      birth_date: (w as any).birth_date || null,
-      gender_id: (w as any).gender_id || null,
-      marital_status_id: (w as any).marital_status_id || null,
-      education_level_id: (w as any).education_level_id || null,
-      specialty: (w as any).specialty || null,
-      has_masters_degree: !!(w as any).has_masters_degree,
-      has_doctorate_degree: !!(w as any).has_doctorate_degree,
-      profession_or_trade: (w as any).profession_or_trade || null,
-      skin_color_id: (w as any).skin_color_id || null,
-      address: (w as any).address || null,
-      province: (w as any).province || null,
-      municipality: (w as any).municipality || null,
-      phone: (w as any).phone || null,
-      email: (w as any).email || null,
+      birth_date: w.birth_date || null,
+      gender_id: w.gender_id || null,
+      marital_status_id: w.marital_status_id || null,
+      education_level_id: w.education_level_id || null,
+      specialty: w.specialty || null,
+      has_masters_degree: !!w.has_masters_degree,
+      has_doctorate_degree: !!w.has_doctorate_degree,
+      profession_or_trade: w.profession_or_trade || null,
+      skin_color_id: w.skin_color_id || null,
+      address: w.address || null,
+      province: w.province || null,
+      municipality: w.municipality || null,
+      phone: w.phone || null,
+      email: w.email || null,
       hire_date: w.hire_date,
       employment_status: w.employment_status,
     })
