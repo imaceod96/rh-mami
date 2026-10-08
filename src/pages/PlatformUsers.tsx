@@ -73,7 +73,7 @@ const PlatformUsers = () => {
             .select("platform_role_id, platform_roles(name, is_system_role)")
             .eq("user_id", profile.id)
 
-          const roles = (roleData || []).map((r: { platform_roles: { name: string; is_system_role: boolean } }) => r.platform_roles)
+          const roles = (roleData || []).map((r: { platform_roles: { name: string; is_system_role: boolean }[] }) => r.platform_roles).flat()
           return {
             ...profile,
             roles,
