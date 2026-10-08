@@ -180,9 +180,9 @@ export async function fetchCatalogRefs(): Promise<CatalogRefs> {
     )
 
   return {
-    genderNameById: label(genders.data as any),
-    skinColorNameById: label(skinColors.data as any),
-    educationNameById: label(educationLevels.data as any),
+    genderNameById: label(genders.data),
+    skinColorNameById: label(skinColors.data),
+    educationNameById: label(educationLevels.data),
   }
 }
 

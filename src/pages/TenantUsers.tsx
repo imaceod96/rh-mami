@@ -56,8 +56,8 @@ const TenantUsers = () => {
       if (membersError) throw membersError
 
       const memberRows = membersData || []
-      const userIds = memberRows.map((member: any) => member.user_id)
-      const membershipIds = memberRows.map((member: any) => member.id)
+      const userIds = memberRows.map((member: { id: string; user_id: string; is_active: boolean; created_at: string }) => member.user_id)
+      const membershipIds = memberRows.map((member: { id: string; user_id: string; is_active: boolean; created_at: string }) => member.id)
 
       const [profilesResult, rolesResult] = await Promise.all([
         userIds.length
@@ -74,19 +74,19 @@ const TenantUsers = () => {
       if (profilesResult.error) throw profilesResult.error
       if (rolesResult.error) throw rolesResult.error
 
-      const profilesById = (profilesResult.data || []).reduce((map: Record<string, any>, profile: any) => {
+      const profilesById = (profilesResult.data || []).reduce((map: Record<string, { id: string; full_name: string | null; username: string | null; is_active: boolean }>, profile: { id: string; full_name: string | null; username: string | null; is_active: boolean }) => {
         map[profile.id] = profile
         return map
       }, {})
       const rolesByMembership = (rolesResult.data || []).reduce(
-        (map: Record<string, any>, roleAssignment: any) => {
+        (map: Record<string, { name: string | null } | null>, roleAssignment: { tenant_membership_id: string; tenant_roles: { name: string | null } | null }) => {
           map[roleAssignment.tenant_membership_id] = roleAssignment.tenant_roles
           return map
         },
         {}
       )
 
-      const usersWithDetails = memberRows.map((member: any) => {
+      const usersWithDetails = memberRows.map((member: { id: string; user_id: string; is_active: boolean; created_at: string }) => {
         const profile = profilesById[member.user_id]
 
         return {

@@ -137,7 +137,14 @@ export async function fetchRepresentativePositions(
   })
 
   if (error) throw error
-  return ((data as any[]) || []).map((row) => ({
+  return ((data as Array<{
+    representative_position_id: string
+    position_title: string
+    display_order: number
+    assignment_id: string | null
+    person_name: string | null
+    effective_from: string | null
+  }>) || []).map((row) => ({
     position_id: row.representative_position_id,
     title: row.position_title,
     display_order: row.display_order,

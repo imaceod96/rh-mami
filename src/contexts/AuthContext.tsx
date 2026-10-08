@@ -2,13 +2,36 @@ import * as React from "react"
 import { supabase } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 
+export interface AuthProfile {
+  id: string
+  username: string | null
+  full_name: string | null
+  avatar_url: string | null
+  is_active: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AuthTenantSummary {
+  id: string
+  name: string
+}
+
+export interface AuthMembership {
+  id: string
+  tenant_id: string
+  user_id: string
+  is_active: boolean
+  tenant: AuthTenantSummary | null
+}
+
 interface AuthContextType {
   user: User | null
-  profile: Record<string, any> | null
+  profile: AuthProfile | null
   isPlatformSuperAdmin: boolean
   isPlatformUser: boolean
   isProfileActive: boolean
-  memberships: Record<string, any>[]
+  memberships: AuthMembership[]
   authLoading: boolean
   authReady: boolean
   logout: () => Promise<void>
@@ -20,11 +43,11 @@ const AuthContext = React.createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = React.useState<User | null>(null)
-    const [profile, setProfile] = React.useState<Record<string, any> | null>(null)
+    const [profile, setProfile] = React.useState<AuthProfile | null>(null)
     const [isPlatformSuperAdmin, setIsPlatformSuperAdmin] = React.useState(false)
     const [isPlatformUser, setIsPlatformUser] = React.useState(false)
     const [isProfileActive, setIsProfileActive] = React.useState(true)
-    const [memberships, setMemberships] = React.useState<Record<string, any>[]>([])
+    const [memberships, setMemberships] = React.useState<AuthMembership[]>([])
     const [authLoading, setAuthLoading] = React.useState(true)
     const [authReady, setAuthReady] = React.useState(false)
 
