@@ -41,7 +41,7 @@ import {
 interface Tenant {
   id: string
   name: string
-  [key: string]: any
+  [key: string]: unknown
 }
 import {
   Breadcrumb,

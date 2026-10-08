@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { useAuth } from "@/contexts/AuthContext"
+import { useAuth, type AuthProfile } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -21,7 +21,12 @@ interface PlatformUser {
   id: string
   full_name: string
   username: string
-  email: string
+  /**
+   * `public.profiles` no almacena el correo (vive en `auth.users`), por lo que el
+   * usuario se construye a partir de la fila de `profiles` y este campo puede
+   * venir ausente.
+   */
+  email?: string
   is_active: boolean
   created_at: string
   roles: { name: string; is_system_role: boolean }[]
@@ -67,7 +72,7 @@ const PlatformUsers = () => {
       if (profilesError) throw profilesError
 
       const usersWithRoles = await Promise.all(
-        (profilesData || []).map(async (profile: any) => {
+        (profilesData || []).map(async (profile: AuthProfile) => {
           const { data: roleData } = await supabase
             .from("platform_user_roles")
             .select("platform_role_id, platform_roles(name, is_system_role)")

@@ -16,7 +16,7 @@ import { Building2, ChevronDown, ChevronRight, Factory, Layers, Pencil, Plus, Se
 interface Tenant {
   id: string
   name: string
-  [key: string]: any
+  [key: string]: unknown
 }
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { OrganizationEntityDialog } from "@/components/organization-entity-dialog"
