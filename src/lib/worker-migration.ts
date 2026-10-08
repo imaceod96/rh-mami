@@ -209,7 +209,9 @@ export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow
   const rows: MigrationRow[] = []
   for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber)
-    const nonEmpty = row.values?.some((value: unknown) => excelText(value) !== "")
+    const nonEmpty = Array.isArray(row.values)
+      ? row.values.some((value: unknown) => excelText(value) !== "")
+      : false
     if (!nonEmpty) continue
     const licensesText = excelText(get(row, "Categorías licencia"))
     const licenses = licensesText.split(/[;,]/).map((value) => value.trim()).filter(Boolean)
