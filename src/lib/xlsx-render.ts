@@ -12,7 +12,7 @@
  * marcadores.
  */
 
-import type { Workbook, Worksheet } from "exceljs"
+import type { Cell, Row, Workbook, Worksheet } from "exceljs"
 
 export interface XlsxRenderResult {
   bytes: Uint8Array
@@ -100,8 +100,8 @@ const renderWorkbook = (
   workbook.eachSheet((worksheet: Worksheet) => {
     let sheetUsed = false
 
-    worksheet.eachRow({ includeEmpty: false }, (row: any) => {
-      row.eachCell({ includeEmpty: false }, (cell: any) => {
+    worksheet.eachRow({ includeEmpty: false }, (row: Row) => {
+      row.eachCell({ includeEmpty: false }, (cell: Cell) => {
         const value = cell.value
         if (typeof value !== "string") return
         if (!value.includes("{{")) return
@@ -146,10 +146,10 @@ export const scanXlsxPlaceholders = async (
   const keys = new Set<string>()
   const parts: string[] = []
 
-  workbook.eachSheet((worksheet: any) => {
+  workbook.eachSheet((worksheet: Worksheet) => {
     let found = false
-    worksheet.eachRow({ includeEmpty: false }, (row: any) => {
-      row.eachCell({ includeEmpty: false }, (cell: any) => {
+    worksheet.eachRow({ includeEmpty: false }, (row: Row) => {
+      row.eachCell({ includeEmpty: false }, (cell: Cell) => {
         const value = cell.value
         if (typeof value !== "string") return
         XLSX_PLACEHOLDER_PATTERN.lastIndex = 0

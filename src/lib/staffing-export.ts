@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import type { PaperSize, Workbook } from "exceljs"
 
 /**
  * ANEXO 14 — «REGISTRO DE TRABAJADORES / a) Registro de principales datos».
@@ -201,6 +202,12 @@ function computeTotal(row: StaffingExportRow): number | null {
   return Math.round(components.reduce((sum, value) => sum + value, 0) * 100) / 100
 }
 
+/** Tipado mínimo del módulo ExcelJS usado por esta exportación (solo `Workbook`). */
+type ExcelJSModule = {
+  Workbook: typeof Workbook
+  default?: { Workbook: typeof Workbook }
+}
+
 /**
  * Genera el .xlsx del Anexo 14 (hoja «Anexo 14»).
  * `exceljs` se importa dinámicamente, igual que en el resto de exportaciones.
@@ -209,7 +216,7 @@ export async function buildStaffingWorkbookBlob(
   rows: StaffingExportRow[],
   meta: StaffingExportMeta
 ): Promise<Blob> {
-  const mod: any = await import("exceljs")
+  const mod: ExcelJSModule = await import("exceljs")
   const ExcelJS = mod?.default ?? mod
 
   const workbook = new ExcelJS.Workbook()
@@ -219,14 +226,14 @@ export async function buildStaffingWorkbookBlob(
   const sheet = workbook.addWorksheet("Anexo 14", {
     pageSetup: {
       orientation: "landscape",
-      paperSize: 9,
+      paperSize: 9 as PaperSize,
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
       horizontalCentered: true,
       margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
       printTitlesRow: `${HEADER_ROW_TOP}:${NUMBERING_ROW}`,
-    } as any,
+    },
   })
 
   sheet.columns = COLUMN_WIDTHS.map((width) => ({ width }))
