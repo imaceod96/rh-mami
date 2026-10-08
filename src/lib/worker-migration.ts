@@ -66,7 +66,7 @@ const excelDate = (value: unknown): string => {
   }
   const text = String(value ?? "").trim()
   if (!text) return ""
-  const dmy = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/)
+  const dmy = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
   return text
