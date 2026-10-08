@@ -24,9 +24,14 @@ interface ValidationResult {
   severity: 'error' | 'warning'
 }
 
+interface ParsedRowData {
+  worker?: { identification?: string; first_name?: string; first_surname?: string } | null
+  position_id?: string | null
+}
+
 interface ParsedRow {
   row: number
-  data: any
+  data: ParsedRowData
   validations: ValidationResult[]
   isValid: boolean
 }
@@ -37,6 +42,10 @@ interface ImportResult {
   invalid: number
   errors: ValidationResult[]
   preview: ParsedRow[]
+}
+
+interface MigrationTemplateData {
+  positions?: { id: string; name: string }[]
 }
 
 export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
@@ -51,7 +60,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [step, setStep] = useState<'upload' | 'preview' | 'importing' | 'complete'>('upload')
   const [progress, setProgress] = useState(0)
-  const [template, setTemplate] = useState<any>(null)
+  const [template, setTemplate] = useState<MigrationTemplateData | null>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
