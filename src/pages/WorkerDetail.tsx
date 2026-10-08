@@ -242,6 +242,18 @@ interface WorkerMovement {
   authorName: string | null
 }
 
+/** Fila cruda de `worker_employment_movements` con la relación embebida (array u objeto). */
+interface WorkerMovementRow extends Omit<WorkerMovement, "separation_reason" | "authorName"> {
+  separation_reason: { name: string } | { name: string }[] | null
+}
+
+/** Fila del RPC `resolve_tenure_payment_for_worker`. */
+interface TenurePaymentRow {
+  amount: number
+  from_months: number
+  to_months: number | null
+}
+
 const WorkerDetail = () => {
   const { entityId, workerId } = useParams<{ entityId: string; workerId: string }>()
   const navigate = useNavigate()
@@ -477,7 +489,7 @@ const WorkerDetail = () => {
                       }
                     )
                     if (tenureData && Array.isArray(tenureData) && tenureData.length > 0) {
-                      const row = tenureData[0] as any
+                      const row = tenureData[0] as TenurePaymentRow
                       setTenurePayment({
                         amount: row.amount,
                         from_months: row.from_months,
@@ -566,7 +578,7 @@ const WorkerDetail = () => {
         .eq("worker_id", workerId)
         .order("created_at", { ascending: false })
 
-      const movRows = ((movData as any[]) || []).map((m: any) => ({
+      const movRows = ((movData as WorkerMovementRow[]) || []).map((m: WorkerMovementRow) => ({
         ...m,
         separation_reason: Array.isArray(m.separation_reason)
           ? m.separation_reason[0] || null
@@ -582,7 +594,7 @@ const WorkerDetail = () => {
           .from("profiles")
           .select("id, full_name")
           .in("id", authorIds)
-        ;(profs || []).forEach((p: any) => {
+        ;(profs || []).forEach((p: { id: string; full_name: string }) => {
           authorMap[p.id] = p.full_name
         })
       }

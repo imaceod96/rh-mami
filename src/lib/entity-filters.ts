@@ -35,9 +35,9 @@ export interface EntityFilterDefinition {
   type: EntityFilterType
   options?: EntityFilterOption[]
   /** Valor simple del registro (se compara como texto). */
-  getValue?: (item: any) => unknown
+  getValue?: (item: unknown) => unknown
   /** Valores múltiples del registro (OR dentro del mismo criterio). */
-  getValues?: (item: any) => string[]
+  getValues?: (item: unknown) => string[]
   /** Marcador de posición del control de texto/fecha. */
   placeholder?: string
 }
@@ -55,7 +55,7 @@ const dateOnly = (value: unknown): string => toText(value).slice(0, 10)
 /** ¿Un registro satisface un filtro activo concreto? */
 export function matchesEntityFilter(
   definition: EntityFilterDefinition,
-  item: any,
+  item: unknown,
   filter: ActiveEntityFilter
 ): boolean {
   const values = filter.values.filter((value) => value !== "" && value !== undefined)
