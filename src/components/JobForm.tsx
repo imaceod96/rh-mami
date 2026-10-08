@@ -15,7 +15,7 @@ import {
   fetchOccupationalCategories,
   type OccupationalCategory,
 } from "@/lib/occupational-categories"
-import type { SalaryGroupWithCurrent } from "@/contexts/SalaryContext"
+import type { SalaryGroup, SalaryGroupWithCurrent } from "@/contexts/SalaryContext"
 
 interface OrganizationArea {
   id: string
@@ -30,9 +30,29 @@ interface OrganizationArea {
   updated_at: string
 }
 
+interface JobFormEditingJob {
+  id: string
+  name: string
+  code: string
+  description: string | null
+  area_id: string
+  hierarchy_order: number
+  salary_group_id: string
+  occupational_category_id: string | null
+  required_profession_or_trade: string | null
+  work_content: string | null
+  is_cuadro: boolean | null
+  is_principal_specialist: boolean | null
+  // Condiciones Laborales Anormales (presentes en la fila real de organization_jobs)
+  has_abnormal_conditions?: boolean | null
+  cla_day_enabled?: boolean | null
+  cla_day_hourly_rate?: number | null
+  cla_night_enabled?: boolean | null
+}
+
 interface JobFormProps {
   entityId: string
-  editingJob?: any | null
+  editingJob?: JobFormEditingJob | null
   onSuccess: () => void
   onCancel: () => void
 }
@@ -150,7 +170,7 @@ export const JobForm: React.FC<JobFormProps> = ({
 
         if (scaleDetailsError) throw scaleDetailsError
 
-        const scaleDetails = (scaleRows as any[] | null)?.[0] || null
+        const scaleDetails = (scaleRows as { id: string; name: string | null; scope_type: string | null }[] | null)?.[0] || null
 
         setScaleInfo({
           scaleId: resolvedScaleId,
@@ -171,7 +191,7 @@ export const JobForm: React.FC<JobFormProps> = ({
 
         // Fetch current values for each group
         const groupsWithValues: SalaryGroupWithCurrent[] = []
-        for (const group of groupsData as any[]) {
+        for (const group of groupsData as SalaryGroup[]) {
           const { data: valueData, error: valueError } = await supabase
             .from("salary_group_values")
             .select("*")
@@ -183,7 +203,7 @@ export const JobForm: React.FC<JobFormProps> = ({
 
           groupsWithValues.push({
             group,
-            current_value: valueError && valueError.code !== "PGRST116" ? null : (valueData as any),
+            current_value: valueError && valueError.code !== "PGRST116" ? null : valueData,
             roman_numeral: toRomanNumeral(group.sequence_number),
           })
         }

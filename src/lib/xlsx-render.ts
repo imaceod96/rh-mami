@@ -12,6 +12,8 @@
  * marcadores.
  */
 
+import type { Workbook, Worksheet } from "exceljs"
+
 export interface XlsxRenderResult {
   bytes: Uint8Array
   /** Claves realmente sustituidas. */
@@ -28,9 +30,15 @@ export interface XlsxRenderResult {
 
 export const XLSX_PLACEHOLDER_PATTERN = /\{\{([^{}]*)\}\}/g
 
+/** Tipado mínimo del módulo ExcelJS usado por este motor (solo `Workbook`). */
+type ExcelJSModule = {
+  Workbook: typeof Workbook
+  default?: { Workbook: typeof Workbook }
+}
+
 /** Carga diferida de ExcelJS (igual que el resto de exportaciones del proyecto). */
-const loadExcelJS = async (): Promise<any> => {
-  const mod: any = await import("exceljs")
+const loadExcelJS = async (): Promise<ExcelJSModule> => {
+  const mod: ExcelJSModule = await import("exceljs")
   return mod?.default ?? mod
 }
 
@@ -79,7 +87,7 @@ const substituteText = (
 
 /** Recorre las celdas de un libro y aplica el reemplazo de marcadores. */
 const renderWorkbook = (
-  workbook: any,
+  workbook: Workbook,
   values: Record<string, string>,
   knownKeys: Set<string>
 ): { replacedKeys: Set<string>; unknownKeys: Set<string>; leftoverKeys: Set<string>; replacedCount: number; parts: Set<string> } => {
@@ -89,7 +97,7 @@ const renderWorkbook = (
   const parts = new Set<string>()
   let replacedCount = 0
 
-  workbook.eachSheet((worksheet: any) => {
+  workbook.eachSheet((worksheet: Worksheet) => {
     let sheetUsed = false
 
     worksheet.eachRow({ includeEmpty: false }, (row: any) => {
