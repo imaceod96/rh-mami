@@ -21,7 +21,8 @@ interface PlatformRoleRef {
 }
 
 interface CallerPlatformRoleRow {
-  platform_roles: PlatformRoleRef | null
+  // Supabase/PostgREST puede devolver la relación embebida como objeto o arreglo.
+  platform_roles: PlatformRoleRef | PlatformRoleRef[] | null
 }
 
 const json = (body: unknown, status = 200) =>
@@ -84,12 +85,16 @@ serve(async (req) => {
       return json({ error: "Forbidden: unable to verify platform role" }, 403)
     }
 
-    const isSuperAdmin = (callerRoles || []).some(
-      (assignment: CallerPlatformRoleRow) =>
-        assignment.platform_roles?.name === "SuperAdmin" &&
-        assignment.platform_roles?.is_system_role === true &&
-        assignment.platform_roles?.is_active === true
-    )
+    const isSuperAdmin = (callerRoles || []).some((assignment: CallerPlatformRoleRow) => {
+      const role = Array.isArray(assignment.platform_roles)
+        ? assignment.platform_roles[0] ?? null
+        : assignment.platform_roles
+      return (
+        role?.name === "SuperAdmin" &&
+        role?.is_system_role === true &&
+        role?.is_active === true
+      )
+    })
 
     if (!isSuperAdmin) {
       console.error("[create-platform-admin] caller is not SuperAdmin", { callerId })
