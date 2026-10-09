@@ -152,3 +152,47 @@ export function buildAnexo14FileName(entityName: string, date = new Date()): str
   const iso = date.toISOString().slice(0, 10)
   return `Anexo_14_Plantilla_${safeName}_${iso}.xlsx`
 }
+
+/** Nombre saneado del Anexo14B: Anexo14B_[Entidad]_[AAAA-MM-DD].xlsx */
+export function buildAnexo14BFileName(entityName: string, date = new Date()): string {
+  const safeName =
+    (entityName || "Entidad")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\\/:*?"<>|]+/g, "")
+      .replace(/\s+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 60) || "Entidad"
+  const iso = date.toISOString().slice(0, 10)
+  return `Anexo14B_${safeName}_${iso}.xlsx`
+}
+
+/**
+ * Años de servicios desde `workers.employment_start_date` hasta la fecha de
+ * generación del Anexo14B: «12 años» o «12 años, 4 meses».
+ */
+export function formatService(
+  serviceStart: string | null | undefined,
+  reference: Date
+): string | null {
+  if (!serviceStart) return null
+  const start = new Date(`${String(serviceStart).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(start.getTime())) return null
+
+  const ref = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate())
+  if (start > ref) return null
+
+  let years = ref.getFullYear() - start.getFullYear()
+  let months = ref.getMonth() - start.getMonth()
+  if (ref.getDate() < start.getDate()) months -= 1
+  if (months < 0) {
+    years -= 1
+    months += 12
+  }
+  if (years < 0) return null
+
+  const yearsLabel = years === 1 ? "1 año" : `${years} años`
+  if (months <= 0) return yearsLabel
+  return `${yearsLabel}, ${months} ${months === 1 ? "mes" : "meses"}`
+}

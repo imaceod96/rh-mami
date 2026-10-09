@@ -92,3 +92,36 @@ export interface Anexo14Meta {
   entityName: string
   generatedAt: Date
 }
+
+/**
+ * Fila del Anexo14B (plantilla con trabajadores): cada capacidad autorizada,
+ * ocupada o vacante, con los datos del trabajador que la ocupa si existe.
+ */
+export interface StaffingExportRow {
+  area_id: string | null
+  area_name: string | null
+  job_id: string | null
+  job_name: string | null
+  position_id: string | null
+  position_name: string | null
+  occupational_category: string | null
+  worker_id: string | null
+  worker_name: string | null
+  gender_code: string | null
+  identification: string | null
+  preparation_level: string | null
+  salary_group_sequence: number | null
+  salary: number | null
+  cla_amount: number | null
+  academic_amount: number | null
+  academic_category: string | null
+  service_start: string | null
+  has_masters_degree: boolean | null
+  has_doctorate_degree: boolean | null
+}
+
+/** Metadatos de cabecera usados al generar el Anexo14B. */
+export interface StaffingExportMeta {
+  entityName: string
+  generatedAt: Date
+}

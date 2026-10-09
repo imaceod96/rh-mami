@@ -34,7 +34,7 @@ import {
   buildStaffingWorkbookBlob,
   saveStaffingExcelBlob,
   type StaffingExportRow,
-} from "@/lib/staffing-export"
+} from "@/domains/organization-structure"
 import {
   WorkerForm,
   type WorkerPositionOption,
@@ -640,8 +640,8 @@ const EntityStaffing = () => {
       })
       saveStaffingExcelBlob(blob, entityName)
     } catch (err) {
-      console.error("Error generating Anexo 14:", err)
-      showNotice("danger", "No se pudo generar el Anexo 14. Inténtalo nuevamente.")
+      console.error("Error generating Anexo14B:", err)
+      showNotice("danger", "No se pudo generar el Anexo14B. Inténtalo nuevamente.")
     } finally {
       setExporting(false)
     }
@@ -688,17 +688,17 @@ const EntityStaffing = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Plantilla"
-        description="Estructura organizativa de la entidad: Área → Cargo/Puesto → capacidad autorizada, ocupación y vacantes. Es la misma estructura del Anexo 14."
+        description="Estructura organizativa de la entidad: Área → Cargo/Puesto → capacidad autorizada, ocupación y vacantes. Es la misma estructura del Anexo14B."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <SiteCorpButton
               variant="outline"
               onClick={handleDownloadExcel}
               disabled={exporting}
-              title="Descargar el Anexo 14: registro de trabajadores de la plantilla"
+              title="Exportar Anexo14B: registro de trabajadores de la plantilla"
             >
               {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-              {exporting ? "Generando Anexo 14..." : "Descargar Anexo 14"}
+              {exporting ? "Generando Anexo14B..." : "Exportar Anexo14B"}
             </SiteCorpButton>
             {canManage && (
               <SiteCorpButton variant="outline" onClick={() => setMigrationDialogOpen(true)}>

@@ -81,3 +81,21 @@ export {
   buildAnexo14WorkbookBlob,
   saveAnexo14Blob,
 } from "./infrastructure/positions-export.workbook"
+
+// --- Anexo14B (plantilla con trabajadores): tipos ---
+export type { StaffingExportRow } from "./domain/entities"
+export type { StaffingExportMeta } from "./domain/entities"
+
+// --- Anexo14B: constantes ---
+export { ANEXO14_HEADERS } from "./domain/rules"
+
+// --- Anexo14B: funciones de formato (puras) ---
+export { buildAnexo14BFileName } from "./domain/formatters"
+export { formatService } from "./domain/formatters"
+
+// --- Anexo14B: infraestructura ---
+export { fetchStaffingExportRows } from "./infrastructure/staffing-export.repository"
+export {
+  buildStaffingWorkbookBlob,
+  saveStaffingExcelBlob,
+} from "./infrastructure/staffing-export.workbook"

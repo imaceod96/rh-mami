@@ -53,3 +53,22 @@ export const NO_CATEGORY_VALUE = "Sin categoría ocupacional configurada"
 
 /** Valor por defecto cuando un dato del Anexo 14 no está configurado. */
 export const NOT_CONFIGURED_VALUE = "—"
+
+/** Columnas de las 15 informaciones del modelo oficial del Anexo14B. */
+export const ANEXO14_HEADERS = [
+  "No",
+  "Órgano y Cargos",
+  "Categoría ocupacional",
+  "Nombres y Apellidos del Trabajador",
+  "Sexo",
+  "Carnet de Identidad",
+  "Nivel de Preparación",
+  "Grupo Escala",
+  "Total",
+  "Escala",
+  "CLA",
+  "Turnos Nocturnos y Mixtos",
+  "Maestría o Doctorado",
+  "Años de Servicios",
+  "Otros",
+] as const
