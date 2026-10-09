@@ -86,13 +86,14 @@ serve(async (req) => {
     }
 
     const isSuperAdmin = (callerRoles || []).some((assignment: CallerPlatformRoleRow) => {
-      const role = Array.isArray(assignment.platform_roles)
-        ? assignment.platform_roles[0] ?? null
-        : assignment.platform_roles
+      const role = assignment.platform_roles
+      // Sólo se evalúa cuando la relación llega como objeto (no como arreglo ni null).
+      // Si llega como arreglo se conserva el resultado previo (false).
+      if (role === null || Array.isArray(role)) return false
       return (
-        role?.name === "SuperAdmin" &&
-        role?.is_system_role === true &&
-        role?.is_active === true
+        role.name === "SuperAdmin" &&
+        role.is_system_role === true &&
+        role.is_active === true
       )
     })
 
