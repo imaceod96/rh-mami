@@ -29,7 +29,7 @@ import {
   type ContractFormalizationPending,
   type PaymentMethodOption,
 } from "@/lib/contract-conditions"
-import type { PositionScheduleSegment } from "@/lib/position-schedule"
+import type { PositionScheduleSegment } from "@/domains/organization-structure"
 import {
   fetchPersonCatalogs,
   fetchWorkerDrivingLicenseIds,

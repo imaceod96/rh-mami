@@ -16,7 +16,7 @@ import {
   formatTime,
   weekDayLabel,
   type PositionScheduleSegment,
-} from "@/lib/position-schedule"
+} from "@/domains/organization-structure"
 import { CalendarClock, Plus, X } from "lucide-react"
 
 export interface PositionJobOption {

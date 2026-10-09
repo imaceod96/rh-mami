@@ -74,7 +74,7 @@ import {
   formatScheduleSummary,
   hasWorkInfo,
   type PositionScheduleSegment,
-} from "@/lib/position-schedule"
+} from "@/domains/organization-structure"
 import { JobForm } from "@/components/JobForm"
 import { AreaForm } from "@/components/AreaForm"
 import { PositionForm, type PositionJobOption, type PositionEditingData } from "@/components/PositionForm"

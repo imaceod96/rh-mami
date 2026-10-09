@@ -22,3 +22,31 @@ export interface PreparationLevel {
   code: string
   sort_order: number
 }
+
+/** Día de la semana ISO-8601 (1 = Lunes … 7 = Domingo). */
+export interface WeekDay {
+  value: number
+  label: string
+  short: string
+}
+
+/** Segmento horario de un puesto (día + rango horario). */
+export interface PositionScheduleSegment {
+  id?: string
+  position_id?: string
+  day_of_week: number
+  start_time: string
+  end_time: string
+  crosses_midnight?: boolean
+  display_order?: number
+}
+
+/** Información laboral del puesto (lugar, jornada, descanso). */
+export interface PositionWorkInfo {
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+}

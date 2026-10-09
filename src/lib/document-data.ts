@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase"
-import { fetchPositionScheduleSegments } from "@/lib/position-schedule"
+import { fetchPositionScheduleSegments } from "@/domains/organization-structure"
 
 /**
  * Fase 11A.7 — Capa central de datos documentales.

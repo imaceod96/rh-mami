@@ -69,7 +69,7 @@ import {
   formatScheduleByDay,
   formatScheduleSummary,
   type PositionScheduleSegment,
-} from "@/lib/position-schedule"
+} from "@/domains/organization-structure"
 import ChangeContractDialog, {
   type CurrentContractInfo,
 } from "@/components/workers/ChangeContractDialog"

@@ -28,7 +28,7 @@ import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInf
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,
-} from "@/lib/position-schedule"
+} from "@/domains/organization-structure"
 import { AddendumChangesList } from "@/components/addendums/AddendumChangesList"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import {
