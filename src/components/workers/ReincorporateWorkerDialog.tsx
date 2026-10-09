@@ -80,6 +80,37 @@ interface PositionRow {
   } | null
 }
 
+// Forma cruda devuelta por PostgREST: las relaciones embebidas pueden llegar
+// como arreglo o como objeto antes de normalizarse en el mapeo.
+interface PositionQueryJobRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  is_principal_specialist: boolean
+  area: { id: string; name: string }[] | null
+  salary_group:
+    | { id: string; salary_scale_id: string; sequence_number: number }
+    | { id: string; salary_scale_id: string; sequence_number: number }[]
+    | null
+}
+
+interface PositionQueryRow {
+  id: string
+  name: string
+  code: string | null
+  is_active: boolean
+  authorized_quantity: number
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  job: PositionQueryJobRow | PositionQueryJobRow[] | null
+}
+
 interface ContractType {
   id: string
   name: string
@@ -172,17 +203,23 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         .order("name")
       if (posError) throw posError
 
-      const mapped = ((posData as any[]) || []).map((p: any) => ({
-        ...p,
-        job: p.job
-          ? {
-              ...p.job,
-              area: p.job.area
-                ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
-                : null,
-            }
-          : null,
-      })) as PositionRow[]
+      const mapped: PositionRow[] = ((posData as PositionQueryRow[]) || []).map((p: PositionQueryRow) => {
+        const job = Array.isArray(p.job) ? p.job[0] ?? null : p.job
+        return {
+          ...p,
+          job: job
+            ? {
+                ...job,
+                area: job.area
+                  ? { id: job.area[0]?.id || null, name: job.area[0]?.name || null }
+                  : null,
+                salary_group: Array.isArray(job.salary_group)
+                  ? job.salary_group[0] ?? null
+                  : job.salary_group,
+              }
+            : null,
+        }
+      })
       setPositions(mapped)
 
       // Fase 11A.3: horarios habituales de los puestos (solo lectura)
