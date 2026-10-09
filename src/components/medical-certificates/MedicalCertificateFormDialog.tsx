@@ -22,7 +22,7 @@ import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { SiteCorpSelect } from "@/components/ui/sitecorp-select"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
 import { Label } from "@/components/ui/label"
-import { createMedicalCertificate } from "@/lib/rpc/medical-certificates"
+import { createMedicalCertificate } from "@/domains/vacations-licenses/medical-certificates"
 import { invalidateMedicalCertificateData } from "@/hooks/use-medical-certificates"
 import { Loader2, X } from "lucide-react"
 

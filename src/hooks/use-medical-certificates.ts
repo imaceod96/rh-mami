@@ -4,7 +4,7 @@ import {
   fetchWorkerMedicalCertificates,
   type EntityMedicalCertificatesResult,
   type WorkerMedicalCertificatesResult,
-} from "@/lib/rpc/medical-certificates"
+} from "@/domains/vacations-licenses/medical-certificates"
 
 /**
  * Certificados Médicos — React Query (Fase 19).
