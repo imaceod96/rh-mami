@@ -53,7 +53,7 @@ import ResolutionForm, {
 import {
   ensureResolutionDocumentGenerated,
   updateJobWorkContent,
-} from "@/lib/resolutions"
+} from "@/domains/resolutions"
 import { AlertTriangle, FileSignature, UserPlus } from "lucide-react"
 
 interface PositionRow {

@@ -1,19 +1,18 @@
 /**
- * Compatibilidad pública — Resoluciones.
+ * Barrel público del dominio de Resoluciones.
  *
- * El módulo ha sido migrado a `src/domains/resolutions/`. Este archivo
- * reexporta explícitamente los 21 símbolos originales para preservar la
- * interfaz pública sin romper a los consumidores existentes.
- *
- * No utiliza `export *` para mantener el contrato explícito.
+ * Reexporta explícitamente los 21 símbolos originales de `src/lib/resolutions.ts`
+ * para preservar la interfaz pública durante la migración DDD.
  */
 
-export { RESOLUTION_DOCUMENT_TYPE } from "@/domains/resolutions"
+// --- Constantes de dominio ---
+export { RESOLUTION_DOCUMENT_TYPE } from "./domain/entities"
 export {
   MISSING_RESOLUTION_TEMPLATE_MESSAGE,
   RESOLUTION_TEMPLATE_NOT_CONFIGURED,
-} from "@/domains/resolutions"
+} from "./domain/rules"
 
+// --- Tipos e interfaces ---
 export type {
   ResolutionContextWorker,
   ResolutionContextJob,
@@ -25,9 +24,11 @@ export type {
   ResolutionTemplateStatus,
   ResolutionTemplateAvailability,
   WorkerResolutionRow,
-  ResolutionAutomationResult,
-} from "@/domains/resolutions"
+} from "./domain/entities"
 
+export type { ResolutionAutomationResult } from "./infrastructure/resolutions.repository"
+
+// --- Funciones de infraestructura ---
 export {
   fetchResolutionContext,
   createWorkerResolution,
@@ -36,4 +37,4 @@ export {
   fetchResolutionRequiredVariables,
   ensureResolutionDocumentGenerated,
   fetchWorkerResolutions,
-} from "@/domains/resolutions"
+} from "./infrastructure/resolutions.repository"

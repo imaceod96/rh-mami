@@ -32,7 +32,7 @@ import ResolutionForm, {
 import {
   ensureResolutionDocumentGenerated,
   updateJobWorkContent,
-} from "@/lib/resolutions"
+} from "@/domains/resolutions"
 import { ensurePayrollMovementDocumentGenerated } from "@/lib/payroll-movements"
 import { AlertTriangle, UserPlus, RefreshCw, Search } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"

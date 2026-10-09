@@ -50,7 +50,7 @@ import ResolutionForm, {
 import {
   ensureResolutionDocumentGenerated,
   updateJobWorkContent,
-} from "@/lib/resolutions"
+} from "@/domains/resolutions"
 
 interface PositionRow {
   id: string
