@@ -23,12 +23,13 @@ interface PlatformRoleRef {
 }
 
 interface CallerPlatformRoleRow {
-  platform_roles: PlatformRoleRef | null
+  // Supabase/PostgREST puede devolver la relación embebida como objeto, arreglo o null.
+  platform_roles: PlatformRoleRef | PlatformRoleRef[] | null
 }
 
 /** Relación embebida `platform_permissions(...)` dentro de `platform_role_permissions`. */
 interface PlatformPermissionRow {
-  platform_permissions: { code: string } | null
+  platform_permissions: { code: string } | { code: string }[] | null
 }
 
 const json = (body: unknown, status = 200) =>
@@ -94,12 +95,17 @@ serve(async (req) => {
       return json({ error: "Forbidden: unable to verify platform role" }, 403)
     }
 
-    const isSuperAdmin = (callerRoles || []).some(
-      (assignment: CallerPlatformRoleRow) =>
-        assignment.platform_roles?.name === "SuperAdmin" &&
-        assignment.platform_roles?.is_system_role === true &&
-        assignment.platform_roles?.is_active === true
-    )
+    const isSuperAdmin = (callerRoles || []).some((assignment: CallerPlatformRoleRow) => {
+      const role = assignment.platform_roles
+      // Sólo se evalúa cuando la relación llega como objeto (no como arreglo ni null).
+      // Si llega como arreglo se conserva el resultado previo (false).
+      if (role === null || Array.isArray(role)) return false
+      return (
+        role.name === "SuperAdmin" &&
+        role.is_system_role === true &&
+        role.is_active === true
+      )
+    })
 
     // Check for users.manage_all permission
     const { data: permissionData, error: permissionError } = await adminClient
@@ -116,9 +122,13 @@ serve(async (req) => {
         .in("platform_role_id", roleIds)
 
       if (!permError && permData) {
-        hasManageAllPermission = permData.some(
-          (p: PlatformPermissionRow) => p.platform_permissions?.code === "users.manage_all"
-        )
+        hasManageAllPermission = permData.some((p: PlatformPermissionRow) => {
+          const permission = p.platform_permissions
+          // Sólo se evalúa cuando la relación llega como objeto (no como arreglo ni null).
+          // Si llega como arreglo se conserva el resultado previo (false).
+          if (permission === null || Array.isArray(permission)) return false
+          return permission.code === "users.manage_all"
+        })
       }
     }
 
