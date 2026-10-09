@@ -4,7 +4,7 @@ import {
   VACATION_MOVEMENT_LABELS,
   formatVacationDays,
   type VacationMovement,
-} from "@/lib/vacations"
+} from "@/domains/vacations-licenses/vacations"
 import { History } from "lucide-react"
 import { cn } from "@/lib/utils"
 

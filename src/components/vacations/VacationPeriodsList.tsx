@@ -6,7 +6,7 @@ import {
   VACATION_PERIOD_STATUS_LABELS,
   formatVacationDays,
   type VacationPeriod,
-} from "@/lib/vacations"
+} from "@/domains/vacations-licenses/vacations"
 import { CalendarDays, FileText, XCircle } from "lucide-react"
 
 const statusTone: Record<VacationPeriod["status"], "info" | "success" | "neutral"> = {

@@ -6,7 +6,7 @@ import {
   summarizeContractAlerts,
   type ContractAlertSummary,
 } from "@/lib/contract-alerts"
-import type { VacationOverviewRow } from "@/lib/vacations"
+import type { VacationOverviewRow } from "@/domains/vacations-licenses/vacations"
 
 /**
  * Dashboard REAL de una entidad (pantalla Resumen).
