@@ -28,7 +28,7 @@ interface Props {
 
 type UsageFilter = "ALL" | "USED" | "UNUSED"
 
-export const templatePlaceholder = (key: string): string => `{{${key}}}`
+const templatePlaceholder = (key: string): string => `{{${key}}}`
 
 const dataTypeLabel: Record<DocumentVariableDefinition["dataType"], string> = {
   text: "Texto",

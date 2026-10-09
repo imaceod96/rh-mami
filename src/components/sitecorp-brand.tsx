@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
  * Variante `full`: logotipo completo oficial A COLOR (isotipo + «SITECORP»).
  * Variante `isotype`: isotipo oficial a color para espacios reducidos.
  */
-export const SITECORP_BRAND = {
+const SITECORP_BRAND = {
   /** Isotipo oficial a color (símbolo sin texto). Recurso principal en UI. */
   isotype: "/brand/isotipo-sitecorp.png",
   /** Logo completo oficial a color (isotipo + nombre). */

@@ -104,6 +104,12 @@ export interface ContractFormalizationPending {
   warnings: string[]
 }
 
+/** Checklist de formalización vacío (sin bloqueos ni avisos). */
+export const EMPTY_FORMALIZATION_PENDING: ContractFormalizationPending = {
+  blocking: [],
+  warnings: [],
+}
+
 /**
  * Fila de `employment_contracts` + `payment_methods` tal como la devuelve la
  * consulta del snapshot. La relación to-one con `payment_methods` llega como

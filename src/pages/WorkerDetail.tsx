@@ -73,10 +73,7 @@ import {
 import ChangeContractDialog, {
   type CurrentContractInfo,
 } from "@/components/workers/ChangeContractDialog"
-import {
-  ContractFormalizationAlerts,
-  EMPTY_FORMALIZATION_PENDING,
-} from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {
   ContractRetributionFields,
   ContractSignatureFields,
@@ -89,6 +86,7 @@ import { AddendumDetailDialog } from "@/components/addendums/AddendumDetailDialo
 import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import {
+  EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
   fetchComponentsByContract,
   fetchPaymentMethods,

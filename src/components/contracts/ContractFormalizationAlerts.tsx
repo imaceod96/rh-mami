@@ -7,11 +7,6 @@ import {
   type ContractFormalizationPending,
 } from "@/lib/contract-conditions"
 
-export const EMPTY_FORMALIZATION_PENDING: ContractFormalizationPending = {
-  blocking: [],
-  warnings: [],
-}
-
 interface ContractFormalizationAlertsProps {
   entityId: string
   positionId: string | null
