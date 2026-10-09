@@ -14,7 +14,7 @@ import {
   NO_OCCUPATIONAL_CATEGORY_LABEL,
   fetchOccupationalCategories,
   type OccupationalCategory,
-} from "@/lib/occupational-categories"
+} from "@/domains/organization-structure"
 import type { SalaryGroup, SalaryGroupWithCurrent } from "@/contexts/SalaryContext"
 
 interface OrganizationArea {

@@ -52,13 +52,13 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
 import {
   NO_OCCUPATIONAL_CATEGORY_LABEL,
   fetchOccupationalCategories,
-} from "@/lib/occupational-categories"
+} from "@/domains/organization-structure"
 import {
   NO_PREPARATION_LEVEL_LABEL,
   fetchJobPreparationLevels,
   formatPreparationLevels,
   type PreparationLevel,
-} from "@/lib/job-preparation-levels"
+} from "@/domains/organization-structure"
 import {
   buildAnexo14FileName,
   buildAnexo14WorkbookBlob,

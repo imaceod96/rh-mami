@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { toRomanNumeral } from "@/utils/roman-numerals"
-import { NO_OCCUPATIONAL_CATEGORY_LABEL } from "@/lib/occupational-categories"
-import { NO_PREPARATION_LEVEL_LABEL } from "@/lib/job-preparation-levels"
+import { NO_OCCUPATIONAL_CATEGORY_LABEL } from "@/domains/organization-structure"
+import { NO_PREPARATION_LEVEL_LABEL } from "@/domains/organization-structure"
 import {
   WEEK_DAYS,
   formatTime,
