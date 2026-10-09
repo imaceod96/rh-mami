@@ -34,13 +34,17 @@ const typeIcon = (type: OrganizationEntity["entity_type"]) => {
 
 const TenantRoles = () => {
   const { currentTenant } = useCurrentTenant()
+
+  // Primitiva estable del tenant: evita depender del objeto completo en el efecto.
+  const currentTenantId = currentTenant?.id
+
   const [entities, setEntities] = React.useState<OrganizationEntity[]>([])
   const [selectedEntityId, setSelectedEntityId] = React.useState<string>("")
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    if (!currentTenant) return
+    if (!currentTenantId) return
 
     const loadEntities = async () => {
       try {
@@ -50,7 +54,7 @@ const TenantRoles = () => {
         const { data, error: entitiesError } = await supabase
           .from("organization_entities")
           .select("id, name, code, entity_type, is_active")
-          .eq("tenant_id", currentTenant.id)
+          .eq("tenant_id", currentTenantId)
           .order("name")
 
         if (entitiesError) throw entitiesError
@@ -66,7 +70,7 @@ const TenantRoles = () => {
     }
 
     loadEntities()
-  }, [currentTenant?.id])
+  }, [currentTenantId])
 
   const selectedEntity = entities.find((entity) => entity.id === selectedEntityId)
 

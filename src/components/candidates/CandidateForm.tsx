@@ -102,7 +102,7 @@ export interface CandidateFormData {
   disciplinary_document: File | null
 }
 
-export const emptyFormData: CandidateFormData = {
+const emptyFormData: CandidateFormData = {
   first_name: "",
   first_surname: "",
   second_surname: "",

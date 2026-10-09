@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Link, useParams } from "react-router-dom"
-import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
+import { useCurrentEntity, type OrganizationEntityRow } from "@/contexts/CurrentEntityContext"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
 import { SiteCorpStatusBadge } from "@/components/ui/sitecorp-status-badge"
@@ -9,6 +9,13 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useEntitySummaryDashboard } from "@/hooks/use-entity-summary"
 import type { DistributionSlice } from "@/lib/entity-summary"
+import type {
+  AgeReport,
+  EducationLevelReport,
+  ReportSlice,
+  SexReport,
+  SkinColorReport,
+} from "@/lib/entity-summary-reports"
 import {
   Building2,
   Layers,
@@ -229,7 +236,7 @@ const DemographicReportCard: React.FC<DemographicReportCardProps> = ({
 interface VistaGeneralProps {
   summary: ReturnType<typeof useEntitySummaryDashboard>
   entityId: string
-  currentEntity: any
+  currentEntity: OrganizationEntityRow | null
   entityType: string
 }
 
@@ -494,9 +501,9 @@ const Reports: React.FC<ReportsProps> = ({ summary }) => {
     key: string
     title: string
     description: string
-    data: any
+    data: AgeReport | SexReport | SkinColorReport | EducationLevelReport | null
     total?: number
-    slices?: any[]
+    slices?: ReportSlice[]
     loading: boolean
     tone: "primary" | "orange" | "success" | "warning" | "danger" | "blue"
   }> = [

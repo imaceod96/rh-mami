@@ -163,10 +163,51 @@ export interface ContractAddendum {
   changes: AddendumChange[]
 }
 
+/**
+ * Fila cruda de `contract_addendums` tal como la devuelve Supabase: sin tipos
+ * generados, la relación embebida con `payment_methods` se infiere como array
+ * (aunque la FK es to-one) y el código la normaliza a objeto antes de exponerla
+ * como `ContractAddendum`.
+ */
+interface ContractAddendumRow extends Omit<ContractAddendum, "payment_method"> {
+  payment_method: { name: string } | { name: string }[] | null
+}
+
 export interface AddendumPending {
   blocking: string[]
   warnings: string[]
   status: string
+}
+
+/** Resultado de `change_worker_position` (cambio de puesto + anexo en la misma transacción). */
+export interface ChangeWorkerPositionResult {
+  previous_assignment_id: string
+  new_assignment_id: string
+  employment_contract_id: string | null
+  salary_history_id: string | null
+  changes: AddendumChange[]
+  has_contractual_changes: boolean
+  is_principal_specialist: boolean
+  resolution_id: string | null
+  /** 'NO_CONTRACT' cuando el cambio no pudo registrar anexo por falta de contrato vigente */
+  addendum_skipped: string | null
+  addendum: {
+    status: string
+    addendum_id?: string
+    addendum_number?: number | null
+    addendum_status?: string
+    changes?: number
+    pending?: string[]
+  } | null
+}
+
+/** Resultado de `create_contract_addendum` (anexo manual). */
+export interface ManualAddendumResult {
+  status: string
+  addendum_id?: string
+  addendum_number?: number | null
+  addendum_status?: string
+  pending?: string[]
 }
 
 export interface AddendumChangeInput {
@@ -296,7 +337,7 @@ export const fetchWorkerAddendums = async (workerId: string): Promise<ContractAd
 
   if (error) throw error
 
-  return ((data as any[]) || []).map((row) => ({
+  return ((data as ContractAddendumRow[]) || []).map((row) => ({
     ...row,
     addendum_number: toNumber(row.addendum_number),
     previous_amount: toNumber(row.previous_amount),
@@ -394,26 +435,7 @@ export const changeWorkerPosition = async (input: {
   requireFormalized?: boolean
   /** Fecha de la Resolución cuando el Cargo destino es Especialista Principal. */
   resolutionDate?: string | null
-}): Promise<{
-  previous_assignment_id: string
-  new_assignment_id: string
-  employment_contract_id: string | null
-  salary_history_id: string | null
-  changes: AddendumChange[]
-  has_contractual_changes: boolean
-  is_principal_specialist: boolean
-  resolution_id: string | null
-  /** 'NO_CONTRACT' cuando el cambio no pudo registrar anexo por falta de contrato vigente */
-  addendum_skipped: string | null
-  addendum: {
-    status: string
-    addendum_id?: string
-    addendum_number?: number | null
-    addendum_status?: string
-    changes?: number
-    pending?: string[]
-  } | null
-}> => {
+}): Promise<ChangeWorkerPositionResult> => {
   const { data, error } = await supabase.rpc("change_worker_position", {
     p_worker_id: input.workerId,
     p_new_position_id: input.newPositionId,
@@ -429,7 +451,7 @@ export const changeWorkerPosition = async (input: {
     p_resolution_date: input.resolutionDate || null,
   })
   if (error) throw error
-  return data as any
+  return data as ChangeWorkerPositionResult
 }
 
 /** Anexo manual: condiciones retributivas, forma de pago, lugar y jornada (§63/§64). */
@@ -445,13 +467,7 @@ export const createManualAddendum = async (input: {
   signaturePlace?: string | null
   representativeAssignmentId?: string | null
   requireFormalized?: boolean
-}): Promise<{
-  status: string
-  addendum_id?: string
-  addendum_number?: number | null
-  addendum_status?: string
-  pending?: string[]
-}> => {
+}): Promise<ManualAddendumResult> => {
   const { data, error } = await supabase.rpc("create_contract_addendum", {
     p_worker_id: input.workerId,
     p_changes: input.changes,
@@ -467,7 +483,7 @@ export const createManualAddendum = async (input: {
     p_require_formalized: input.requireFormalized ?? false,
   })
   if (error) throw error
-  return data as any
+  return data as ManualAddendumResult
 }
 
 /** Formalizar: sólo confirma los datos del anexo. No modifica salario, escala ni puesto. */

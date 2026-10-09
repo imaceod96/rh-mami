@@ -97,7 +97,7 @@ export default function MedicalCertificateFormDialog({
         if (error) throw error
         if (!cancelled) {
           setWorkers(
-            ((data || []) as any[]).map((w) => ({
+            ((data || []) as { id: string; first_name: string; first_surname: string; second_surname: string | null; identification: string }[]).map((w) => ({
               id: w.id,
               full_name: [w.first_name, w.first_surname, w.second_surname]
                 .filter(Boolean)

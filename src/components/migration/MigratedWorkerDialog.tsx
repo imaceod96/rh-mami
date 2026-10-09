@@ -44,7 +44,7 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
       const failed = [genders, marital, skins, education, licenses].find((item) => item.error)
       if (failed?.error) throw failed.error
       setCatalogs({ gender_id: genders.data || [], marital_status_id: marital.data || [], skin_color_id: skins.data || [], education_level_id: education.data || [] })
-      setLicenseCategories((licenses.data || []).map((row: any) => ({ id: row.id, name: row.name, code: row.code })))
+      setLicenseCategories((licenses.data || []).map((row: { id: string; name: string; code?: string }) => ({ id: row.id, name: row.name, code: row.code })))
     }).catch((cause) => setError(cause instanceof Error ? cause.message : "No se cargaron los catálogos."))
   }, [])
 
@@ -94,7 +94,7 @@ export function MigratedWorkerDialog({ onSuccess, onCancel }: Props) {
         { p_entity_id: entityId, p_identification: form.identification.trim() }
       )
       if (checkError) throw checkError
-      const existingPerson = (personStatus as any) || {}
+      const existingPerson = (personStatus || {}) as { worker_id?: string | null; worker_status?: string | null; candidate_count?: number | null }
       if (existingPerson.worker_id) {
         throw new Error(
           existingPerson.worker_status === "active"

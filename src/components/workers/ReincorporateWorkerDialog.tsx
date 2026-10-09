@@ -27,16 +27,14 @@ import {
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
-import {
-  ContractFormalizationAlerts,
-  EMPTY_FORMALIZATION_PENDING,
-} from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {
   ContractRetributionFields,
   ContractSignatureFields,
 } from "@/components/contracts/ContractConditionsFields"
 import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
 import {
+  EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
   fetchPaymentMethods,
   formatConditionDate,
@@ -78,6 +76,37 @@ interface PositionRow {
     area: { id: string; name: string } | null
     salary_group: { id: string; salary_scale_id: string; sequence_number: number } | null
   } | null
+}
+
+// Forma cruda devuelta por PostgREST: las relaciones embebidas pueden llegar
+// como arreglo o como objeto antes de normalizarse en el mapeo.
+interface PositionQueryJobRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  is_principal_specialist: boolean
+  area: { id: string; name: string }[] | null
+  salary_group:
+    | { id: string; salary_scale_id: string; sequence_number: number }
+    | { id: string; salary_scale_id: string; sequence_number: number }[]
+    | null
+}
+
+interface PositionQueryRow {
+  id: string
+  name: string
+  code: string | null
+  is_active: boolean
+  authorized_quantity: number
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  job: PositionQueryJobRow | PositionQueryJobRow[] | null
 }
 
 interface ContractType {
@@ -172,17 +201,23 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         .order("name")
       if (posError) throw posError
 
-      const mapped = ((posData as any[]) || []).map((p: any) => ({
-        ...p,
-        job: p.job
-          ? {
-              ...p.job,
-              area: p.job.area
-                ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
-                : null,
-            }
-          : null,
-      })) as PositionRow[]
+      const mapped: PositionRow[] = ((posData as PositionQueryRow[]) || []).map((p: PositionQueryRow) => {
+        const job = Array.isArray(p.job) ? p.job[0] ?? null : p.job
+        return {
+          ...p,
+          job: job
+            ? {
+                ...job,
+                area: job.area
+                  ? { id: job.area[0]?.id || null, name: job.area[0]?.name || null }
+                  : null,
+                salary_group: Array.isArray(job.salary_group)
+                  ? job.salary_group[0] ?? null
+                  : job.salary_group,
+              }
+            : null,
+        }
+      })
       setPositions(mapped)
 
       // Fase 11A.3: horarios habituales de los puestos (solo lectura)
@@ -198,8 +233,10 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       if (workersError) throw workersError
 
       const counts: Record<string, number> = {}
-      ;((workersData as any[]) || []).forEach((w: any) => {
-        ;((w.assignments as any[]) || []).forEach((a: any) => {
+      ;((workersData as {
+        assignments: { position_id: string; is_current: boolean; end_date: string | null }[] | null
+      }[]) || []).forEach((w) => {
+        ;(w.assignments || []).forEach((a) => {
           if (a.is_current && !a.end_date) {
             counts[a.position_id] = (counts[a.position_id] || 0) + 1
           }
@@ -223,7 +260,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
         .maybeSingle()
       if (workerError) throw workerError
       if (workerRow) {
-        const row = workerRow as any
+        const row = workerRow as { first_name: string; first_surname: string; second_surname: string | null; identification: string }
         setWorker({
           fullName: [row.first_name, row.first_surname, row.second_surname]
             .filter(Boolean)

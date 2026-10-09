@@ -46,7 +46,7 @@ export function validateDocumentFile(file: File): string | null {
 export function sanitizeFileName(name: string): string {
   const cleaned = name
     .normalize("NFKD")
-    .replace(/[^\w.\-]+/g, "_")
+    .replace(/[^\w.-]+/g, "_")
     .replace(/_+/g, "_")
   return cleaned.replace(/^_+|_+$/g, "") || "documento"
 }

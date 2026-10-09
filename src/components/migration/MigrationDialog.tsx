@@ -55,13 +55,46 @@ interface MigrationRow {
   representative_assignment_id: string
 }
 
+/**
+ * Contrato del RPC `get_migration_template_data` (ver
+ * `src/db/migrations/20261020_02_worker_migration_rpcs.sql`). Cada catálogo es un
+ * `jsonb_agg(jsonb_build_object(...))`, por lo que las claves son exactamente las
+ * que aparecen aquí.
+ */
+interface MigrationCatalogItem {
+  id: string
+  name: string
+  code: string
+}
+
+interface MigrationTemplateJob {
+  id: string
+  name: string
+  code: string
+  area_id: string
+}
+
+interface MigrationTemplatePosition {
+  id: string
+  name: string
+  code: string
+  job_id: string
+  authorized_quantity: number
+}
+
+interface MigrationTemplateRepresentative {
+  id: string
+  person_name: string
+  title: string | null
+}
+
 interface MigrationTemplate {
-  areas: any[]
-  jobs: any[]
-  positions: any[]
-  contract_types: any[]
-  payment_methods: any[]
-  representatives: any[]
+  areas: MigrationCatalogItem[]
+  jobs: MigrationTemplateJob[]
+  positions: MigrationTemplatePosition[]
+  contract_types: MigrationCatalogItem[]
+  payment_methods: MigrationCatalogItem[]
+  representatives: MigrationTemplateRepresentative[]
 }
 
 export const MigrationDialog: React.FC<MigrationDialogProps> = ({
@@ -79,7 +112,7 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [migrationType, setMigrationType] = useState<'basic' | 'complete'>('basic')
   const [batchId, setBatchId] = useState<string>(`MIG-${Date.now()}`)
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<{ successful: number; failed: number; total_rows: number } | null>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]

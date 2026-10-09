@@ -13,16 +13,14 @@ import { CUBA_PROVINCES_FULL, MUNICIPIOS_BY_PROVINCE_FULL } from "@/data/cuba-lo
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
-import {
-  ContractFormalizationAlerts,
-  EMPTY_FORMALIZATION_PENDING,
-} from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {
   ContractRetributionFields,
   ContractSignatureFields,
 } from "@/components/contracts/ContractConditionsFields"
 import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
 import {
+  EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
   fetchPaymentMethods,
   formatConditionDate,
@@ -545,7 +543,7 @@ export const WorkerForm: React.FC<WorkerFormProps> = ({
           setFormError("No se pudo verificar la unicidad de la identificación.")
           return
         }
-        const existingPerson = (personStatus as any) || {}
+        const existingPerson = (personStatus || {}) as { worker_id?: string | null; worker_status?: string | null; candidate_count?: number | null }
         if (existingPerson.worker_id) {
           setFormError(
             existingPerson.worker_status === "active"

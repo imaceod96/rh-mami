@@ -24,8 +24,8 @@ const Admin = () => {
         if (tenants) {
           setMetrics({
             total: tenants.length,
-            active: tenants.filter((t: any) => t.is_active).length,
-            inactive: tenants.filter((t: any) => !t.is_active).length,
+            active: tenants.filter((t: { is_active: boolean | null }) => t.is_active).length,
+            inactive: tenants.filter((t: { is_active: boolean | null }) => !t.is_active).length,
           })
         }
       } catch (error) {

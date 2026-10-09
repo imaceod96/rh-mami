@@ -46,6 +46,17 @@ export interface WorkerSalaryHistoryEntry {
   }[]
 }
 
+/**
+ * Fila cruda de `worker_salary_history` con las relaciones embebidas tal como las
+ * devuelve Supabase: la relación a `salary_groups` llega como objeto o array y
+ * `addendums` como array. Se normaliza a `WorkerSalaryHistoryEntry` en el mapeo.
+ */
+interface WorkerSalaryHistoryRow
+  extends Omit<WorkerSalaryHistoryEntry, "group_sequence_number" | "addendums"> {
+  salary_group: { sequence_number: number } | { sequence_number: number }[] | null
+  addendums: WorkerSalaryHistoryEntry["addendums"] | null
+}
+
 /** Histórico salarial del trabajador en orden cronológico inverso, con su anexo si existe. */
 export async function fetchWorkerSalaryHistory(
   workerId: string
@@ -64,7 +75,7 @@ export async function fetchWorkerSalaryHistory(
 
   if (error) throw error
 
-  return (((data as any[]) || []).map((row) => ({
+  return (((data as WorkerSalaryHistoryRow[]) || []).map((row) => ({
     ...row,
     group_sequence_number: Array.isArray(row.salary_group)
       ? row.salary_group[0]?.sequence_number ?? null

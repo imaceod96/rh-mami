@@ -117,7 +117,7 @@ const EntitySettingsInitialImport = () => {
       const batchId = worker.migration_batch_id as string
       const group = groups.get(batchId) || { batchId, migratedAt: worker.migrated_at, total: 0, linked: 0, pending: 0 }
       group.total += 1
-      const assigned = (worker.worker_position_assignments || []).some((assignment: any) => assignment.is_current && !assignment.end_date)
+      const assigned = (worker.worker_position_assignments || []).some((assignment: { is_current: boolean | null; end_date: string | null }) => assignment.is_current && !assignment.end_date)
       if (worker.employment_status === "active" && assigned) group.linked += 1
       else if (worker.employment_status === "active") group.pending += 1
       groups.set(batchId, group)

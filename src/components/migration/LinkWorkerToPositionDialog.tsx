@@ -11,6 +11,20 @@ import { Label } from "@/components/ui/label"
 
 interface Props { workerId: string; positions: WorkerPositionOption[]; onSuccess: () => void; onCancel: () => void }
 
+interface PositionHierarchyArea {
+  name: string | null
+}
+
+interface PositionHierarchyJob {
+  name: string | null
+  area: PositionHierarchyArea | PositionHierarchyArea[] | null
+}
+
+interface PositionHierarchyRow {
+  id: string
+  job: PositionHierarchyJob | PositionHierarchyJob[] | null
+}
+
 export function LinkWorkerToPositionDialog({ workerId, positions, onSuccess, onCancel }: Props) {
   const { entityId } = useParams<{ entityId: string }>()
   const [positionId, setPositionId] = React.useState("")
@@ -23,8 +37,8 @@ export function LinkWorkerToPositionDialog({ workerId, positions, onSuccess, onC
       const { data, error: queryError } = await supabase.from("organization_positions").select("id,job:organization_jobs(name,area:organization_areas(name))").eq("organization_entity_id", entityId)
       if (queryError) throw queryError
       const result: Record<string, { area: string; job: string }> = {}
-      for (const item of data || []) {
-        const job = Array.isArray((item as any).job) ? (item as any).job[0] : (item as any).job
+      for (const item of (data || []) as PositionHierarchyRow[]) {
+        const job = Array.isArray(item.job) ? item.job[0] : item.job
         const area = Array.isArray(job?.area) ? job.area[0] : job?.area
         result[item.id] = { area: area?.name || "—", job: job?.name || "—" }
       }

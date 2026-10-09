@@ -73,10 +73,7 @@ import {
 import ChangeContractDialog, {
   type CurrentContractInfo,
 } from "@/components/workers/ChangeContractDialog"
-import {
-  ContractFormalizationAlerts,
-  EMPTY_FORMALIZATION_PENDING,
-} from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {
   ContractRetributionFields,
   ContractSignatureFields,
@@ -89,6 +86,7 @@ import { AddendumDetailDialog } from "@/components/addendums/AddendumDetailDialo
 import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import {
+  EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
   fetchComponentsByContract,
   fetchPaymentMethods,
@@ -240,6 +238,123 @@ interface WorkerMovement {
   created_at: string
   separation_reason: { name: string } | null
   authorName: string | null
+}
+
+/** Fila cruda de `worker_employment_movements` con la relación embebida (array u objeto). */
+interface WorkerMovementRow extends Omit<WorkerMovement, "separation_reason" | "authorName"> {
+  separation_reason: { name: string } | { name: string }[] | null
+}
+
+/** Fila del RPC `resolve_tenure_payment_for_worker`. */
+interface TenurePaymentRow {
+  amount: number
+  from_months: number
+  to_months: number | null
+}
+
+// Forma cruda del trabajador devuelta por PostgREST: las relaciones embebidas
+// pueden llegar como arreglo o como objeto antes de normalizarse a `WorkerDetail`.
+interface WorkerDetailQueryJobRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  area: { id: string; name: string }[] | null
+  salary_group:
+    | { id: string; salary_scale_id: string; sequence_number: number }
+    | { id: string; salary_scale_id: string; sequence_number: number }[]
+    | null
+}
+
+interface WorkerDetailQueryPositionRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  job_id: string
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  job: WorkerDetailQueryJobRow | WorkerDetailQueryJobRow[] | null
+}
+
+interface WorkerDetailQueryAssignmentRow {
+  id: string
+  position_id: string
+  start_date: string
+  end_date: string | null
+  is_current: boolean
+  position: WorkerDetailQueryPositionRow | WorkerDetailQueryPositionRow[] | null
+}
+
+interface WorkerDetailQueryContractRow {
+  id: string
+  assignment_id: string
+  contract_type_id: string
+  start_date: string
+  end_date: string | null
+  actual_end_date: string | null
+  is_current: boolean
+  salary_amount: number | null
+  salary_currency_code: string | null
+  salary_effective_date: string | null
+  salary_snapshot_status: string
+  representative_name_snapshot: string | null
+  representative_position_snapshot: string | null
+  representative_captured_at: string | null
+  entity_name_snapshot: string | null
+  signature_date: string | null
+  signature_place: string | null
+  payment_method_id: string | null
+  payment_schedule_text: string | null
+  total_compensation_snapshot: number | null
+  conditions_captured_at: string | null
+  salary_group:
+    | { id: string; sequence_number: number }
+    | { id: string; sequence_number: number }[]
+    | null
+  payment_method:
+    | { name: string; code: string }
+    | { name: string; code: string }[]
+    | null
+  contract_type:
+    | { id: string; name: string; code: string }
+    | { id: string; name: string; code: string }[]
+    | null
+}
+
+interface WorkerDetailQueryRow {
+  id: string
+  code: string
+  first_name: string
+  first_surname: string
+  second_surname: string | null
+  identification: string
+  birth_date: string | null
+  gender_id: string | null
+  marital_status_id: string | null
+  education_level_id: string | null
+  specialty: string | null
+  has_masters_degree: boolean
+  has_doctorate_degree: boolean
+  profession_or_trade: string | null
+  skin_color_id: string | null
+  address: string | null
+  province: string | null
+  municipality: string | null
+  phone: string | null
+  email: string | null
+  hire_date: string
+  employment_start_date: string | null
+  employment_status: string
+  created_at: string
+  updated_at: string
+  assignments: WorkerDetailQueryAssignmentRow[] | null
+  contracts: WorkerDetailQueryContractRow[] | null
 }
 
 const WorkerDetail = () => {
@@ -422,42 +537,56 @@ const WorkerDetail = () => {
               .single()
       
             if (workerError) throw workerError
-                  // Map nested area arrays to objects
-                  const mappedWorker = workerData as any
-                  if (mappedWorker.contracts) {
-                    mappedWorker.contracts = mappedWorker.contracts.map((c: any) => ({
-                      ...c,
-                      contract_type: Array.isArray(c.contract_type)
-                        ? c.contract_type[0] || null
-                        : c.contract_type,
-                      // Fase 11A.5: snapshot contractual (grupo y forma de pago formalizados)
-                      salary_group: Array.isArray(c.salary_group)
-                        ? c.salary_group[0] || null
-                        : c.salary_group,
-                      payment_method: Array.isArray(c.payment_method)
-                        ? c.payment_method[0] || null
-                        : c.payment_method,
-                    }))
-                  }
-            if (mappedWorker.assignments) {
-              mappedWorker.assignments = mappedWorker.assignments.map((a: any) => ({
-                ...a,
-                position: a.position
-                  ? {
-                      ...a.position,
-                      job: a.position.job
+            // Normaliza las relaciones embebidas (arreglo u objeto) al shape de WorkerDetail.
+            const rawWorker = workerData as WorkerDetailQueryRow
+            const mappedWorker: WorkerDetail = {
+              ...rawWorker,
+              contracts: rawWorker.contracts
+                ? rawWorker.contracts.map((c) => ({
+                    ...c,
+                    contract_type: Array.isArray(c.contract_type)
+                      ? c.contract_type[0] || null
+                      : c.contract_type,
+                    // Fase 11A.5: snapshot contractual (grupo y forma de pago formalizados)
+                    salary_group: Array.isArray(c.salary_group)
+                      ? c.salary_group[0] || null
+                      : c.salary_group,
+                    payment_method: Array.isArray(c.payment_method)
+                      ? c.payment_method[0] || null
+                      : c.payment_method,
+                  }))
+                : null,
+              assignments: rawWorker.assignments
+                ? rawWorker.assignments.map((a) => {
+                    const position = Array.isArray(a.position) ? a.position[0] ?? null : a.position
+                    const job = position
+                      ? Array.isArray(position.job)
+                        ? position.job[0] ?? null
+                        : position.job
+                      : null
+                    return {
+                      ...a,
+                      position: position
                         ? {
-                            ...a.position.job,
-                            area: a.position.job.area
-                              ? { id: a.position.job.area[0]?.id || null, name: a.position.job.area[0]?.name || null }
+                            ...position,
+                            job: job
+                              ? {
+                                  ...job,
+                                  area: job.area
+                                    ? { id: job.area[0]?.id || null, name: job.area[0]?.name || null }
+                                    : null,
+                                  salary_group: Array.isArray(job.salary_group)
+                                    ? job.salary_group[0] ?? null
+                                    : job.salary_group,
+                                }
                               : null,
                           }
                         : null,
                     }
-                  : null,
-              }))
+                  })
+                : null,
             }
-            setWorker(mappedWorker as WorkerDetail)
+            setWorker(mappedWorker)
             
                   // Antigüedad desde la fecha canónica de incorporación laboral
                   // (employment_start_date; fallback histórico a hire_date).
@@ -477,7 +606,7 @@ const WorkerDetail = () => {
                       }
                     )
                     if (tenureData && Array.isArray(tenureData) && tenureData.length > 0) {
-                      const row = tenureData[0] as any
+                      const row = tenureData[0] as TenurePaymentRow
                       setTenurePayment({
                         amount: row.amount,
                         from_months: row.from_months,
@@ -502,8 +631,8 @@ const WorkerDetail = () => {
             
                   // Fase 11A.3: horario habitual del puesto vigente (o del último puesto si está inactivo)
       const requestedPositionId =
-        mappedWorker.assignments?.find((a: any) => a.is_current && !a.end_date)?.position_id ||
-        [...(mappedWorker.assignments || [])].sort((a: any, b: any) =>
+        mappedWorker.assignments?.find((a) => a.is_current && !a.end_date)?.position_id ||
+        [...(mappedWorker.assignments || [])].sort((a, b) =>
           a.start_date < b.start_date ? 1 : -1
         )[0]?.position_id ||
         null
@@ -566,7 +695,7 @@ const WorkerDetail = () => {
         .eq("worker_id", workerId)
         .order("created_at", { ascending: false })
 
-      const movRows = ((movData as any[]) || []).map((m: any) => ({
+      const movRows = ((movData as WorkerMovementRow[]) || []).map((m: WorkerMovementRow) => ({
         ...m,
         separation_reason: Array.isArray(m.separation_reason)
           ? m.separation_reason[0] || null
@@ -582,7 +711,7 @@ const WorkerDetail = () => {
           .from("profiles")
           .select("id, full_name")
           .in("id", authorIds)
-        ;(profs || []).forEach((p: any) => {
+        ;(profs || []).forEach((p: { id: string; full_name: string }) => {
           authorMap[p.id] = p.full_name
         })
       }
@@ -609,7 +738,7 @@ const WorkerDetail = () => {
         setApplicableScaleName(null)
       }
 
-      const localAssignments = (mappedWorker.assignments || []) as any[]
+      const localAssignments = mappedWorker.assignments || []
       const localCurrentAssignment =
         localAssignments.find((a) => a.is_current && !a.end_date) || null
       // Si el trabajador está inactivo no hay assignment actual: usamos su última

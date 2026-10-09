@@ -78,6 +78,38 @@ interface PermissionGroup {
   codes: string[]
 }
 
+/**
+ * Filas de Supabase utilizadas al cargar roles. Cada interfaz refleja sólo las
+ * columnas realmente seleccionadas y consumidas en este componente.
+ */
+interface RoleRow {
+  id: string
+  name: string
+  description: string | null
+  is_system_role: boolean
+  is_active: boolean
+  created_at: string
+  /** Sólo existe en `tenant_roles`; `platform_roles` no tiene esta columna. */
+  organization_entity_id?: string | null
+}
+
+interface PlatformUserRoleRow {
+  platform_role_id: string
+  user_id: string
+}
+
+interface TenantUserRoleRow {
+  tenant_role_id: string
+  tenant_membership_id: string
+}
+
+interface RolePermissionMappingRow {
+  platform_role_id?: string
+  tenant_role_id?: string
+  platform_permission_id?: string
+  tenant_permission_id?: string
+}
+
 const emptyForm: RoleForm = {
   name: "",
   description: "",
@@ -222,7 +254,7 @@ export const RolesManager = ({
       if (rolesResult.error) throw rolesResult.error
       if (permissionsResult.error) throw permissionsResult.error
 
-      const roleRows = rolesResult.data || []
+      const roleRows: RoleRow[] = rolesResult.data || []
       const roleIds = roleRows.map((role: { id: string }) => role.id)
 
       const mappingsRequest =
@@ -250,7 +282,7 @@ export const RolesManager = ({
             .select("platform_role_id,user_id")
             .in("platform_role_id", roleIds)
           if (platformAssignments.error) throw platformAssignments.error
-          assignmentRows = (platformAssignments.data || []).map((row: any) => ({
+          assignmentRows = (platformAssignments.data || []).map((row: PlatformUserRoleRow) => ({
             roleId: row.platform_role_id,
             userId: row.user_id,
           }))
@@ -271,15 +303,15 @@ export const RolesManager = ({
           assignmentRows = [
             ...(entityAssignments.data || []),
             ...(legacyAssignments.data || []),
-          ].map((row: any) => ({
+          ].map((row: TenantUserRoleRow) => ({
             roleId: row.tenant_role_id,
             userId: row.tenant_membership_id,
           }))
         }
       }
 
-      const mappings = (mappingsResult.data || []) as any[]
-      const roleRecords = roleRows.map((role: any) => {
+      const mappings = (mappingsResult.data || []) as RolePermissionMappingRow[]
+      const roleRecords = roleRows.map((role: RoleRow) => {
         const roleMappings = mappings.filter((mapping) =>
           isPlatform ? mapping.platform_role_id === role.id : mapping.tenant_role_id === role.id
         )

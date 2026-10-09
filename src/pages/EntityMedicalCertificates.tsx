@@ -24,7 +24,7 @@ import { useEntityPermissions } from "@/hooks/use-entity-permissions"
 import {
   useEntityMedicalCertificates,
 } from "@/hooks/use-medical-certificates"
-import { getCertificateSignedUrl } from "@/lib/rpc/medical-certificates"
+import { getCertificateSignedUrl, type EntityMedicalCertificateRow } from "@/lib/rpc/medical-certificates"
 import MedicalCertificateFormDialog from "@/components/medical-certificates/MedicalCertificateFormDialog"
 import { FilterBuilder } from "@/components/filters/filter-builder"
 import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"
@@ -80,12 +80,12 @@ const EntityMedicalCertificates = () => {
         options: Array.from(new Set(rows.map((r) => r.area_name).filter((v): v is string => !!v)))
           .sort()
           .map((value) => ({ value, label: value })),
-        getValue: (r: any) => r.area_name,
+        getValue: (r: EntityMedicalCertificateRow) => r.area_name,
       },
-      { key: "worker", label: "Trabajador", type: "text", placeholder: "Nombre o CI", getValue: (r: any) => `${r.worker_full_name} ${r.worker_identification}` },
-      { key: "startDate", label: "Fecha de salida", type: "daterange", getValue: (r: any) => r.start_date },
-      { key: "returnDate", label: "Reincorporación", type: "daterange", getValue: (r: any) => r.return_date },
-      { key: "hasDocument", label: "Con documento", type: "boolean", getValue: (r: any) => !!r.document?.storage_path },
+      { key: "worker", label: "Trabajador", type: "text", placeholder: "Nombre o CI", getValue: (r: EntityMedicalCertificateRow) => `${r.worker_full_name} ${r.worker_identification}` },
+      { key: "startDate", label: "Fecha de salida", type: "daterange", getValue: (r: EntityMedicalCertificateRow) => r.start_date },
+      { key: "returnDate", label: "Reincorporación", type: "daterange", getValue: (r: EntityMedicalCertificateRow) => r.return_date },
+      { key: "hasDocument", label: "Con documento", type: "boolean", getValue: (r: EntityMedicalCertificateRow) => !!r.document?.storage_path },
       {
         key: "days",
         label: "Cantidad de días",
@@ -93,7 +93,7 @@ const EntityMedicalCertificates = () => {
         options: Array.from(new Set(rows.map((r) => r.days).filter((v) => v !== null && v !== undefined)))
           .sort((a, b) => (a as number) - (b as number))
           .map((value) => ({ value: String(value), label: `${value} día(s)` })),
-        getValue: (r: any) => (r.days === null || r.days === undefined ? null : String(r.days)),
+        getValue: (r: EntityMedicalCertificateRow) => (r.days === null || r.days === undefined ? null : String(r.days)),
       },
     ],
     [rows]

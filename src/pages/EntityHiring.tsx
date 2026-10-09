@@ -51,6 +51,28 @@ interface PositionRow {
   job: JobRef | null
 }
 
+// Forma cruda devuelta por PostgREST: las relaciones embebidas pueden llegar
+// como arreglo o como objeto antes de normalizarse en el mapeo.
+interface PositionQueryJobRow {
+  id: string
+  name: string
+  area_id: string
+  area: { id: string; name: string }[] | null
+  salary_group:
+    | { id: string; salary_scale_id: string; sequence_number: number }
+    | { id: string; salary_scale_id: string; sequence_number: number }[]
+    | null
+}
+
+interface PositionQueryRow {
+  id: string
+  name: string
+  code: string | null
+  is_active: boolean
+  authorized_quantity: number
+  job: PositionQueryJobRow | PositionQueryJobRow[] | null
+}
+
 interface WorkerRow {
   id: string
   code: string
@@ -130,17 +152,25 @@ const EntityHiring = () => {
         .order("name")
       if (positionsError) throw positionsError
 
-      const positionRows = (((positionsData as any[]) || []).map((p: any) => ({
-        ...p,
-        job: p.job
-          ? {
-              ...p.job,
-              area: p.job.area
-                ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
-                : null,
-            }
-          : null,
-      })) as PositionRow[]) || []
+      const positionRows: PositionRow[] = ((positionsData as PositionQueryRow[]) || []).map(
+        (p: PositionQueryRow) => {
+          const job = Array.isArray(p.job) ? p.job[0] ?? null : p.job
+          return {
+            ...p,
+            job: job
+              ? {
+                  ...job,
+                  area: job.area
+                    ? { id: job.area[0]?.id || null, name: job.area[0]?.name || null }
+                    : null,
+                  salary_group: Array.isArray(job.salary_group)
+                    ? job.salary_group[0] ?? null
+                    : job.salary_group,
+                }
+              : null,
+          }
+        }
+      )
       setPositions(positionRows)
 
       const { data: workersData, error: workersError } = await supabase

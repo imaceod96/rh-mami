@@ -624,7 +624,7 @@ const EntityCandidates = () => {
       )
       if (checkError) throw checkError
 
-      const existingPerson = (personStatus as any) || {}
+      const existingPerson = (personStatus || {}) as { worker_id?: string | null; worker_status?: string | null; candidate_count?: number | null }
       if (existingPerson.worker_id) {
         setFormError(
           existingPerson.worker_status === "active"

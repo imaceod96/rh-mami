@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase"
 import { toRomanNumeral } from "@/utils/roman-numerals"
+import type { Workbook } from "exceljs"
 
 /**
  * ANEXO 14 — Exportación de la VISTA DE PUESTOS.
@@ -108,6 +109,12 @@ const THIN_BORDER = {
 const AREA_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFEFF4FA" } }
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFF7F9FC" } }
 
+/** Tipado mínimo del módulo ExcelJS usado por esta exportación (solo `Workbook`). */
+type ExcelJSModule = {
+  Workbook: typeof Workbook
+  default?: { Workbook: typeof Workbook }
+}
+
 /**
  * Genera el .xlsx del Anexo 14 (hoja «Anexo 14»), agrupado por Área.
  * `exceljs` se importa dinámicamente, igual que en el resto de exportaciones.
@@ -116,7 +123,7 @@ export async function buildAnexo14WorkbookBlob(
   rows: Anexo14Row[],
   meta: Anexo14Meta
 ): Promise<Blob> {
-  const mod: any = await import("exceljs")
+  const mod: ExcelJSModule = await import("exceljs")
   const ExcelJS = mod?.default ?? mod
 
   const workbook = new ExcelJS.Workbook()

@@ -124,7 +124,12 @@ const EntityReentries = () => {
           .order("effective_date", { ascending: false })
 
         const map: Record<string, BajaInfo> = {}
-        ;((movData as any[]) || []).forEach((m) => {
+        ;((movData as {
+          worker_id: string
+          effective_date: string
+          reason: string | null
+          separation_reason: { name: string | null } | { name: string | null }[] | null
+        }[]) || []).forEach((m) => {
           if (map[m.worker_id]) return
           const reason = Array.isArray(m.separation_reason)
             ? m.separation_reason[0]?.name

@@ -1,7 +1,14 @@
 import { supabase } from "@/lib/supabase"
 import { academicCategoryLabel } from "@/lib/academic-payment"
+import type { Workbook } from "exceljs"
 
 export { academicCategoryLabel }
+
+/** Tipado mínimo del módulo ExcelJS usado por esta exportación (solo `Workbook`). */
+type ExcelJSModule = {
+  Workbook: typeof Workbook
+  default?: { Workbook: typeof Workbook }
+}
 
 /**
  * PRENÓMINA (Fase 1) — preparación mensual del pago de los trabajadores activos.
@@ -236,7 +243,7 @@ const timeToMinutes = (time: string): number => {
  * contemplando horarios que cruzan medianoche (19:00 → 07:00) y parciales.
  */
 export function computeNightOverlapHours(start: string, end: string): NightOverlapHours {
-  let s = timeToMinutes(start)
+  const s = timeToMinutes(start)
   let e = timeToMinutes(end)
   if (e <= s) e += 1440
 
@@ -452,7 +459,7 @@ export async function fetchPrenominaPeriod(periodId: string): Promise<PrenominaP
 const toNumberOrNull = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value)
 
-const normalizeEntry = (row: any): PrenominaWorkerEntry => ({
+const normalizeEntry = (row: PrenominaWorkerEntry): PrenominaWorkerEntry => ({
   ...row,
   salary_group_sequence: toNumberOrNull(row.salary_group_sequence),
   salary_scale_amount: toNumberOrNull(row.salary_scale_amount),
@@ -505,7 +512,7 @@ const normalizeEntry = (row: any): PrenominaWorkerEntry => ({
   total_payment: Number(row.total_payment || 0),
 })
 
-const normalizeNight = (row: any): PrenominaNightEntry => ({
+const normalizeNight = (row: PrenominaNightEntry): PrenominaNightEntry => ({
   ...row,
   nights_worked: Number(row.nights_worked || 0),
   hours_19_23_per_night: Number(row.hours_19_23_per_night || 0),
@@ -522,7 +529,7 @@ export async function fetchPrenominaEntries(periodId: string): Promise<Prenomina
     .eq("period_id", periodId)
     .order("worker_name_snapshot")
   if (error) throw error
-  return (((data as any[]) || [])).map(normalizeEntry)
+  return ((data as PrenominaWorkerEntry[]) || []).map(normalizeEntry)
 }
 
 export async function fetchPrenominaNights(
@@ -537,7 +544,7 @@ export async function fetchPrenominaNights(
     .order("created_at")
   if (error) throw error
   const grouped: Record<string, PrenominaNightEntry[]> = {}
-    ;(((data as any[]) || [])).map(normalizeNight).forEach((night) => {
+    ;(((data as PrenominaNightEntry[]) || [])).map(normalizeNight).forEach((night) => {
       grouped[night.worker_entry_id] = grouped[night.worker_entry_id] || []
       grouped[night.worker_entry_id].push(night)
     })
@@ -725,7 +732,7 @@ export async function buildPrenominaWorkbookBlob(
   nightsByEntry: Record<string, PrenominaNightEntry[]>,
   meta: PrenominaExportMeta
 ): Promise<Blob> {
-  const mod: any = await import("exceljs")
+  const mod: ExcelJSModule = await import("exceljs")
   const ExcelJS = mod?.default ?? mod
 
   const workbook = new ExcelJS.Workbook()

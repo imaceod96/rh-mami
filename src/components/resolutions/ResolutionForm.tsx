@@ -134,7 +134,7 @@ const ResolutionForm: React.FC<ResolutionFormProps> = ({
     !!template &&
     (template.status === "NONE" || template.status === "AMBIGUOUS" || template.status === "UNKNOWN")
 
-  const needs = (key: string) => required.includes(key)
+  const needs = React.useCallback((key: string) => required.includes(key), [required])
   const jobName = context?.job.name ?? null
   const salary = context?.job.salary_amount ?? null
   const salaryCurrency = context?.job.currency_code ?? null
@@ -182,7 +182,6 @@ const ResolutionForm: React.FC<ResolutionFormProps> = ({
     municipality,
     revolutionYear,
     parentCompany,
-    required,
   ])
 
   const valid = templateResolved && !error
@@ -204,11 +203,15 @@ const ResolutionForm: React.FC<ResolutionFormProps> = ({
       error,
     })
   }, [
+    onValuesChange,
     resolutionDate,
     representativeAssignmentId,
     workContent,
+    workContentChanged,
     municipality,
+    municipalityChanged,
     revolutionYear,
+    revolutionYearChanged,
     template,
     valid,
     error,

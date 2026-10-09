@@ -138,6 +138,56 @@ interface OrganizationJob {
   } | null
 }
 
+// Forma cruda del cargo tal como la devuelve PostgREST: el grupo salarial
+// incluye su arreglo de valores vigentes antes de resolverse a `current_value`.
+interface OrganizationJobQueryRow {
+  id: string
+  organization_entity_id: string
+  area_id: string
+  code: string
+  name: string
+  description: string | null
+  salary_group_id: string
+  hierarchy_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  occupational_category_id: string | null
+  required_profession_or_trade: string | null
+  work_content: string | null
+  is_cuadro: boolean
+  is_principal_specialist: boolean
+  area: {
+    id: string
+    name: string
+    code: string
+    is_active: boolean
+    organization_entity_id: string
+  } | null
+  salary_group: {
+    id: string
+    salary_scale_id: string
+    sequence_number: number
+    description: string | null
+    is_active: boolean
+    salary_group_values: {
+      id: string
+      amount: number
+      currency_code: string
+      effective_from: string
+      effective_to: string | null
+      is_active: boolean
+    }[] | null
+  } | null
+}
+
+interface SalaryGroupValueQueryRow {
+  salary_group_id: string
+  amount: number
+  currency_code: string
+  effective_from: string
+}
+
 type StatusFilter = "active" | "inactive" | "all"
 
 interface OrganizationPosition {
@@ -353,7 +403,7 @@ const EntitySettingsStaffing = () => {
       setCategoryNameById(Object.fromEntries(categories.map(c => [c.id, c.name])))
 
       // Transform jobs to include current salary value
-      const jobsWithCurrentValue = (jobsData as any[])?.map((job: any) => {
+      const jobsWithCurrentValue = (jobsData as OrganizationJobQueryRow[])?.map((job: OrganizationJobQueryRow) => {
         const currentValue = job.salary_group?.salary_group_values?.length > 0
           ? job.salary_group.salary_group_values[0]
           : null
@@ -375,7 +425,7 @@ const EntitySettingsStaffing = () => {
               }
             : null,
         }
-      }) as OrganizationJob[]
+      })
 
       setJobs(jobsWithCurrentValue || [])
 
@@ -412,7 +462,7 @@ const EntitySettingsStaffing = () => {
           .order("effective_from", { ascending: false })
 
         if (valuesError) throw valuesError
-        ;(valuesData as any[])?.forEach(v => {
+        ;(valuesData as SalaryGroupValueQueryRow[])?.forEach(v => {
           if (valuesMap[v.salary_group_id] === undefined) {
             valuesMap[v.salary_group_id] = {
               amount: v.amount,

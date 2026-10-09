@@ -128,6 +128,20 @@ function mapResolution(data: unknown): AcademicCategoryPaymentResolution {
   }
 }
 
+interface AcademicCategoryPaymentConfigRow {
+  entity_id?: string
+  scope?: string
+  regime?: string | null
+  currency_code?: string
+  master_amount?: number | null
+  doctor_amount?: number | null
+  master_configured?: boolean
+  doctor_configured?: boolean
+  configured?: boolean
+  can_view?: boolean
+  can_manage?: boolean
+}
+
 /** Configuración vigente de pago por categoría académica para una entidad. */
 export async function fetchAcademicCategoryPaymentConfig(
   entityId: string
@@ -136,7 +150,7 @@ export async function fetchAcademicCategoryPaymentConfig(
     p_entity_id: entityId,
   })
   if (error) throw error
-  const row = (data || {}) as Record<string, any>
+  const row = (data || {}) as AcademicCategoryPaymentConfigRow
   return {
     entityId,
     scope:

@@ -60,7 +60,14 @@ const TenantInvitations = () => {
       if (fetchError) throw fetchError
 
       setInvitations(
-        (data || []).map((inv: any) => ({
+        (data || []).map((inv: {
+          id: string
+          email: string
+          status: string
+          expires_at: string | null
+          created_at: string
+          tenant_role: { name: string | null } | null
+        }) => ({
           id: inv.id,
           email: inv.email,
           role_name: inv.tenant_role?.name || "Sin rol",

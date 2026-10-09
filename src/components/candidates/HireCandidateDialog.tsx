@@ -56,13 +56,11 @@ import {
   ContractRetributionFields,
   ContractSignatureFields,
 } from "@/components/contracts/ContractConditionsFields"
-import {
-  ContractFormalizationAlerts,
-  EMPTY_FORMALIZATION_PENDING,
-} from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
 import type { RepresentativePositionRow } from "@/lib/representatives"
 import {
+  EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
   fetchPaymentMethods,
   formatConditionDate,
@@ -93,6 +91,38 @@ interface PositionRow {
     area: { id: string; name: string } | null
     salary_group: { id: string; salary_scale_id: string; sequence_number: number } | null
   } | null
+}
+
+// Forma cruda devuelta por PostgREST: las relaciones embebidas pueden llegar
+// como arreglo o como objeto antes de normalizarse en el mapeo.
+interface PositionQueryJobRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  is_cuadro: boolean
+  is_principal_specialist: boolean
+  area: { id: string; name: string }[] | null
+  salary_group:
+    | { id: string; salary_scale_id: string; sequence_number: number }
+    | { id: string; salary_scale_id: string; sequence_number: number }[]
+    | null
+}
+
+interface PositionQueryRow {
+  id: string
+  name: string
+  code: string | null
+  is_active: boolean
+  authorized_quantity: number
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  job: PositionQueryJobRow | PositionQueryJobRow[] | null
 }
 
 interface ContractType {
@@ -229,17 +259,23 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         .order("name")
       if (posError) throw posError
 
-      const mapped = ((data as any[]) || []).map((p: any) => ({
-        ...p,
-        job: p.job
-          ? {
-              ...p.job,
-              area: p.job.area
-                ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
-                : null,
-            }
-          : null,
-      })) as PositionRow[]
+      const mapped: PositionRow[] = ((data as PositionQueryRow[]) || []).map((p: PositionQueryRow) => {
+        const job = Array.isArray(p.job) ? p.job[0] ?? null : p.job
+        return {
+          ...p,
+          job: job
+            ? {
+                ...job,
+                area: job.area
+                  ? { id: job.area[0]?.id || null, name: job.area[0]?.name || null }
+                  : null,
+                salary_group: Array.isArray(job.salary_group)
+                  ? job.salary_group[0] ?? null
+                  : job.salary_group,
+              }
+            : null,
+        }
+      })
       setPositions(mapped)
 
       // Fase 11A.3: horarios habituales de los puestos (solo lectura)
@@ -255,8 +291,10 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       if (workersError) throw workersError
 
       const counts: Record<string, number> = {}
-      ;((workersData as any[]) || []).forEach((w: any) => {
-        ;((w.assignments as any[]) || []).forEach((a: any) => {
+      ;((workersData as {
+        assignments: { position_id: string; is_current: boolean; end_date: string | null }[] | null
+      }[]) || []).forEach((w) => {
+        ;(w.assignments || []).forEach((a) => {
           if (a.is_current && !a.end_date) {
             counts[a.position_id] = (counts[a.position_id] || 0) + 1
           }
@@ -276,7 +314,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         .order("first_name")
       if (candidatesError) throw candidatesError
       setCandidates(
-        (((candidatesData as any[]) || []).map((c: any) => ({
+        (((candidatesData as (Omit<CandidateRow, "worker"> & { worker: LinkedWorker | LinkedWorker[] | null })[]) || []).map((c) => ({
           ...c,
           worker: Array.isArray(c.worker) ? c.worker[0] || null : c.worker || null,
         })) as CandidateRow[]) || []
@@ -543,7 +581,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
         })
         if (rpcError) throw rpcError
 
-        const payload = (data as any) || {}
+        const payload = (data || {}) as { worker_id?: string | null; resolution_id?: string | null; contract_id?: string | null }
         const workerId = payload.worker_id as string | undefined
         const resolutionId = payload.resolution_id as string | undefined
 
@@ -676,7 +714,7 @@ const HireCandidateDialog: React.FC<HireCandidateDialogProps> = ({
       })
       if (rpcError) throw rpcError
 
-      const payload = (data as any) || {}
+      const payload = (data || {}) as { worker_id?: string | null; resolution_id?: string | null; contract_id?: string | null }
       const workerId = payload.worker_id as string | undefined
       const contractId = payload.contract_id as string | undefined
 

@@ -41,7 +41,7 @@ import {
 interface Tenant {
   id: string
   name: string
-  [key: string]: any
+  [key: string]: unknown
 }
 import {
   Breadcrumb,
@@ -116,7 +116,10 @@ const OrganizationDetail = () => {
   const navigate = useNavigate()
   const { user, isPlatformSuperAdmin } = useAuth()
   const { currentTenant } = useCurrentTenant()
-  
+
+  // Primitiva estable del tenant: evita depender del objeto completo en los callbacks.
+  const currentTenantId = currentTenant?.id
+
   const [entity, setEntity] = React.useState<OrganizationEntity | null>(null)
   const [ancestors, setAncestors] = React.useState<OrganizationEntity[]>([])
   const [children, setChildren] = React.useState<OrganizationEntity[]>([])
@@ -151,11 +154,11 @@ const OrganizationDetail = () => {
       const entityData = entityResult.data as OrganizationEntity
       
       // Check if entity belongs to current tenant
-      if (currentTenant && entityData.tenant_id !== currentTenant.id) {
+      if (currentTenantId && entityData.tenant_id !== currentTenantId) {
               throw new Error("No tienes permiso para acceder a esta entidad")
             }
       
-            if (!currentTenant && !isPlatformSuperAdmin) {
+            if (!currentTenantId && !isPlatformSuperAdmin) {
               throw new Error("No tienes permiso para acceder a esta entidad")
             }
       
@@ -208,11 +211,11 @@ const OrganizationDetail = () => {
       setInheritedUsers(accessRows.filter(row => !row.is_direct))
       
       // Fetch all entities in tenant for switcher (if needed)
-            if (currentTenant && currentTenant.id !== entityData.tenant_id) {
+            if (currentTenantId && currentTenantId !== entityData.tenant_id) {
               const otherTenantEntitiesResult = await supabase
                 .from("organization_entities")
                 .select("*")
-                .eq("tenant_id", currentTenant.id)
+                .eq("tenant_id", currentTenantId)
                 .order("name")
               
               if (otherTenantEntitiesResult.error) throw otherTenantEntitiesResult.error
@@ -224,18 +227,20 @@ const OrganizationDetail = () => {
           } finally {
             setLoading(false)
           }
-        }, [entityId, currentTenant?.id])
+        }, [entityId, currentTenantId, isPlatformSuperAdmin])
   
   React.useEffect(() => {
     loadEntityData()
   }, [loadEntityData])
   
   const checkDeletePermissions = React.useCallback(async () => {
-    if (!entity) return
+    // Primitiva estable: la identidad del callback depende solo del id de la entidad.
+    const targetEntityId = entity?.id
+    if (!targetEntityId) return
     
     try {
       const { data } = await supabase.rpc("can_access_entity", {
-        target_entity_id: entity.id,
+        target_entity_id: targetEntityId,
         permission_code: "organization.manage"
       })
       

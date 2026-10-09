@@ -18,16 +18,14 @@ import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/lib/representatives"
-import {
-  ContractFormalizationAlerts,
-  EMPTY_FORMALIZATION_PENDING,
-} from "@/components/contracts/ContractFormalizationAlerts"
+import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {
   ContractRetributionFields,
   ContractSignatureFields,
 } from "@/components/contracts/ContractConditionsFields"
 import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
 import {
+  EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
   fetchContractConditions,
   fetchPaymentMethods,

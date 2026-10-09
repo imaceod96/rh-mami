@@ -1,5 +1,12 @@
 import { supabase } from "@/lib/supabase"
 import { ciToBirthDate } from "@/utils/ci"
+import type { Workbook, Cell, Row } from "exceljs"
+
+/** Tipado mínimo del módulo ExcelJS usado por esta exportación (solo `Workbook`). */
+type ExcelJSModule = {
+  Workbook: typeof Workbook
+  default?: { Workbook: typeof Workbook }
+}
 
 // Plantilla simplificada de Carga inicial. No incluye "Fecha nacimiento"
 // (se deriva de la identificación) ni "Código Puesto" (la carga inicial no
@@ -66,7 +73,7 @@ const excelDate = (value: unknown): string => {
   }
   const text = String(value ?? "").trim()
   if (!text) return ""
-  const dmy = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/)
+  const dmy = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
   return text
@@ -95,7 +102,7 @@ const decimalText = (value: unknown): string => {
 }
 
 export async function buildWorkerMigrationTemplate(): Promise<Blob> {
-  const mod: any = await import("exceljs")
+  const mod: ExcelJSModule = await import("exceljs")
   const ExcelJS = mod?.default ?? mod
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "SiteCorp"
@@ -160,7 +167,7 @@ export class WorkerMigrationTemplateError extends Error {
 export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow[]> {
   if (file.size > 10 * 1024 * 1024) throw new WorkerMigrationTemplateError("INVALID_FILE", "El archivo supera el límite de 10 MB.")
   if (!file.name.toLowerCase().endsWith(".xlsx")) throw new WorkerMigrationTemplateError("INVALID_FILE", "Seleccione un archivo .xlsx válido.")
-  const mod: any = await import("exceljs")
+  const mod: ExcelJSModule = await import("exceljs")
   const ExcelJS = mod?.default ?? mod
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(await file.arrayBuffer())
@@ -168,7 +175,7 @@ export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow
   if (!sheet) throw new WorkerMigrationTemplateError("SHEET_MISSING", "El archivo no contiene ninguna hoja de trabajo.")
   const indexHeaders = (rowNumber: number) => {
     const map = new Map<string, number>()
-    sheet.getRow(rowNumber).eachCell((cell: any, column: number) => map.set(excelText(cell.value).toLowerCase(), column))
+    sheet.getRow(rowNumber).eachCell((cell: Cell, column: number) => map.set(excelText(cell.value).toLowerCase(), column))
     return map
   }
   // Busca la fila de encabezados en las primeras filas (por si hay títulos previos).
@@ -195,14 +202,16 @@ export async function readWorkerMigrationExcel(file: File): Promise<MigrationRow
   // oficial omite "Fecha nacimiento" (se deriva de la identificación) y
   // "Código Puesto" (la carga inicial no vincula puestos). Nunca se debe pedir a
   // exceljs una columna inexistente: getCell(0) lanza una excepción.
-  const get = (row: any, header: string) => {
+  const get = (row: Row, header: string): unknown => {
     const column = headerIndex.get(header.toLowerCase())
     return column ? row.getCell(column).value : undefined
   }
   const rows: MigrationRow[] = []
   for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber)
-    const nonEmpty = row.values?.some((value: unknown) => excelText(value) !== "")
+    const nonEmpty = Array.isArray(row.values)
+      ? row.values.some((value: unknown) => excelText(value) !== "")
+      : false
     if (!nonEmpty) continue
     const licensesText = excelText(get(row, "Categorías licencia"))
     const licenses = licensesText.split(/[;,]/).map((value) => value.trim()).filter(Boolean)

@@ -15,6 +15,23 @@ interface CreateSitecorpUserRequest {
   is_active?: boolean
 }
 
+/** Relación embebida `platform_roles(...)` dentro de `platform_user_roles`. */
+interface PlatformRoleRef {
+  name: string
+  is_system_role: boolean
+  is_active: boolean
+}
+
+interface CallerPlatformRoleRow {
+  // Supabase/PostgREST puede devolver la relación embebida como objeto, arreglo o null.
+  platform_roles: PlatformRoleRef | PlatformRoleRef[] | null
+}
+
+/** Relación embebida `platform_permissions(...)` dentro de `platform_role_permissions`. */
+interface PlatformPermissionRow {
+  platform_permissions: { code: string } | { code: string }[] | null
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -78,12 +95,17 @@ serve(async (req) => {
       return json({ error: "Forbidden: unable to verify platform role" }, 403)
     }
 
-    const isSuperAdmin = (callerRoles || []).some(
-      (assignment: any) =>
-        assignment.platform_roles?.name === "SuperAdmin" &&
-        assignment.platform_roles?.is_system_role === true &&
-        assignment.platform_roles?.is_active === true
-    )
+    const isSuperAdmin = (callerRoles || []).some((assignment: CallerPlatformRoleRow) => {
+      const role = assignment.platform_roles
+      // Sólo se evalúa cuando la relación llega como objeto (no como arreglo ni null).
+      // Si llega como arreglo se conserva el resultado previo (false).
+      if (role === null || Array.isArray(role)) return false
+      return (
+        role.name === "SuperAdmin" &&
+        role.is_system_role === true &&
+        role.is_active === true
+      )
+    })
 
     // Check for users.manage_all permission
     const { data: permissionData, error: permissionError } = await adminClient
@@ -93,16 +115,20 @@ serve(async (req) => {
 
     let hasManageAllPermission = false
     if (!permissionError && permissionData) {
-      const roleIds = permissionData.map((p: any) => p.platform_role_id)
+      const roleIds = permissionData.map((p: { platform_role_id: string }) => p.platform_role_id)
       const { data: permData, error: permError } = await adminClient
         .from("platform_role_permissions")
         .select("platform_role_id, platform_permissions(code)")
         .in("platform_role_id", roleIds)
 
       if (!permError && permData) {
-        hasManageAllPermission = permData.some(
-          (p: any) => p.platform_permissions?.code === "users.manage_all"
-        )
+        hasManageAllPermission = permData.some((p: PlatformPermissionRow) => {
+          const permission = p.platform_permissions
+          // Sólo se evalúa cuando la relación llega como objeto (no como arreglo ni null).
+          // Si llega como arreglo se conserva el resultado previo (false).
+          if (permission === null || Array.isArray(permission)) return false
+          return permission.code === "users.manage_all"
+        })
       }
     }
 
