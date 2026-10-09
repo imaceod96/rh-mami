@@ -64,3 +64,31 @@ export interface SalaryGroupRef {
   salary_scale_id: string
   sequence_number: number
 }
+
+/** Fila del Anexo 14 de Puestos (VISTA DE PUESTOS, sin datos personales). */
+export interface Anexo14Row {
+  area_name: string | null
+  area_code: string | null
+  area_order: number
+  job_order: number
+  job_name: string | null
+  position_name: string | null
+  position_order: number
+  occupational_category: string | null
+  authorized_quantity: number
+  preparation_levels: string | null
+  salary_group_sequence: number | null
+}
+
+/** Filtros disponibles para la consulta del Anexo 14 de Puestos. */
+export interface Anexo14Filters {
+  includeInactive?: boolean
+  areaId?: string | null
+  jobId?: string | null
+}
+
+/** Metadatos de cabecera usados al generar el Anexo 14. */
+export interface Anexo14Meta {
+  entityName: string
+  generatedAt: Date
+}

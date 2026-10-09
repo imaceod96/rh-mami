@@ -64,7 +64,7 @@ import {
   buildAnexo14WorkbookBlob,
   fetchAnexo14Rows,
   saveAnexo14Blob,
-} from "@/lib/positions-export"
+} from "@/domains/organization-structure"
 import {
   NO_WORK_INFO_LABEL,
   fetchEntityScheduleSegments,

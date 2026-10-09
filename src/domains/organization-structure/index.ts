@@ -61,3 +61,23 @@ export {
   resolveApplicableScaleId,
   fetchSalaryValuesForGroups,
 } from "./infrastructure/salary.repository"
+
+// --- Anexo 14: tipos ---
+export type { Anexo14Row } from "./domain/entities"
+export type { Anexo14Filters } from "./domain/entities"
+export type { Anexo14Meta } from "./domain/entities"
+
+// --- Anexo 14: constantes ---
+export { ANEXO_14_HEADERS } from "./domain/rules"
+export { NO_CATEGORY_VALUE } from "./domain/rules"
+export { NOT_CONFIGURED_VALUE } from "./domain/rules"
+
+// --- Anexo 14: funciones de formato (puras) ---
+export { buildAnexo14FileName } from "./domain/formatters"
+
+// --- Anexo 14: infraestructura ---
+export { fetchAnexo14Rows } from "./infrastructure/positions-export.repository"
+export {
+  buildAnexo14WorkbookBlob,
+  saveAnexo14Blob,
+} from "./infrastructure/positions-export.workbook"

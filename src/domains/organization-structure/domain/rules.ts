@@ -38,3 +38,18 @@ export function salaryForGroup(
   if (group.salary_scale_id !== applicableScaleId) return null
   return valuesByGroup[group.id] || null
 }
+
+/** Columnas exactas del Anexo 14 de Puestos. */
+export const ANEXO_14_HEADERS = [
+  "Nombre del puesto",
+  "Categoría Ocupacional",
+  "No. de puestos",
+  "Nivel de preparación",
+  "Grupo escala",
+] as const
+
+/** Valor por defecto cuando el puesto no tiene categoría ocupacional. */
+export const NO_CATEGORY_VALUE = "Sin categoría ocupacional configurada"
+
+/** Valor por defecto cuando un dato del Anexo 14 no está configurado. */
+export const NOT_CONFIGURED_VALUE = "—"

@@ -137,3 +137,18 @@ export const hasWorkInfo = (
 /** Formato de importe salarial: «1.234,56 CUP». */
 export const formatSalary = (v: { amount: number; currency_code: string }) =>
   `${v.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${v.currency_code}`
+
+/** Nombre saneado: Anexo_14_Plantilla_[Entidad].xlsx */
+export function buildAnexo14FileName(entityName: string, date = new Date()): string {
+  const safeName =
+    (entityName || "Entidad")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\\/:*?"<>|]+/g, "")
+      .replace(/\s+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 60) || "Entidad"
+  const iso = date.toISOString().slice(0, 10)
+  return `Anexo_14_Plantilla_${safeName}_${iso}.xlsx`
+}
