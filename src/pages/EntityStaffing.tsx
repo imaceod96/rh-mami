@@ -82,6 +82,44 @@ interface PositionRow {
   job: JobRef | null
 }
 
+// Forma cruda devuelta por PostgREST: las relaciones embebidas pueden llegar
+// como arreglo o como objeto antes de normalizarse en el mapeo.
+interface JobQueryRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  area: { id: string; name: string }[] | null
+  salary_group: SalaryGroupRef | SalaryGroupRef[] | null
+}
+
+interface PositionQueryJobRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  area_id: string
+  area: { id: string; name: string }[] | null
+  salary_group: SalaryGroupRef | SalaryGroupRef[] | null
+}
+
+interface PositionQueryRow {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  job_id: string
+  authorized_quantity: number
+  work_location: string | null
+  daily_hours: number | null
+  weekly_hours: number | null
+  monthly_hours: number | null
+  break_minutes: number | null
+  schedule_notes: string | null
+  job: PositionQueryJobRow | PositionQueryJobRow[] | null
+}
+
 interface WorkerRow {
   id: string
   code: string
@@ -236,10 +274,11 @@ const EntityStaffing = () => {
         .eq("organization_entity_id", entityId)
         .order("name")
       if (jobsError) throw jobsError
-      const jobsRows = ((jobsData as any[])?.map((j: any) => ({
+      const jobsRows: JobRef[] = (jobsData as JobQueryRow[])?.map((j: JobQueryRow) => ({
         ...j,
         area: j.area ? { id: j.area[0]?.id || null, name: j.area[0]?.name || null } : null,
-      })) as unknown as JobRef[]) || []
+        salary_group: Array.isArray(j.salary_group) ? j.salary_group[0] ?? null : j.salary_group,
+      })) || []
 
       const { data: positionsData, error: positionsError } = await supabase
         .from("organization_positions")
@@ -255,17 +294,23 @@ const EntityStaffing = () => {
         .eq("organization_entity_id", entityId)
         .order("name")
       if (positionsError) throw positionsError
-      const positionsRows = ((positionsData as any[])?.map((p: any) => ({
-        ...p,
-        job: p.job
-          ? {
-              ...p.job,
-              area: p.job.area
-                ? { id: p.job.area[0]?.id || null, name: p.job.area[0]?.name || null }
-                : null,
-            }
-          : null,
-      })) as unknown as PositionRow[]) || []
+      const positionsRows: PositionRow[] = (positionsData as PositionQueryRow[])?.map((p: PositionQueryRow) => {
+        const job = Array.isArray(p.job) ? p.job[0] ?? null : p.job
+        return {
+          ...p,
+          job: job
+            ? {
+                ...job,
+                area: job.area
+                  ? { id: job.area[0]?.id || null, name: job.area[0]?.name || null }
+                  : null,
+                salary_group: Array.isArray(job.salary_group)
+                  ? job.salary_group[0] ?? null
+                  : job.salary_group,
+              }
+            : null,
+        }
+      }) || []
       setPositions(positionsRows)
 
       setSegmentsByPosition(await fetchEntityScheduleSegments(entityId))
