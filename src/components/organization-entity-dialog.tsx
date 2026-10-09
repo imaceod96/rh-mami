@@ -356,11 +356,14 @@ export const OrganizationEntityDialog = ({
     return active
   }, [entities, editingEntity, effectiveTenantId])
 
+  const watchedEntityType = watch("entity_type")
+  const watchedParentId = watch("parent_id")
+
   // When entity type is business_group, no parents allowed
   // When entity type is company, only business_groups as parents
   // When entity type is ueb, only companies as parents
   const filteredParentEntities = React.useMemo(() => {
-    const entityType = watch("entity_type")
+    const entityType = watchedEntityType
     if (!entityType) return parentEntities
 
     return parentEntities.filter((e) => {
@@ -378,12 +381,10 @@ export const OrganizationEntityDialog = ({
 
       return true
     })
-  }, [watch("entity_type"), parentEntities])
+  }, [watchedEntityType, parentEntities])
 
   // La entidad superior debe ser coherente con el tipo: los grupos no tienen padre y
   // al cambiar de tipo se descarta una selección que ya no es válida.
-  const watchedEntityType = watch("entity_type")
-  const watchedParentId = watch("parent_id")
   React.useEffect(() => {
     if (watchedEntityType === "business_group") {
       if (watchedParentId) setValue("parent_id", null)

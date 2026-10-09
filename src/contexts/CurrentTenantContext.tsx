@@ -18,26 +18,6 @@ interface CurrentTenantContextType {
 
 const CurrentTenantContext = React.createContext<CurrentTenantContextType | undefined>(undefined)
 
-export const CurrentTenantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentTenant, setCurrentTenant] = React.useState<TenantSummary | null>(null)
-
-  const clearCurrentTenant = React.useCallback(() => {
-    setCurrentTenant(null)
-  }, [])
-
-  return (
-    <CurrentTenantContext.Provider
-      value={{
-        currentTenant,
-        setCurrentTenant,
-        clearCurrentTenant,
-      }}
-    >
-      {children}
-    </CurrentTenantContext.Provider>
-  )
-}
-
 export const useCurrentTenant = (): CurrentTenantContextType => {
   const context = React.useContext(CurrentTenantContext)
   if (context === undefined) {

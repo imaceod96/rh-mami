@@ -73,14 +73,17 @@ const EntitySettingsSalary = () => {
   const [historyData, setHistoryData] = React.useState<SalaryHistoryValue[]>([])
   const [historyLoading, setHistoryLoading] = React.useState(false)
 
+  const currentEntityId = currentEntity?.id
+  const currentEntityRegimeId = currentEntity?.regime_id
+
   const loadScale = React.useCallback(async () => {
-      if (!currentEntity) return
+      if (!currentEntityId) return
       try {
         setLoading(true)
         setError(null)
   
         // Check global scale management permission
-        if (currentEntity.regime_id === "PRESUPUESTADA") {
+        if (currentEntityRegimeId === "PRESUPUESTADA") {
           const canManage = await canManageGlobalSalary()
           setCanManageGlobal(canManage)
   
@@ -105,10 +108,10 @@ const EntitySettingsSalary = () => {
           }
         } else {
           // EMPRESARIAL: Load entity-specific scale ONLY
-          const canManageEntity = await canManageSalary(currentEntity.id)
+          const canManageEntity = await canManageSalary(currentEntityId)
           setCanManageEntitySalary(canManageEntity)
 
-          const scaleData = await fetchEntityEmpresarialScale(currentEntity.id)
+          const scaleData = await fetchEntityEmpresarialScale(currentEntityId)
           if (scaleData) {
             setScale(scaleData)
             const scaleWithGroups = await fetchScaleWithGroups(scaleData.id)
@@ -133,7 +136,7 @@ const EntitySettingsSalary = () => {
       } finally {
         setLoading(false)
       }
-    }, [currentEntity?.id, currentEntity?.regime_id, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary, canManageSalary])
+    }, [currentEntityId, currentEntityRegimeId, fetchEntityEmpresarialScale, fetchScaleWithGroups, fetchGlobalPresupuestadaScale, canManageGlobalSalary, canManageSalary])
 
   React.useEffect(() => {
     loadScale()
