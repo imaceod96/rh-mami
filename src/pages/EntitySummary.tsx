@@ -15,7 +15,7 @@ import type {
   ReportSlice,
   SexReport,
   SkinColorReport,
-} from "@/lib/entity-summary-reports"
+} from "@/domains/entity-summary"
 import {
   Building2,
   Layers,

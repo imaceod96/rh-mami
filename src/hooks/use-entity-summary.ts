@@ -23,7 +23,7 @@ import {
   fetchWorkersByEducationLevel,
   fetchWorkersBySex,
   fetchWorkersBySkinColor,
-} from "@/lib/entity-summary-reports"
+} from "@/domains/entity-summary"
 
 /**
  * Datos REALES del dashboard de entidad (Resumen) vía React Query.
