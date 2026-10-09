@@ -25,7 +25,7 @@ import {
   type SalaryValue,
 } from "@/lib/salary"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
-import type { RepresentativePositionRow } from "@/lib/representatives"
+import type { RepresentativePositionRow } from "@/domains/representatives"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
 import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {

@@ -84,7 +84,7 @@ import { CurrentContractSummary } from "@/components/contracts/CurrentContractSu
 import { ContractualTimeline } from "@/components/contracts/ContractualTimeline"
 import { AddendumDetailDialog } from "@/components/addendums/AddendumDetailDialog"
 import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
-import type { RepresentativePositionRow } from "@/lib/representatives"
+import type { RepresentativePositionRow } from "@/domains/representatives"
 import {
   EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,

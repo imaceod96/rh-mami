@@ -17,7 +17,7 @@ import { showSuccess, showError } from "@/utils/toast"
 import { ensureContractDocumentGenerated } from "@/lib/contract-automation"
 import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
-import type { RepresentativePositionRow } from "@/lib/representatives"
+import type { RepresentativePositionRow } from "@/domains/representatives"
 import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import {
   ContractRetributionFields,

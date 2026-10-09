@@ -28,7 +28,7 @@ import {
   type EntityContractDataInput,
   type RepresentativeHistoryRow,
   type RepresentativePositionRow,
-} from "@/lib/representatives"
+} from "@/domains/representatives"
 import { Building2, Clock, Edit3, Plus, Replace, UserPlus, Users } from "lucide-react"
 
 interface PositionRow {

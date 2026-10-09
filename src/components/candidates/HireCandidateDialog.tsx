@@ -58,7 +58,7 @@ import {
 } from "@/components/contracts/ContractConditionsFields"
 import { ContractFormalizationAlerts } from "@/components/contracts/ContractFormalizationAlerts"
 import { ContractFormalizationSummary } from "@/components/contracts/ContractFormalizationSummary"
-import type { RepresentativePositionRow } from "@/lib/representatives"
+import type { RepresentativePositionRow } from "@/domains/representatives"
 import {
   EMPTY_FORMALIZATION_PENDING,
   buildComponentsPayload,
