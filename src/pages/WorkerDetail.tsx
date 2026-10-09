@@ -105,7 +105,7 @@ import {
   salaryForGroup,
   formatSalary,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import {
   SALARY_CHANGE_TYPE_LABELS,
   fetchWorkerSalaryHistory,

@@ -1,4 +1,4 @@
-import { type WeekDay } from "./entities"
+import { type WeekDay, type SalaryGroupRef, type SalaryValue } from "./entities"
 
 /**
  * Constantes de etiqueta para catálogos globales de la estructura organizativa.
@@ -24,3 +24,17 @@ export const WEEK_DAYS: WeekDay[] = [
   { value: 6, label: "Sábado", short: "S" },
   { value: 7, label: "Domingo", short: "D" },
 ]
+
+/**
+ * Salario de referencia derivado: Grupo → escala aplicable → importe vigente.
+ * Sin fallback: si el grupo no pertenece a la escala aplicable, devuelve null.
+ */
+export function salaryForGroup(
+  applicableScaleId: string | null,
+  group: SalaryGroupRef | null | undefined,
+  valuesByGroup: Record<string, SalaryValue | null>
+): SalaryValue | null {
+  if (!applicableScaleId || !group) return null
+  if (group.salary_scale_id !== applicableScaleId) return null
+  return valuesByGroup[group.id] || null
+}

@@ -17,7 +17,7 @@ import { toRomanNumeral } from "@/utils/roman-numerals"
 import { showSuccess, showError } from "@/utils/toast"
 import { invalidateContractAlertData } from "@/hooks/use-contract-alerts"
 import { ensurePayrollMovementDocumentGenerated } from "@/lib/payroll-movements"
-import { formatSalary } from "@/lib/salary"
+import { formatSalary } from "@/domains/organization-structure"
 import type { WorkerCurrentSituation } from "@/components/workers/ChangePositionDialog"
 import { AlertTriangle, UserMinus } from "lucide-react"
 

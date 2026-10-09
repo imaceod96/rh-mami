@@ -30,7 +30,7 @@ import {
   salaryForGroup,
   formatSalary,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import HireCandidateDialog from "@/components/candidates/HireCandidateDialog"
 import { FilterBuilder } from "@/components/filters/filter-builder"
 import { useEntityFilters, type EntityFilterDefinition } from "@/lib/entity-filters"

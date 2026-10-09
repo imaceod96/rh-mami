@@ -34,7 +34,7 @@ import {
   resolveApplicableScaleId,
   salaryForGroup,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import { toRomanNumeral } from "@/utils/roman-numerals"
 import {
   AlertTriangle,

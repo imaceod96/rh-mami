@@ -47,3 +47,17 @@ export {
   fetchEntityScheduleSegments,
   fetchPositionScheduleSegments,
 } from "./infrastructure/schedule.repository"
+
+// --- Salario: tipos ---
+export type { SalaryValue } from "./domain/entities"
+export type { SalaryGroupRef } from "./domain/entities"
+
+// --- Salario: funciones puras ---
+export { salaryForGroup } from "./domain/rules"
+export { formatSalary } from "./domain/formatters"
+
+// --- Salario: infraestructura ---
+export {
+  resolveApplicableScaleId,
+  fetchSalaryValuesForGroups,
+} from "./infrastructure/salary.repository"

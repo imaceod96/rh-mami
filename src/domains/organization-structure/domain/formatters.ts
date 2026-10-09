@@ -133,3 +133,7 @@ export const hasWorkInfo = (
     (segments && segments.length > 0)
   )
 }
+
+/** Formato de importe salarial: «1.234,56 CUP». */
+export const formatSalary = (v: { amount: number; currency_code: string }) =>
+  `${v.amount.toLocaleString("es-CU", { minimumFractionDigits: 2 })} ${v.currency_code}`

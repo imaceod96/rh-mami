@@ -44,7 +44,7 @@ import {
   resolveApplicableScaleId,
   fetchSalaryValuesForGroups,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import {
   fetchEntityScheduleSegments,
   type PositionScheduleSegment,

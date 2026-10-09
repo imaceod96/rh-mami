@@ -22,7 +22,7 @@ import {
   salaryForGroup,
   formatSalary,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import { ArrowRight, AlertTriangle, FileSignature, Info } from "lucide-react"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"
 import {

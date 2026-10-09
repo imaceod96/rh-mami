@@ -50,3 +50,17 @@ export interface PositionWorkInfo {
   break_minutes: number | null
   schedule_notes: string | null
 }
+
+/** Valor salarial vigente de un grupo (resuelto por vigencia temporal en el backend). */
+export interface SalaryValue {
+  amount: number
+  currency_code: string
+  effective_from?: string | null
+}
+
+/** Referencia mínima al grupo salarial de un cargo. */
+export interface SalaryGroupRef {
+  id: string
+  salary_scale_id: string
+  sequence_number: number
+}

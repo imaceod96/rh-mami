@@ -23,7 +23,7 @@ import {
   salaryForGroup,
   formatSalary,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import type { RepresentativePositionRow } from "@/domains/representatives"
 import { PositionWorkInfoReadOnly } from "@/components/positions/PositionWorkInfoReadOnly"

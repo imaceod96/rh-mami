@@ -24,7 +24,7 @@ import {
   salaryForGroup,
   formatSalary,
   type SalaryValue,
-} from "@/lib/salary"
+} from "@/domains/organization-structure"
 import { RepresentativeSelect } from "@/components/representatives/RepresentativeSelect"
 import ResolutionForm, {
   type ResolutionFormValues,
