@@ -182,7 +182,6 @@ const ResolutionForm: React.FC<ResolutionFormProps> = ({
     municipality,
     revolutionYear,
     parentCompany,
-    required,
   ])
 
   const valid = templateResolved && !error

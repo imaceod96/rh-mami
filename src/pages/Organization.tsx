@@ -57,7 +57,10 @@ const Organization = () => {
   const { currentTenant } = useCurrentTenant()
   const { isPlatformSuperAdmin } = useAuth()
   const navigate = useNavigate()
-  
+
+  // Primitiva estable del tenant: evita depender del objeto completo en los callbacks.
+  const currentTenantId = currentTenant?.id
+
   const [entities, setEntities] = React.useState<OrganizationEntity[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -69,7 +72,7 @@ const Organization = () => {
   const [canDeleteEntities, setCanDeleteEntities] = React.useState(false)
   
   const loadEntities = React.useCallback(async () => {
-    if (!currentTenant) return
+    if (!currentTenantId) return
     
     try {
       setError(null)
@@ -78,7 +81,7 @@ const Organization = () => {
       const entitiesResult = await supabase
         .from("organization_entities")
         .select("*")
-        .eq("tenant_id", currentTenant.id)
+        .eq("tenant_id", currentTenantId)
         .order("name")
       
       if (entitiesResult.error) throw entitiesResult.error
@@ -89,18 +92,18 @@ const Organization = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentTenant?.id])
+  }, [currentTenantId])
   
   React.useEffect(() => {
     loadEntities()
   }, [loadEntities])
   
   const checkDeletePermissions = React.useCallback(async () => {
-    if (!currentTenant) return
+    if (!currentTenantId) return
     
     try {
       const { data } = await supabase.rpc("can_access_entity", {
-        target_entity_id: currentTenant.id,
+        target_entity_id: currentTenantId,
         permission_code: "organization.manage"
       })
       
@@ -109,7 +112,7 @@ const Organization = () => {
       console.error("Error checking delete permissions:", err)
       setCanDeleteEntities(false)
     }
-  }, [currentTenant?.id])
+  }, [currentTenantId])
   
   React.useEffect(() => {
     checkDeletePermissions()
