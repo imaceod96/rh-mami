@@ -15,6 +15,22 @@ interface CreateSitecorpUserRequest {
   is_active?: boolean
 }
 
+/** Relación embebida `platform_roles(...)` dentro de `platform_user_roles`. */
+interface PlatformRoleRef {
+  name: string
+  is_system_role: boolean
+  is_active: boolean
+}
+
+interface CallerPlatformRoleRow {
+  platform_roles: PlatformRoleRef | null
+}
+
+/** Relación embebida `platform_permissions(...)` dentro de `platform_role_permissions`. */
+interface PlatformPermissionRow {
+  platform_permissions: { code: string } | null
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -79,7 +95,7 @@ serve(async (req) => {
     }
 
     const isSuperAdmin = (callerRoles || []).some(
-      (assignment: any) =>
+      (assignment: CallerPlatformRoleRow) =>
         assignment.platform_roles?.name === "SuperAdmin" &&
         assignment.platform_roles?.is_system_role === true &&
         assignment.platform_roles?.is_active === true
@@ -93,7 +109,7 @@ serve(async (req) => {
 
     let hasManageAllPermission = false
     if (!permissionError && permissionData) {
-      const roleIds = permissionData.map((p: any) => p.platform_role_id)
+      const roleIds = permissionData.map((p: { platform_role_id: string }) => p.platform_role_id)
       const { data: permData, error: permError } = await adminClient
         .from("platform_role_permissions")
         .select("platform_role_id, platform_permissions(code)")
@@ -101,7 +117,7 @@ serve(async (req) => {
 
       if (!permError && permData) {
         hasManageAllPermission = permData.some(
-          (p: any) => p.platform_permissions?.code === "users.manage_all"
+          (p: PlatformPermissionRow) => p.platform_permissions?.code === "users.manage_all"
         )
       }
     }

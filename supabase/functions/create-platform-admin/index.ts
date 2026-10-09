@@ -13,6 +13,17 @@ interface CreatePlatformAdminRequest {
   platform_role_id?: string
 }
 
+/** Relación embebida `platform_roles(...)` dentro de `platform_user_roles`. */
+interface PlatformRoleRef {
+  name: string
+  is_system_role: boolean
+  is_active: boolean
+}
+
+interface CallerPlatformRoleRow {
+  platform_roles: PlatformRoleRef | null
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -74,7 +85,7 @@ serve(async (req) => {
     }
 
     const isSuperAdmin = (callerRoles || []).some(
-      (assignment: any) =>
+      (assignment: CallerPlatformRoleRow) =>
         assignment.platform_roles?.name === "SuperAdmin" &&
         assignment.platform_roles?.is_system_role === true &&
         assignment.platform_roles?.is_active === true
