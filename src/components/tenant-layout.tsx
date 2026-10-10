@@ -4,6 +4,7 @@ import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { cn } from "@/lib/utils"
 import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import { SidebarUserMenu } from "@/components/sidebar-user-menu"
+import { toCompanyClient } from "@/domains/company-client"
 import {
   LayoutDashboard,
   Building2,
@@ -29,6 +30,12 @@ const TenantLayout = React.forwardRef<
 >(({ className, ...props }, ref) => {
   const { currentTenant } = useCurrentTenant()
 
+  // Cliente propietario de los datos expresado con el vocabulario de dominio.
+  // El mapper solo proyecta el objeto que ya expone el contexto: no consulta,
+  // no genera identificadores y no concede permisos. `currentTenant` sigue
+  // siendo la única fuente de verdad del cliente activo.
+  const companyClient = currentTenant ? toCompanyClient(currentTenant) : null
+
   return (
     <div
       ref={ref}
@@ -43,7 +50,7 @@ const TenantLayout = React.forwardRef<
             <SiteCorpBrand variant="isotype" size="sm" />
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-ink">SiteCorp</h2>
-              <p className="truncate text-xs text-muted-foreground">{currentTenant?.name || "Tenant"}</p>
+              <p className="truncate text-xs text-muted-foreground">{companyClient?.name || "Cliente"}</p>
             </div>
           </div>
         </div>
