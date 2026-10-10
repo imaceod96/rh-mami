@@ -3,6 +3,7 @@ import { Outlet, Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
+import { toCompanyClient } from "@/domains/company-client"
 import { cn } from "@/lib/utils"
 import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import { SidebarUserMenu } from "@/components/sidebar-user-menu"
@@ -26,6 +27,12 @@ const PlatformAdminLayout = React.forwardRef<
   const { clearCurrentEntity } = useCurrentEntity()
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Cliente activo expresado con el vocabulario de dominio. El mapper solo
+  // proyecta el objeto que ya expone el contexto: no consulta, no genera
+  // identificadores y no concede permisos. `currentTenant` sigue siendo la
+  // única fuente de verdad del cliente activo.
+  const companyClient = currentTenant ? toCompanyClient(currentTenant) : null
 
   const handleReturnToAdmin = () => {
     clearCurrentTenant()
@@ -83,7 +90,7 @@ const PlatformAdminLayout = React.forwardRef<
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-ink">SiteCorp</h2>
               <p className="truncate text-xs text-muted-foreground">
-                {currentTenant?.name || "Admin"}
+                {companyClient?.name || "Admin"}
               </p>
             </div>
           </div>
