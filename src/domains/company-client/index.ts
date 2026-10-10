@@ -9,9 +9,18 @@
  *   domain/rules.ts                               → reglas puras
  *   infrastructure/company-client.mapper.ts        → compatibilidad con `tenant_id`
  *
- * Alcance de este subbloque: el módulo es AUTÓNOMO y todavía NO lo consume
- * ningún otro dominio, hook, página ni componente. Existe únicamente como
- * nomenclatura de dominio + mapper de compatibilidad.
+ * Alcance: el módulo es AUTÓNOMO y todavía NO lo consume ningún otro dominio,
+ * hook, página ni componente. Existe únicamente como nomenclatura de dominio +
+ * mapper de compatibilidad.
+ *
+ * ADAPTADOR DE LECTURA (bloque 6B.2): NO hace falta ninguno. `LegacyTenantSummary`
+ * replica campo por campo el `TenantSummary` real de
+ * `src/contexts/CurrentTenantContext.ts`, por lo que `toCompanyClient(...)` acepta
+ * directamente el objeto del contexto mediante compatibilidad ESTRUCTURAL
+ * (verificado con el compilador: `tsc` sin errores). La ruta de lectura es, por
+ * tanto: TenantSummary → toCompanyClient → CompanyClient. No se importa ningún
+ * contexto de React desde el dominio, y el contexto actual sigue siendo la ÚNICA
+ * fuente de verdad del cliente.
  *
  * El dominio NO importa de `@/lib/*` ni de la presentación: la dependencia va en
  * un solo sentido (presentación → dominio; infrastructure → domain), por lo que
