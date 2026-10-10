@@ -96,7 +96,7 @@ const PlatformAdminLayout = React.forwardRef<
             {navItem(
               "/admin/companies",
               <Building2 className="h-5 w-5" />,
-              "Clientes / Organizaciones"
+              "Clientes"
             )}
 
             {/* Sección Ajustes: desplegable que se oculta cuando no se usa. */}

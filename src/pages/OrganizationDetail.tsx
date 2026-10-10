@@ -338,7 +338,7 @@ const OrganizationDetail = () => {
           description="La entidad solicitada no existe o no tienes permiso para acceder a ella"
         />
         <SiteCorpAlert type="warning">
-          La entidad con ID {entityId} no fue encontrada en el workspace actual.
+          La entidad con ID {entityId} no fue encontrada en el cliente actual.
         </SiteCorpAlert>
         <div className="flex justify-end">
           <SiteCorpButton

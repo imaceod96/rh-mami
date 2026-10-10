@@ -519,7 +519,7 @@ const Organizations = () => {
   return (
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
-        title="Clientes / Organizaciones"
+        title="Clientes"
         description="Clientes independientes con grupos empresariales, empresas y UEB. Cada nodo puede tener su propia cuenta SiteCorp."
         actions={
           <SiteCorpButton onClick={openCreateTenant}>

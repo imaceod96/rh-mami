@@ -74,7 +74,7 @@ const EntitySettingsRoles = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Roles y permisos"
-        description={`Roles internos de ${currentEntity.name}. Son propios de esta entidad y no afectan a otras entidades del mismo workspace.`}
+        description={`Roles internos de ${currentEntity.name}. Son propios de esta entidad y no afectan a otras entidades del mismo cliente.`}
       />
 
       {loading ? (

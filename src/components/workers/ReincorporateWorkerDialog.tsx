@@ -553,7 +553,7 @@ const ReincorporateWorkerDialog: React.FC<ReincorporateWorkerDialogProps> = ({
       } else if (/ya est[aá] activo/i.test(msg)) {
         friendly = "El trabajador ya está activo."
       } else if (/carn[eé] de identidad/i.test(msg)) {
-        friendly = "Ya existe otro trabajador activo con ese carné de identidad en este workspace."
+        friendly = "Ya existe otro trabajador activo con ese carné de identidad en este cliente."
       } else if (/representante/i.test(msg)) {
         friendly = "No hay representantes configurados para la fecha de firma seleccionada."
       } else if (/no est[aá] activo/i.test(msg)) {

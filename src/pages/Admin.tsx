@@ -45,29 +45,29 @@ const Admin = () => {
       />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <SiteCorpCard title="Total de workspaces">
+        <SiteCorpCard title="Total de clientes">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-3xl font-bold text-ink">{metrics.total}</p>
-              <p className="text-sm text-muted-foreground">Workspaces registrados</p>
+              <p className="text-sm text-muted-foreground">Clientes registrados</p>
             </div>
             <Building2 className="h-8 w-8 text-sitecorp-primary" />
           </div>
         </SiteCorpCard>
-        <SiteCorpCard title="Workspaces activos">
+        <SiteCorpCard title="Clientes activos">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-3xl font-bold text-sitecorp-success">{metrics.active}</p>
-              <p className="text-sm text-muted-foreground">Workspaces activos</p>
+              <p className="text-sm text-muted-foreground">Clientes activos</p>
             </div>
             <SiteCorpStatusBadge status="success">Activo</SiteCorpStatusBadge>
           </div>
         </SiteCorpCard>
-        <SiteCorpCard title="Workspaces inactivos">
+        <SiteCorpCard title="Clientes inactivos">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-3xl font-bold text-sitecorp-warning">{metrics.inactive}</p>
-              <p className="text-sm text-muted-foreground">Workspaces inactivos</p>
+              <p className="text-sm text-muted-foreground">Clientes inactivos</p>
             </div>
             <SiteCorpStatusBadge status="warning">Inactivo</SiteCorpStatusBadge>
           </div>
@@ -83,7 +83,7 @@ const Admin = () => {
               onClick={() => navigate("/admin/companies")}
             >
               <Building2 className="h-4 w-4 mr-2" />
-              Clientes / Organizaciones
+              Clientes
             </SiteCorpButton>
             <SiteCorpButton
               className="w-full justify-start"
@@ -107,7 +107,7 @@ const Admin = () => {
 
       <div className="mt-6">
         <SiteCorpButton onClick={() => navigate("/admin/companies")}>
-          Ir a Clientes / Organizaciones <ArrowRight className="h-4 w-4 ml-2" />
+          Ir a Clientes <ArrowRight className="h-4 w-4 ml-2" />
         </SiteCorpButton>
       </div>
     </div>

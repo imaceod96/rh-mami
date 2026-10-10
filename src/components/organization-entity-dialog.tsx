@@ -126,10 +126,10 @@ const describeEntityError = (error: {
   const message = error?.message || ""
 
   if (code === "23503") {
-    return "El workspace o la entidad superior seleccionada no es válida."
+    return "El cliente o la entidad superior seleccionada no es válida."
   }
   if (code === "23505") {
-    return "Ya existe una entidad con ese nombre en este workspace."
+    return "Ya existe una entidad con ese nombre en este cliente."
   }
   if (code === "23514") {
     return /parent/i.test(message)
@@ -143,7 +143,7 @@ const describeEntityError = (error: {
     return "Alguno de los identificadores enviados no es válido."
   }
   if (code === "42501" || /row-level security/i.test(message)) {
-    return "No tienes permiso para crear o editar entidades en este workspace."
+    return "No tienes permiso para crear o editar entidades en este cliente."
   }
   if (code === "PGRST204") {
     return "La estructura del formulario no coincide con la base de datos. Contacta al administrador."
@@ -243,7 +243,7 @@ export const OrganizationEntityDialog = ({
     setSaveError(null)
 
     if (!effectiveTenantId) {
-      const message = "No hay un workspace seleccionado para crear la entidad."
+      const message = "No hay un cliente seleccionado para crear la entidad."
       setSaveError(message)
       toast({ title: "Error", description: message, variant: "destructive" })
       return
@@ -488,14 +488,14 @@ export const OrganizationEntityDialog = ({
                   {errors.parent_id?.message
                     ? errors.parent_id.message
                     : watch("entity_type") === "company"
-                      ? "La empresa pertenece a un grupo empresarial del mismo workspace."
-                      : "La UEB pertenece a una empresa del mismo workspace."}
+                      ? "La empresa pertenece a un grupo empresarial del mismo cliente."
+                      : "La UEB pertenece a una empresa del mismo cliente."}
                 </p>
                 {filteredParentEntities.length === 0 && (
                   <p className="text-xs text-sitecorp-warning">
                     {watch("entity_type") === "company"
-                      ? "Este workspace todavía no tiene grupos empresariales."
-                      : "Este workspace todavía no tiene empresas en ese grupo empresarial."}
+                      ? "Este cliente todavía no tiene grupos empresariales."
+                      : "Este cliente todavía no tiene empresas en ese grupo empresarial."}
                   </p>
                 )}
               </div>

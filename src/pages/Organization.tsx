@@ -266,9 +266,9 @@ const Organization = () => {
       {loading ? (
         <SiteCorpLoading rows={3} />
       ) : filteredEntities.length === 0 ? (
-        <SiteCorpCard title="No hay entidades" description="No se encontraron entidades en el workspace actual">
+        <SiteCorpCard title="No hay entidades" description="No se encontraron entidades en el cliente actual">
           <p className="text-sm text-muted-foreground">
-            {searchTerm ? "No se encontraron entidades con el término de búsqueda." : "No hay entidades en el workspace actual."}
+            {searchTerm ? "No se encontraron entidades con el término de búsqueda." : "No hay entidades en el cliente actual."}
           </p>
         </SiteCorpCard>
       ) : (

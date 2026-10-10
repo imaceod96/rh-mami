@@ -264,7 +264,7 @@ const EntitySettingsInitialImport = () => {
         <SiteCorpAlert type="warning" title="Identificaciones repetidas detectadas">
           <div className="mt-1 space-y-2">
             <p>
-              Estas identificaciones están repetidas en el archivo o ya existían en el workspace. La carga se completó:
+              Estas identificaciones están repetidas en el archivo o ya existían en el cliente. La carga se completó:
               las personas se crearon igualmente.
             </p>
             <ul className="list-disc space-y-0.5 pl-5 font-mono text-xs">

@@ -534,7 +534,7 @@ export const EntityUsersDialog = ({
                   <SiteCorpAlert type="info">
                     <span className="flex items-start gap-2">
                       <ArrowUpFromLine className="mt-0.5 h-4 w-4 shrink-0" />
-                      Al aceptar la invitación se crea o activa la membresía del workspace y el
+                      Al aceptar la invitación se crea o activa la membresía del cliente y el
                       acceso exclusivamente a esta entidad con el rol y alcance seleccionados.
                     </span>
                   </SiteCorpAlert>

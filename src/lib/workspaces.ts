@@ -26,12 +26,12 @@ export interface WorkspaceInput {
 export const workspaceNameError = (err: unknown): string => {
   const message = err instanceof Error ? err.message : String(err ?? "")
   if (message.toLowerCase().includes("row-level security")) {
-    return "No tienes permiso para crear o editar workspaces."
+    return "No tienes permiso para crear o editar clientes."
   }
   if (message.toLowerCase().includes("duplicate key")) {
-    return "No se pudo generar un código único para el workspace. Inténtalo de nuevo."
+    return "No se pudo generar un código único para el cliente. Inténtalo de nuevo."
   }
-  return message || "No se pudo guardar el workspace."
+  return message || "No se pudo guardar el cliente."
 }
 
 /** Crea un workspace; el código lo genera la base de datos de forma automática. */
@@ -92,9 +92,9 @@ export interface WorkspaceDeletionResult {
 const deletionError = (err: unknown): string => {
   const message = err instanceof Error ? err.message : String(err ?? "")
   if (message.toLowerCase().includes("row-level security")) {
-    return "No tienes permiso para eliminar workspaces."
+    return "No tienes permiso para eliminar clientes."
   }
-  return message || "No se pudo eliminar el workspace."
+  return message || "No se pudo eliminar el cliente."
 }
 
 /**

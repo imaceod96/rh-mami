@@ -188,7 +188,7 @@ const friendlySaveError = (scope: RoleScope, error: unknown) => {
     return "El rol no puede eliminarse: tiene usuarios o invitaciones asignadas, o es un rol del sistema."
   }
   if (normalized.includes("workspace was not found")) {
-    return "El workspace de organización no existe."
+    return "El cliente no existe."
   }
   return message || `No se pudo guardar el ${roleLabel}.`
 }
