@@ -25,6 +25,10 @@ export {
   countsToSlices,
 } from "./domain/rules"
 
+// --- Ámbito del Resumen: tipos ---
+export type { SummaryScope } from "./domain/entities"
+export type { EntityScopeInfo } from "./domain/entities"
+
 // --- Informes demográficos: infraestructura ---
 export { fetchEntityScope } from "./infrastructure/entity-scope.repository"
 export {

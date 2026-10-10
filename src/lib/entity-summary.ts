@@ -21,61 +21,17 @@ import {
  *     una tabla completa sólo para hacer `array.length`.
  */
 
-export type SummaryScope = "self" | "descendants"
-
 /** Período mostrado para los movimientos de personal (días). */
 export const MOVEMENTS_WINDOW_DAYS = 30
 
 const today = () => format(new Date(), "yyyy-MM-dd")
 
 // ---------------------------------------------------------------------------
-// ÁMBITO (Esta entidad / Entidad + descendientes)
+// ÁMBITO (Esta entidad / Entidad + descendientes) — migrado a `@/domains/entity-summary`
 // ---------------------------------------------------------------------------
 
-export interface EntityScopeInfo {
-  /** Entidades incluidas en el ámbito efectivo. */
-  entityIds: string[]
-  /** Descendientes ACCESIBLES para el usuario (0 = no se ofrece el ámbito ampliado). */
-  descendantCount: number
-}
-
-/**
- * Resuelve el ámbito respetando el acceso real: se parte del árbol de entidades que
- * el usuario puede ver (filtrado por RLS con `can_view_entity`), por lo que un
- * usuario con alcance SELF nunca obtiene descendientes. Cambiar el `entityId` de la
- * URL no permite ver datos de otra entidad.
- */
-export async function fetchEntityScope(
-  entityId: string,
-  scope: SummaryScope
-): Promise<EntityScopeInfo> {
-  const { data, error } = await supabase.from("organization_entities").select("id, parent_id")
-  if (error) throw error
-
-  const rows = (data as { id: string; parent_id: string | null }[]) || []
-  const childrenByParent = new Map<string, string[]>()
-  rows.forEach((row) => {
-    if (!row.parent_id) return
-    const list = childrenByParent.get(row.parent_id) || []
-    list.push(row.id)
-    childrenByParent.set(row.parent_id, list)
-  })
-
-  const descendants: string[] = []
-  const seen = new Set<string>()
-  const stack = [...(childrenByParent.get(entityId) || [])]
-  while (stack.length > 0) {
-    const id = stack.pop() as string
-    if (seen.has(id)) continue
-    seen.add(id)
-    descendants.push(id)
-    const children = childrenByParent.get(id)
-    if (children) stack.push(...children)
-  }
-
-  const entityIds = scope === "descendants" ? [entityId, ...descendants] : [entityId]
-  return { entityIds, descendantCount: descendants.length }
-}
+export type { SummaryScope, EntityScopeInfo } from "@/domains/entity-summary"
+export { fetchEntityScope } from "@/domains/entity-summary"
 
 // ---------------------------------------------------------------------------
 // BLOQUE PRINCIPAL — PLANTILLA (migrado a `@/domains/entity-summary`)

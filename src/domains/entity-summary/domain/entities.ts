@@ -113,3 +113,17 @@ export interface VacationsSummary {
   atLimit: number
   averageBalance: number
 }
+
+// ---------------------------------------------------------------------------
+// ÁMBITO DEL RESUMEN (Esta entidad / Entidad + descendientes)
+// ---------------------------------------------------------------------------
+
+/** Ámbito del Resumen: sólo esta entidad, o esta entidad más sus descendientes. */
+export type SummaryScope = "self" | "descendants"
+
+export interface EntityScopeInfo {
+  /** Entidades incluidas en el ámbito efectivo. */
+  entityIds: string[]
+  /** Descendientes ACCESIBLES para el usuario (0 = no se ofrece el ámbito ampliado). */
+  descendantCount: number
+}
