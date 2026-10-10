@@ -48,3 +48,9 @@ export { buildDistribution } from "./domain/distribution"
 // --- Distribución y ocupación: infraestructura ---
 export { fetchPlantillaSummary } from "./infrastructure/plantilla.repository"
 export { fetchOccupancySummary } from "./infrastructure/occupancy.repository"
+
+// --- Vacaciones: tipo ---
+export type { VacationsSummary } from "./domain/entities"
+
+// --- Vacaciones: infraestructura ---
+export { fetchVacationsSummary } from "./infrastructure/vacations.repository"

@@ -101,3 +101,15 @@ export interface DistributionSummary {
   byArea: DistributionSlice[]
   byCategory: DistributionSlice[]
 }
+
+// ---------------------------------------------------------------------------
+// VACACIONES (reutiliza el MISMO motor backend `entity_vacation_overview`)
+// ---------------------------------------------------------------------------
+
+export interface VacationsSummary {
+  active: number
+  onVacation: number
+  nearLimit: number
+  atLimit: number
+  averageBalance: number
+}
