@@ -34,3 +34,17 @@ export {
   fetchWorkersBySkinColor,
   fetchWorkersByEducationLevel,
 } from "./infrastructure/reports.repository"
+
+// --- Distribución y ocupación: tipos ---
+export type { PositionRef } from "./domain/entities"
+export type { PlantillaSummary } from "./domain/entities"
+export type { OccupancySummary } from "./domain/entities"
+export type { DistributionSlice } from "./domain/entities"
+export type { DistributionSummary } from "./domain/entities"
+
+// --- Distribución y ocupación: funciones puras ---
+export { buildDistribution } from "./domain/distribution"
+
+// --- Distribución y ocupación: infraestructura ---
+export { fetchPlantillaSummary } from "./infrastructure/plantilla.repository"
+export { fetchOccupancySummary } from "./infrastructure/occupancy.repository"

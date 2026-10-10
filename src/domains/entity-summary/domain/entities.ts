@@ -52,3 +52,52 @@ export interface CatalogRefs {
   skinColorNameById: Record<string, string>
   educationNameById: Record<string, string>
 }
+
+// ---------------------------------------------------------------------------
+// BLOQUE PRINCIPAL — PLANTILLA
+// ---------------------------------------------------------------------------
+
+export interface PositionRef {
+  id: string
+  job_id: string
+  authorized_quantity: number
+}
+
+export interface PlantillaSummary {
+  /** SUM(authorized_quantity) sobre puestos activos/válidos (no nº de registros). */
+  authorized: number
+  positionsTotal: number
+  positions: PositionRef[]
+  areaByJob: Record<string, string | null>
+  categoryByJob: Record<string, string | null>
+  areaNameById: Record<string, string>
+  categoryNameById: Record<string, string>
+}
+
+// ---------------------------------------------------------------------------
+// BLOQUE PRINCIPAL — OCUPACIÓN Y TRABAJADORES ACTIVOS
+// ---------------------------------------------------------------------------
+
+export interface OccupancySummary {
+  /** Trabajadores con estado laboral activo. */
+  activeWorkers: number
+  /** Assignments actuales de trabajadores activos (puestos ocupados). */
+  occupied: number
+  /** Ocupación por puesto (position_id → nº de trabajadores activos). */
+  occupiedByPosition: Record<string, number>
+}
+
+// ---------------------------------------------------------------------------
+// DISTRIBUCIÓN (Área / Categoría ocupacional)
+// ---------------------------------------------------------------------------
+
+export interface DistributionSlice {
+  key: string
+  label: string
+  value: number
+}
+
+export interface DistributionSummary {
+  byArea: DistributionSlice[]
+  byCategory: DistributionSlice[]
+}
