@@ -154,7 +154,7 @@ export const EntityUsersDialog = ({
             .eq("tenant_id", entity.tenant_id)
             .eq("is_active", true),
           // Sólo los roles PROPIOS de esta entidad: un rol de otra entidad del
-          // mismo workspace no puede asignarse aquí (el backend lo rechaza además).
+          // mismo cliente no puede asignarse aquí (el backend lo rechaza además).
           supabase
             .from("tenant_roles")
             .select("id,name,is_active")

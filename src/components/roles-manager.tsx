@@ -198,8 +198,12 @@ export const RolesManager = ({
   organizationEntityId,
 }: {
   scope: RoleScope
-  /** Compatibilidad: se conserva la firma; el ámbito de entidad se rige por entidad. */
-  tenantId?: string
+  /**
+   * Cliente propietario. Se conserva la firma por compatibilidad, pero el ámbito
+   * de entidad se rige SIEMPRE por `organizationEntityId`: el rol interno
+   * pertenece a UNA entidad organizativa, nunca al cliente completo.
+   */
+  companyClientId?: string
   organizationEntityId?: string
 }) => {
   const isPlatform = scope === "platform"

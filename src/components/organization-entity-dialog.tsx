@@ -2,7 +2,7 @@ import * as React from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { supabase } from "@/lib/supabase"
 import { Button as SiteCorpButton } from "@/components/ui/button"
 import { SiteCorpInput } from "@/components/ui/sitecorp-input"
@@ -102,11 +102,12 @@ interface OrganizationEntityDialogProps {
   onOpenChange: (open: boolean) => void
   onSaved: () => void
   /**
-   * Workspace/tenant al que pertenecerá la entidad. Debe provenir siempre de una
-   * fuente autoritativa (el workspace desde el que se abre el formulario, el tenant
-   * activo o el tenant de la entidad que se edita). Nunca se deduce «el primero».
+   * Cliente propietario al que pertenecerá la entidad. Debe provenir siempre de
+   * una fuente autoritativa (el cliente desde el que se abre el formulario, el
+   * cliente activo o el cliente de la entidad que se edita). Nunca se deduce
+   * «el primero». Se envía a Supabase como la columna física `tenant_id`.
    */
-  tenantId: string
+  companyClientId: string
   entities: OrganizationEntity[]
   editingEntity: OrganizationEntity | null
   defaultEntityType?: OrganizationEntity["entity_type"]
@@ -155,22 +156,22 @@ export const OrganizationEntityDialog = ({
   open,
   onOpenChange,
   onSaved,
-  tenantId,
+  companyClientId,
   entities,
   editingEntity,
   defaultEntityType = "business_group",
   defaultParentId,
   defaultRegime = "PRESUPUESTADA",
 }: OrganizationEntityDialogProps) => {
-  const { currentTenant } = useCurrentTenant()
+  const { currentCompanyClient } = useCurrentCompanyClient()
   const { toast } = useToast()
   const [saving, setSaving] = React.useState(false)
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = React.useState(false)
   const pendingSubmit = React.useRef<OrganizationEntityFormDataZod | null>(null)
 
-  // El tenant activo solo se usa como respaldo; nunca se toma «el primer workspace».
-  const effectiveTenantId = tenantId || currentTenant?.id || ""
+  // El cliente activo solo se usa como respaldo; nunca se toma «el primer cliente».
+  const effectiveCompanyClientId = companyClientId || currentCompanyClient?.id || ""
 
   const {
     register,
@@ -242,7 +243,7 @@ export const OrganizationEntityDialog = ({
   const persistEntity = async (data: OrganizationEntityFormDataZod) => {
     setSaveError(null)
 
-    if (!effectiveTenantId) {
+    if (!effectiveCompanyClientId) {
       const message = "No hay un cliente seleccionado para crear la entidad."
       setSaveError(message)
       toast({ title: "Error", description: message, variant: "destructive" })
@@ -281,7 +282,7 @@ export const OrganizationEntityDialog = ({
       }
 
       if (editingEntity) {
-        // El workspace de la entidad no se modifica al editar (aislamiento multi-tenant)
+        // El cliente de la entidad no se modifica al editar (aislamiento por cliente)
         entityPayload = entityData
         const { error } = await supabase
           .from("organization_entities")
@@ -295,8 +296,9 @@ export const OrganizationEntityDialog = ({
           description: `La entidad "${data.name}" ha sido actualizada correctamente.`,
         })
       } else {
-        // El tenant solo se fija al crear: proviene del workspace desde el que se abre el formulario
-        const insertData = { ...entityData, tenant_id: effectiveTenantId }
+        // El cliente solo se fija al crear: proviene del cliente desde el que se
+        // abre el formulario. `tenant_id` es la columna FÍSICA de Supabase.
+        const insertData = { ...entityData, tenant_id: effectiveCompanyClientId }
         entityPayload = insertData
 
         const { error } = await supabase
@@ -339,22 +341,23 @@ export const OrganizationEntityDialog = ({
     }
   }
 
-  // Entidades candidatas a ser padre: siempre del MISMO tenant (aislamiento por workspace)
+  // Entidades candidatas a ser padre: siempre del MISMO cliente (aislamiento por
+  // cliente). `tenant_id` es la columna FÍSICA de Supabase.
   const parentEntities = React.useMemo(() => {
-    const sameTenant = entities.filter(
-      (e) => e.id !== editingEntity?.id && e.tenant_id === effectiveTenantId
+    const sameCompanyClient = entities.filter(
+      (e) => e.id !== editingEntity?.id && e.tenant_id === effectiveCompanyClientId
     )
-    const active = sameTenant.filter((e) => e.is_active !== false)
+    const active = sameCompanyClient.filter((e) => e.is_active !== false)
 
     // Al editar, la entidad superior actual debe seguir visible aunque esté inactiva
     const currentParent = editingEntity?.parent_id
-      ? sameTenant.find((e) => e.id === editingEntity.parent_id)
+      ? sameCompanyClient.find((e) => e.id === editingEntity.parent_id)
       : undefined
     if (currentParent && !active.some((e) => e.id === currentParent.id)) {
       return [currentParent, ...active]
     }
     return active
-  }, [entities, editingEntity, effectiveTenantId])
+  }, [entities, editingEntity, effectiveCompanyClientId])
 
   const watchedEntityType = watch("entity_type")
   const watchedParentId = watch("parent_id")
@@ -445,7 +448,7 @@ export const OrganizationEntityDialog = ({
               </SiteCorpSelect>
             </div>
 
-            {/* El workspace (tenant) se asigna automáticamente desde el contexto */}
+            {/* El cliente se asigna automáticamente desde el contexto */}
             <div className="space-y-2 sm:col-span-full">
               <label className="text-sm font-medium text-ink">Régimen *</label>
               <SiteCorpSelect

@@ -1,7 +1,6 @@
 import * as React from "react"
 import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
@@ -24,7 +23,6 @@ const EntityRouteWrapper = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, isPlatformSuperAdmin, hasPlatformPermission } = useAuth()
-  const { currentTenant } = useCurrentTenant()
   const { setCurrentEntity, clearCurrentEntity } = useCurrentEntity()
 
   const [loading, setLoading] = React.useState(true)
@@ -107,7 +105,7 @@ const EntityRouteWrapper = () => {
     loadEntity()
   }, [entityId, isPlatformSuperAdmin, hasPlatformPermission, setCurrentEntity])
 
-  // Ruta externa de retorno (Organizaciones o estructura del workspace)
+  // Ruta externa de retorno (Organizaciones o estructura del cliente)
   React.useEffect(() => {
     let cancelled = false
 

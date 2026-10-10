@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -38,11 +38,6 @@ import {
   LogOut,
 } from "lucide-react"
 
-interface Tenant {
-  id: string
-  name: string
-  [key: string]: unknown
-}
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -115,10 +110,10 @@ const OrganizationDetail = () => {
   const { entityId } = useParams<{ entityId: string }>()
   const navigate = useNavigate()
   const { user, isPlatformSuperAdmin } = useAuth()
-  const { currentTenant } = useCurrentTenant()
+  const { currentCompanyClient } = useCurrentCompanyClient()
 
-  // Primitiva estable del tenant: evita depender del objeto completo en los callbacks.
-  const currentTenantId = currentTenant?.id
+  // Primitiva estable del cliente: evita depender del objeto completo en los callbacks.
+  const currentCompanyClientId = currentCompanyClient?.id
 
   const [entity, setEntity] = React.useState<OrganizationEntity | null>(null)
   const [ancestors, setAncestors] = React.useState<OrganizationEntity[]>([])
@@ -153,18 +148,19 @@ const OrganizationDetail = () => {
       if (entityResult.error) throw entityResult.error
       const entityData = entityResult.data as OrganizationEntity
       
-      // Check if entity belongs to current tenant
-      if (currentTenantId && entityData.tenant_id !== currentTenantId) {
+      // La entidad debe pertenecer al cliente activo. `tenant_id` es la columna
+      // FÍSICA de Supabase.
+      if (currentCompanyClientId && entityData.tenant_id !== currentCompanyClientId) {
               throw new Error("No tienes permiso para acceder a esta entidad")
             }
       
-            if (!currentTenantId && !isPlatformSuperAdmin) {
+            if (!currentCompanyClientId && !isPlatformSuperAdmin) {
               throw new Error("No tienes permiso para acceder a esta entidad")
             }
       
       setEntity(entityData)
       
-      // Fetch all entities in tenant (for ancestor path and switcher)
+      // Fetch all entities of the owning company client (ancestor path + switcher)
       const tenantEntitiesResult = await supabase
         .from("organization_entities")
         .select("*")
@@ -210,12 +206,12 @@ const OrganizationDetail = () => {
       setDirectUsers(accessRows.filter(row => row.is_direct))
       setInheritedUsers(accessRows.filter(row => !row.is_direct))
       
-      // Fetch all entities in tenant for switcher (if needed)
-            if (currentTenantId && currentTenantId !== entityData.tenant_id) {
+      // Fetch all entities of the active company client for switcher (if needed)
+            if (currentCompanyClientId && currentCompanyClientId !== entityData.tenant_id) {
               const otherTenantEntitiesResult = await supabase
                 .from("organization_entities")
                 .select("*")
-                .eq("tenant_id", currentTenantId)
+                .eq("tenant_id", currentCompanyClientId)
                 .order("name")
               
               if (otherTenantEntitiesResult.error) throw otherTenantEntitiesResult.error
@@ -227,7 +223,7 @@ const OrganizationDetail = () => {
           } finally {
             setLoading(false)
           }
-        }, [entityId, currentTenantId, isPlatformSuperAdmin])
+        }, [entityId, currentCompanyClientId, isPlatformSuperAdmin])
   
   React.useEffect(() => {
     loadEntityData()
@@ -634,7 +630,7 @@ const OrganizationDetail = () => {
       
       {/* Roles y permisos de la entidad */}
       <SiteCorpCard title="Roles y permisos" description="Gestiona los roles y permisos específicos para esta entidad organizativa">
-        <RolesManager scope="organization" tenantId={currentTenant?.id} organizationEntityId={entity?.id} />
+        <RolesManager scope="organization" companyClientId={currentCompanyClient?.id} organizationEntityId={entity?.id} />
       </SiteCorpCard>
       
       {/* Entity actions */}
@@ -700,7 +696,7 @@ const OrganizationDetail = () => {
               open={entityDialogOpen}
               onOpenChange={setEntityDialogOpen}
               onSaved={loadEntityData}
-              tenantId={entity?.tenant_id || currentTenant?.id || ""}
+              companyClientId={entity?.tenant_id || currentCompanyClient?.id || ""}
               entities={tenantEntities}
               editingEntity={editingEntity}
               defaultEntityType={

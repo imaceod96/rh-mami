@@ -21,9 +21,9 @@ import type { CompanyClient, CompanyClientId } from "../domain/entities"
 /**
  * Forma LEGACY del cliente mientras exista la tabla `tenants`.
  *
- * Replica los campos REALMENTE existentes de `TenantSummary`
- * (`src/contexts/CurrentTenantContext.ts`) sin importar código de React, y no
- * añade ninguna propiedad que el esquema no tenga.
+ * Es el tipo que la presentación expone como `CompanyClientSummary`
+ * (`src/contexts/CurrentCompanyClientContext.ts`) sin importar código de React,
+ * y no añade ninguna propiedad que el esquema no tenga.
  */
 export interface LegacyTenantSummary {
   id: string

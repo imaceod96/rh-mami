@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Outlet, Link } from "react-router-dom"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { cn } from "@/lib/utils"
 import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import { SidebarUserMenu } from "@/components/sidebar-user-menu"
@@ -14,7 +14,11 @@ import {
   Shield,
 } from "lucide-react"
 
-const tenantNavItems = [
+/**
+ * Rutas de la aplicación del cliente. Los segmentos `/tenant/*` son el contrato
+ * de navegación vigente: se conservan tal cual (no son nomenclatura de dominio).
+ */
+const companyClientNavItems = [
   { label: "Panel", href: "/", icon: LayoutDashboard },
   { label: "Organización", href: "/organization", icon: Building2 },
   { label: "Usuarios", href: "/tenant/users", icon: Users },
@@ -24,17 +28,17 @@ const tenantNavItems = [
   { label: "Contratación", href: "/hiring", icon: Briefcase },
 ]
 
-const TenantLayout = React.forwardRef<
+const CompanyClientLayout = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
-  const { currentTenant } = useCurrentTenant()
+  const { currentCompanyClient } = useCurrentCompanyClient()
 
   // Cliente propietario de los datos expresado con el vocabulario de dominio.
   // El mapper solo proyecta el objeto que ya expone el contexto: no consulta,
-  // no genera identificadores y no concede permisos. `currentTenant` sigue
-  // siendo la única fuente de verdad del cliente activo.
-  const companyClient = currentTenant ? toCompanyClient(currentTenant) : null
+  // no genera identificadores y no concede permisos. `currentCompanyClient`
+  // sigue siendo la única fuente de verdad del cliente activo.
+  const companyClient = currentCompanyClient ? toCompanyClient(currentCompanyClient) : null
 
   return (
     <div
@@ -58,7 +62,7 @@ const TenantLayout = React.forwardRef<
         {/* Navigation (scrollable) */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-1">
-            {tenantNavItems.map((item) => (
+            {companyClientNavItems.map((item) => (
               <Link
                 key={item.href}
                 to={item.href}
@@ -84,6 +88,6 @@ const TenantLayout = React.forwardRef<
     </div>
   )
 })
-TenantLayout.displayName = "TenantLayout"
+CompanyClientLayout.displayName = "CompanyClientLayout"
 
-export { TenantLayout }
+export { CompanyClientLayout }

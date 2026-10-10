@@ -6,14 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { AuthProvider } from "@/contexts/AuthProvider"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
-import { CurrentTenantProvider } from "@/contexts/CurrentTenantProvider"
+import { CurrentCompanyClientProvider } from "@/contexts/CurrentCompanyClientProvider"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { CurrentEntityProvider } from "@/contexts/CurrentEntityProvider"
 import { SalaryProvider } from "@/contexts/SalaryProvider"
 import { PlatformAdminLayout } from "@/components/platform-admin-layout"
 import EntityRouteWrapper from "@/components/entity-route-wrapper"
-import { TenantLayout } from "@/components/tenant-layout"
+import { CompanyClientLayout } from "@/components/company-client-layout"
 import { SiteCorpBrand } from "@/components/sitecorp-brand"
 import Login from "./pages/Login"
 import Index from "./pages/Index"
@@ -26,9 +25,9 @@ import Account from "./pages/Account"
 import Organizations from "./pages/Organizations"
 import PlatformUsers from "./pages/PlatformUsers"
 import RolesPermissions from "./pages/RolesPermissions"
-import TenantUsers from "./pages/TenantUsers"
-import TenantInvitations from "./pages/TenantInvitations"
-import TenantRoles from "./pages/TenantRoles"
+import CompanyClientUsers from "./pages/CompanyClientUsers"
+import CompanyClientInvitations from "./pages/CompanyClientInvitations"
+import CompanyClientRoles from "./pages/CompanyClientRoles"
 import AdminSettingsSalaryScale from "./pages/AdminSettingsSalaryScale"
 import EntitySummary from "./pages/EntitySummary"
 import EntityCandidates from "./pages/EntityCandidates"
@@ -140,10 +139,10 @@ const AppRoutes = () => {
     )
   }
 
-  // Entity routes are evaluated BEFORE platform/tenant branching.
-  // currentTenant is intentionally NOT used here: Platform users may have a
-  // null tenant, and a stale non-null tenant must not hide entity routes.
-  // EntityRouteWrapper remains responsible for authorization.
+  // Entity routes are evaluated BEFORE platform/company-client branching.
+  // currentCompanyClient is intentionally NOT used here: Platform users may have
+  // a null active client, and a stale non-null client must not hide entity
+  // routes. EntityRouteWrapper remains responsible for authorization.
   if (location.pathname.startsWith("/entity/")) {
     return (
       <Routes>
@@ -182,8 +181,8 @@ const AppRoutes = () => {
 
   // Platform User (any active Platform Role, including SuperAdmin)
   // -> Global Platform Administration.
-  // currentTenant is intentionally NOT required: a Platform User's default
-  // application is Global Administration.
+  // currentCompanyClient is intentionally NOT required: a Platform User's
+  // default application is Global Administration.
   if (isPlatformUser) {
     return (
       <Routes>
@@ -201,18 +200,19 @@ const AppRoutes = () => {
     )
   }
 
-  // Tenant user -> Tenant Application
+  // Client user -> Company Client application
+  // Las rutas `/tenant/*` se conservan: son el contrato de navegación vigente.
   return (
     <Routes>
-      <Route element={<TenantLayout />}>
+      <Route element={<CompanyClientLayout />}>
         <Route path="/" element={<Index />} />
         <Route path="/organization" element={<Organization />} />
         <Route path="/organization/:entityId" element={<OrganizationDetail />} />
         <Route path="/candidates" element={<Candidates />} />
         <Route path="/hiring" element={<Hiring />} />
-        <Route path="/tenant/users" element={<TenantUsers />} />
-        <Route path="/tenant/roles" element={<TenantRoles />} />
-        <Route path="/tenant/invitations" element={<TenantInvitations />} />
+        <Route path="/tenant/users" element={<CompanyClientUsers />} />
+        <Route path="/tenant/roles" element={<CompanyClientRoles />} />
+        <Route path="/tenant/invitations" element={<CompanyClientInvitations />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
@@ -227,14 +227,14 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-                      <CurrentTenantProvider>
-                        <CurrentEntityProvider>
-                          <SalaryProvider>
-                            <AppRoutes />
-                          </SalaryProvider>
-                        </CurrentEntityProvider>
-                      </CurrentTenantProvider>
-                    </AuthProvider>
+            <CurrentCompanyClientProvider>
+              <CurrentEntityProvider>
+                <SalaryProvider>
+                  <AppRoutes />
+                </SalaryProvider>
+              </CurrentEntityProvider>
+            </CurrentCompanyClientProvider>
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

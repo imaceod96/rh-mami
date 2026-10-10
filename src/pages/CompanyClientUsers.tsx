@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -16,7 +16,7 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpError } from "@/components/ui/sitecorp-error"
 import { Pencil, Plus, Power, UserMinus, UserCheck, Mail } from "lucide-react"
 
-interface TenantUser {
+interface CompanyClientUser {
   id: string
   full_name: string
   username: string
@@ -28,14 +28,14 @@ interface TenantUser {
   created_at: string
 }
 
-const TenantUsers = () => {
+const CompanyClientUsers = () => {
   const { isPlatformSuperAdmin } = useAuth()
-  const { currentTenant } = useCurrentTenant()
+  const { currentCompanyClient } = useCurrentCompanyClient()
   const navigate = useNavigate()
-  const [users, setUsers] = React.useState<TenantUser[]>([])
+  const [users, setUsers] = React.useState<CompanyClientUser[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [editingUser, setEditingUser] = React.useState<TenantUser | null>(null)
+  const [editingUser, setEditingUser] = React.useState<CompanyClientUser | null>(null)
   const [formData, setFormData] = React.useState({
     full_name: "",
     username: "",
@@ -46,12 +46,12 @@ const TenantUsers = () => {
     try {
       setError(null)
       setLoading(true)
-      if (!currentTenant) return
+      if (!currentCompanyClient) return
 
       const { data: membersData, error: membersError } = await supabase
         .from("tenant_memberships")
         .select("id,user_id,tenant_id,is_active,created_at")
-        .eq("tenant_id", currentTenant.id)
+        .eq("tenant_id", currentCompanyClient.id)
 
       if (membersError) throw membersError
 
@@ -109,7 +109,7 @@ const TenantUsers = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentTenant])
+  }, [currentCompanyClient])
 
   React.useEffect(() => {
     loadUsers()
@@ -120,7 +120,7 @@ const TenantUsers = () => {
     setFormData({ full_name: "", username: "", email: "" })
   }
 
-  const startEdit = (user: TenantUser) => {
+  const startEdit = (user: CompanyClientUser) => {
     setEditingUser(user)
     setFormData({ full_name: user.full_name, username: user.username, email: user.email })
   }
@@ -128,7 +128,7 @@ const TenantUsers = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      if (editingUser && currentTenant) {
+      if (editingUser && currentCompanyClient) {
         const { error } = await supabase
           .from("profiles")
           .update({ full_name: formData.full_name, username: formData.username })
@@ -143,13 +143,13 @@ const TenantUsers = () => {
     }
   }
 
-  const toggleActive = async (user: TenantUser) => {
+  const toggleActive = async (user: CompanyClientUser) => {
     try {
-      if (!currentTenant) return
+      if (!currentCompanyClient) return
       const { error } = await supabase
         .from("tenant_memberships")
         .update({ is_active: !user.is_active })
-        .eq("tenant_id", currentTenant.id)
+        .eq("tenant_id", currentCompanyClient.id)
         .eq("user_id", user.id)
       if (error) throw error
       await loadUsers()
@@ -204,7 +204,7 @@ const TenantUsers = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Usuarios"
-        description={`Gestión de usuarios en ${currentTenant?.name || "este cliente"}`}
+        description={`Gestión de usuarios en ${currentCompanyClient?.name || "este cliente"}`}
         actions={
           <SiteCorpButton onClick={startCreate}>
             <Plus className="h-4 w-4 mr-2" /> Invitar usuario
@@ -295,4 +295,4 @@ const TenantUsers = () => {
   )
 }
 
-export default TenantUsers
+export default CompanyClientUsers

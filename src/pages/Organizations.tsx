@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
@@ -27,12 +27,13 @@ import EntityUsersDialog, {
   type OrganizationEntity,
 } from "@/components/entity-users-dialog"
 import {
-  createWorkspace,
-  deleteWorkspace,
-  getWorkspaceDeletionSummary,
-  updateWorkspace,
-  type WorkspaceDeletionSummary,
-} from "@/lib/workspaces"
+  createCompanyClient,
+  deleteCompanyClient,
+  getCompanyClientDeletionSummary,
+  updateCompanyClient,
+  type CompanyClientDeletionSummary,
+  type CompanyClientRecord,
+} from "@/lib/company-clients"
 import {
   OrganizationEntityDialog,
 } from "@/components/organization-entity-dialog"
@@ -53,22 +54,13 @@ import {
   LogIn,
 } from "lucide-react"
 
-interface Tenant {
-  id: string
-  name: string
-  code: string
-  description: string | null
-  is_active: boolean
-  created_at?: string
-}
-
-interface TenantForm {
+interface CompanyClientForm {
   name: string
   description: string
   is_active: boolean
 }
 
-const emptyTenantForm: TenantForm = {
+const emptyCompanyClientForm: CompanyClientForm = {
   name: "",
   description: "",
   is_active: true,
@@ -86,7 +78,7 @@ const typeIcon = (type: OrganizationEntity["entity_type"]) => {
   return <Factory className="h-4 w-4 text-sitecorp-primary" />
 }
 
-const friendlyTenantError = (error: unknown) => {
+const friendlyCompanyClientError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? "")
   const normalized = message.toLowerCase()
 
@@ -98,26 +90,29 @@ const friendlyTenantError = (error: unknown) => {
 
 const Organizations = () => {
   const { isPlatformSuperAdmin, hasPlatformPermission } = useAuth()
-  const { currentTenant, setCurrentTenant, clearCurrentTenant } = useCurrentTenant()
+  const { currentCompanyClient, setCurrentCompanyClient, clearCurrentCompanyClient } =
+    useCurrentCompanyClient()
   const { clearCurrentEntity } = useCurrentEntity()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [tenants, setTenants] = React.useState<Tenant[]>([])
+  const [companyClients, setCompanyClients] = React.useState<CompanyClientRecord[]>([])
   const [entities, setEntities] = React.useState<OrganizationEntity[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
 
-  const [tenantDialogOpen, setTenantDialogOpen] = React.useState(false)
-  const [editingTenant, setEditingTenant] = React.useState<Tenant | null>(null)
-  const [tenantForm, setTenantForm] = React.useState<TenantForm>(emptyTenantForm)
-  const [tenantSaving, setTenantSaving] = React.useState(false)
-  const [tenantError, setTenantError] = React.useState<string | null>(null)
+  const [companyClientDialogOpen, setCompanyClientDialogOpen] = React.useState(false)
+  const [editingCompanyClient, setEditingCompanyClient] =
+    React.useState<CompanyClientRecord | null>(null)
+  const [companyClientForm, setCompanyClientForm] =
+    React.useState<CompanyClientForm>(emptyCompanyClientForm)
+  const [companyClientSaving, setCompanyClientSaving] = React.useState(false)
+  const [companyClientError, setCompanyClientError] = React.useState<string | null>(null)
 
   const [entityDialogOpen, setEntityDialogOpen] = React.useState(false)
   const [editingEntity, setEditingEntity] = React.useState<OrganizationEntity | null>(null)
-  const [entityDefaultTenant, setEntityDefaultTenant] = React.useState("")
+  const [entityDefaultCompanyClient, setEntityDefaultCompanyClient] = React.useState("")
   const [entityDefaultParent, setEntityDefaultParent] = React.useState<string | undefined>()
   const [entityDefaultType, setEntityDefaultType] = React.useState<
     OrganizationEntity["entity_type"]
@@ -125,32 +120,39 @@ const Organizations = () => {
 
   const [usersEntity, setUsersEntity] = React.useState<OrganizationEntity | null>(null)
   const [deleteEntity, setDeleteEntity] = React.useState<OrganizationEntity | null>(null)
-  const [deleteTenant, setDeleteTenant] = React.useState<Tenant | null>(null)
+  // Estado del diálogo de eliminación de cliente. NO se llama `deleteCompanyClient`
+  // para no ensombrecer la operación homónima del adaptador de escritura.
+  const [deletingCompanyClient, setDeletingCompanyClient] =
+    React.useState<CompanyClientRecord | null>(null)
   const [deleteConfirmation, setDeleteConfirmation] = React.useState("")
-  const [deleteSummary, setDeleteSummary] = React.useState<WorkspaceDeletionSummary | null>(null)
+  const [deleteSummary, setDeleteSummary] = React.useState<CompanyClientDeletionSummary | null>(
+    null
+  )
   const [deleteSummaryLoading, setDeleteSummaryLoading] = React.useState(false)
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [canDeleteEntities, setCanDeleteEntities] = React.useState(false)
-  const [canDeleteTenants, setCanDeleteTenants] = React.useState(false)
+  const [canDeleteCompanyClients, setCanDeleteCompanyClients] = React.useState(false)
   
     const loadData = React.useCallback(async () => {
     try {
       setError(null)
       setLoading(true)
 
-      const [tenantResult, entityResult] = await Promise.all([
+      // `tenants` es el nombre FÍSICO de la tabla en Supabase (contrato legacy
+      // intacto). Es una lectura de LISTA: no se sustituye por lecturas unitarias.
+      const [companyClientResult, entityResult] = await Promise.all([
         supabase.from("tenants").select("*").order("name"),
         supabase.from("organization_entities").select("*").order("name"),
       ])
 
-      if (tenantResult.error) throw tenantResult.error
+      if (companyClientResult.error) throw companyClientResult.error
       if (entityResult.error) throw entityResult.error
 
-      const tenantRows = (tenantResult.data || []) as Tenant[]
+      const companyClientRows = (companyClientResult.data || []) as CompanyClientRecord[]
       const entityRows = (entityResult.data || []) as OrganizationEntity[]
 
-      setTenants(tenantRows)
+      setCompanyClients(companyClientRows)
       setEntities(entityRows)
       setExpanded((current) => {
         if (Object.keys(current).length > 0) return current
@@ -172,13 +174,14 @@ const Organizations = () => {
 
   React.useEffect(() => {
     const checkDeletePermissions = async () => {
-      const [entitiesPermission, tenantsPermission] = await Promise.all([
+      // Los CÓDIGOS DE PERMISO son el contrato del backend: no se traducen aquí.
+      const [entitiesPermission, companyClientsPermission] = await Promise.all([
         hasPlatformPermission("organizations.delete"),
         hasPlatformPermission("tenants.delete"),
       ])
 
       setCanDeleteEntities(entitiesPermission)
-      setCanDeleteTenants(tenantsPermission)
+      setCanDeleteCompanyClients(companyClientsPermission)
     }
 
     checkDeletePermissions()
@@ -192,7 +195,7 @@ const Organizations = () => {
     }, {})
   }, [entities])
 
-  const rootsByTenant = React.useMemo(() => {
+  const rootsByCompanyClient = React.useMemo(() => {
     return entities.reduce<Record<string, OrganizationEntity[]>>((map, entity) => {
       if (entity.parent_id) return map
       map[entity.tenant_id] = [...(map[entity.tenant_id] || []), entity]
@@ -215,72 +218,79 @@ const Organizations = () => {
     return (childrenByParent[entity.id] || []).some((child) => subtreeMatchesSearch(child))
   }
 
-  const tenantMatchesSearch = (tenant: Tenant) => {
+  const companyClientMatchesSearch = (companyClient: CompanyClientRecord) => {
     if (!normalizedSearch) return true
-    const tenantMatches = [tenant.name, tenant.code, tenant.description || ""]
+    const companyClientMatches = [
+      companyClient.name,
+      companyClient.code,
+      companyClient.description || "",
+    ]
       .join(" ")
       .toLowerCase()
       .includes(normalizedSearch)
-    return tenantMatches || (rootsByTenant[tenant.id] || []).some((root) => subtreeMatchesSearch(root))
+    return (
+      companyClientMatches ||
+      (rootsByCompanyClient[companyClient.id] || []).some((root) => subtreeMatchesSearch(root))
+    )
   }
 
-  const openCreateTenant = () => {
-    setEditingTenant(null)
-    setTenantForm(emptyTenantForm)
-    setTenantError(null)
-    setTenantDialogOpen(true)
+  const openCreateCompanyClient = () => {
+    setEditingCompanyClient(null)
+    setCompanyClientForm(emptyCompanyClientForm)
+    setCompanyClientError(null)
+    setCompanyClientDialogOpen(true)
   }
 
-  const openEditTenant = (tenant: Tenant) => {
-    setEditingTenant(tenant)
-    setTenantForm({
-      name: tenant.name,
-      description: tenant.description || "",
-      is_active: tenant.is_active,
+  const openEditCompanyClient = (companyClient: CompanyClientRecord) => {
+    setEditingCompanyClient(companyClient)
+    setCompanyClientForm({
+      name: companyClient.name,
+      description: companyClient.description || "",
+      is_active: companyClient.is_active,
     })
-    setTenantError(null)
-    setTenantDialogOpen(true)
+    setCompanyClientError(null)
+    setCompanyClientDialogOpen(true)
   }
 
-  const submitTenant = async (event: React.FormEvent) => {
+  const submitCompanyClient = async (event: React.FormEvent) => {
     event.preventDefault()
 
     try {
-      setTenantError(null)
-      if (!tenantForm.name.trim()) throw new Error("El nombre es obligatorio.")
+      setCompanyClientError(null)
+      if (!companyClientForm.name.trim()) throw new Error("El nombre es obligatorio.")
 
-      setTenantSaving(true)
+      setCompanyClientSaving(true)
 
-      // El código del workspace lo genera la base de datos (nombre normalizado +
+      // El código del cliente lo genera la base de datos (nombre normalizado +
       // sufijo único) y es inmutable: nunca se envía desde el formulario.
-      if (editingTenant) {
-        await updateWorkspace(editingTenant.id, {
-          name: tenantForm.name,
-          description: tenantForm.description,
-          isActive: tenantForm.is_active,
+      if (editingCompanyClient) {
+        await updateCompanyClient(editingCompanyClient.id, {
+          name: companyClientForm.name,
+          description: companyClientForm.description,
+          isActive: companyClientForm.is_active,
         })
       } else {
-        await createWorkspace({
-          name: tenantForm.name,
-          description: tenantForm.description,
-          isActive: tenantForm.is_active,
+        await createCompanyClient({
+          name: companyClientForm.name,
+          description: companyClientForm.description,
+          isActive: companyClientForm.is_active,
         })
       }
 
-      setTenantDialogOpen(false)
-      setEditingTenant(null)
-      setTenantForm(emptyTenantForm)
+      setCompanyClientDialogOpen(false)
+      setEditingCompanyClient(null)
+      setCompanyClientForm(emptyCompanyClientForm)
       await loadData()
     } catch (err) {
-      setTenantError(friendlyTenantError(err))
+      setCompanyClientError(friendlyCompanyClientError(err))
     } finally {
-      setTenantSaving(false)
+      setCompanyClientSaving(false)
     }
   }
 
-  const openCreateRootEntity = (tenantId: string) => {
+  const openCreateRootEntity = (companyClientId: string) => {
     setEditingEntity(null)
-    setEntityDefaultTenant(tenantId)
+    setEntityDefaultCompanyClient(companyClientId)
     setEntityDefaultParent(undefined)
     setEntityDefaultType("business_group")
     setEntityDialogOpen(true)
@@ -288,7 +298,7 @@ const Organizations = () => {
 
   const openCreateChildEntity = (parent: OrganizationEntity) => {
     setEditingEntity(null)
-    setEntityDefaultTenant(parent.tenant_id)
+    setEntityDefaultCompanyClient(parent.tenant_id)
     setEntityDefaultParent(parent.id)
     setEntityDefaultType(parent.entity_type === "business_group" ? "company" : "ueb")
     setEntityDialogOpen(true)
@@ -296,7 +306,7 @@ const Organizations = () => {
 
   const openEditEntity = (entity: OrganizationEntity) => {
     setEditingEntity(entity)
-    setEntityDefaultTenant(entity.tenant_id)
+    setEntityDefaultCompanyClient(entity.tenant_id)
     setEntityDefaultParent(entity.parent_id || undefined)
     setEntityDefaultType(entity.entity_type)
     setEntityDialogOpen(true)
@@ -316,19 +326,19 @@ const Organizations = () => {
     }
   }
 
-  const openDeleteTenant = async (tenant: Tenant) => {
-    setDeleteTenant(tenant)
+  const openDeleteCompanyClient = async (companyClient: CompanyClientRecord) => {
+    setDeletingCompanyClient(companyClient)
     setDeleteConfirmation("")
     setDeleteError(null)
     setDeleteSummary(null)
     setDeleteSummaryLoading(true)
 
     try {
-      const summary = await getWorkspaceDeletionSummary(tenant.id)
+      const summary = await getCompanyClientDeletionSummary(companyClient.id)
       setDeleteSummary(summary)
     } catch (err) {
-      console.error("No se pudo preparar la eliminación del workspace.", {
-        tenantId: tenant.id,
+      console.error("No se pudo preparar la eliminación del cliente.", {
+        companyClientId: companyClient.id,
         error: err,
       })
       setDeleteError(
@@ -339,18 +349,18 @@ const Organizations = () => {
     }
   }
 
-  const closeDeleteTenant = () => {
+  const closeDeleteCompanyClient = () => {
     if (deleting) return
-    setDeleteTenant(null)
+    setDeletingCompanyClient(null)
     setDeleteConfirmation("")
     setDeleteSummary(null)
     setDeleteError(null)
   }
 
-  const deleteWorkspaceTenant = async (tenant: Tenant) => {
+  const confirmDeleteCompanyClient = async (companyClient: CompanyClientRecord) => {
     if (deleting) return
 
-    if (deleteConfirmation.trim() !== tenant.name) {
+    if (deleteConfirmation.trim() !== companyClient.name) {
       setDeleteError("Escribe el nombre exacto del cliente para confirmar la eliminación.")
       return
     }
@@ -360,21 +370,21 @@ const Organizations = () => {
       setDeleteError(null)
 
       // Autorización, confirmación y borrado transaccional los aplica el backend.
-      const result = await deleteWorkspace(tenant.id, deleteConfirmation.trim())
+      const result = await deleteCompanyClient(companyClient.id, deleteConfirmation.trim())
 
-      // El workspace eliminado no puede seguir siendo el contexto actual.
-      if (currentTenant?.id === tenant.id) {
-        clearCurrentTenant()
+      // El cliente eliminado no puede seguir siendo el contexto actual.
+      if (currentCompanyClient?.id === companyClient.id) {
+        clearCurrentCompanyClient()
         clearCurrentEntity()
       }
 
-      // Ninguna vista puede seguir mostrando datos del workspace eliminado.
+      // Ninguna vista puede seguir mostrando datos del cliente eliminado.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["entity-summary"] }),
         queryClient.invalidateQueries({ queryKey: ["contract-alerts"] }),
       ])
 
-      setDeleteTenant(null)
+      setDeletingCompanyClient(null)
       setDeleteConfirmation("")
       setDeleteSummary(null)
       await loadData()
@@ -383,27 +393,30 @@ const Organizations = () => {
         toast.warning(
           `Cliente eliminado, pero ${result.storage.failed} archivo(s) privados no pudieron borrarse del almacenamiento.`,
         )
-        console.error("Objetos de Storage no eliminados del workspace.", {
-          tenantId: tenant.id,
+        console.error("Objetos de Storage no eliminados del cliente.", {
+          companyClientId: companyClient.id,
           failures: result.storage.failures,
         })
       } else {
         toast.success("Cliente eliminado correctamente.")
       }
 
-      if (currentTenant?.id === tenant.id) {
+      if (currentCompanyClient?.id === companyClient.id) {
         navigate("/admin/companies", { replace: true })
       }
     } catch (err) {
-      console.error("No se pudo eliminar el workspace.", { tenantId: tenant.id, error: err })
+      console.error("No se pudo eliminar el cliente.", {
+        companyClientId: companyClient.id,
+        error: err,
+      })
       setDeleteError(err instanceof Error ? err.message : "No se pudo eliminar el cliente.")
     } finally {
       setDeleting(false)
     }
   }
 
-  const enterWorkspace = (tenant: Tenant) => {
-      setCurrentTenant(tenant)
+  const enterCompanyClient = (companyClient: CompanyClientRecord) => {
+      setCurrentCompanyClient(companyClient)
       navigate("/")
     }
   
@@ -522,7 +535,7 @@ const Organizations = () => {
         title="Clientes"
         description="Clientes independientes con grupos empresariales, empresas y UEB. Cada nodo puede tener su propia cuenta SiteCorp."
         actions={
-          <SiteCorpButton onClick={openCreateTenant}>
+          <SiteCorpButton onClick={openCreateCompanyClient}>
             <Plus className="mr-2 h-4 w-4" /> Crear cliente
           </SiteCorpButton>
         }
@@ -532,7 +545,7 @@ const Organizations = () => {
         <SiteCorpAlert type="danger" title="Error">
           {error}
         </SiteCorpAlert>
-        )}
+      )}
       {!isPlatformSuperAdmin && (
         <SiteCorpAlert type="info" title="Vista autorizada">
           Solo se muestran los clientes y entidades a los que tu usuario tiene acceso.
@@ -542,7 +555,7 @@ const Organizations = () => {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SiteCorpCard title="Clientes">
           <div className="flex items-center justify-between">
-            <p className="text-3xl font-bold text-ink">{tenants.length}</p>
+            <p className="text-3xl font-bold text-ink">{companyClients.length}</p>
             <Landmark className="h-8 w-8 text-sitecorp-primary" />
           </div>
         </SiteCorpCard>
@@ -582,48 +595,48 @@ const Organizations = () => {
       >
         {loading ? (
           <SiteCorpLoading rows={6} />
-        ) : tenants.filter(tenantMatchesSearch).length === 0 ? (
+        ) : companyClients.filter(companyClientMatchesSearch).length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             No se encontraron clientes o entidades.
           </div>
         ) : (
           <div className="space-y-5">
-            {tenants.filter(tenantMatchesSearch).map((tenant) => {
-              const roots = (rootsByTenant[tenant.id] || []).filter(
+            {companyClients.filter(companyClientMatchesSearch).map((companyClient) => {
+              const roots = (rootsByCompanyClient[companyClient.id] || []).filter(
                 (root) => !normalizedSearch || subtreeMatchesSearch(root)
               )
 
               return (
                 <section
-                  key={tenant.id}
+                  key={companyClient.id}
                   className="rounded-2xl border border-border bg-sitecorp-background/60 p-3 sm:p-4"
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Landmark className="h-5 w-5 text-sitecorp-primary" />
-                        <h3 className="text-base font-semibold text-ink">{tenant.name}</h3>
-                        <SiteCorpStatusBadge status="neutral">{tenant.code}</SiteCorpStatusBadge>
-                        <SiteCorpStatusBadge status={tenant.is_active ? "success" : "warning"}>
-                          {tenant.is_active ? "Cliente activo" : "Cliente inactivo"}
+                        <h3 className="text-base font-semibold text-ink">{companyClient.name}</h3>
+                        <SiteCorpStatusBadge status="neutral">{companyClient.code}</SiteCorpStatusBadge>
+                        <SiteCorpStatusBadge status={companyClient.is_active ? "success" : "warning"}>
+                          {companyClient.is_active ? "Cliente activo" : "Cliente inactivo"}
                         </SiteCorpStatusBadge>
                       </div>
-                      {tenant.description && (
+                      {companyClient.description && (
                         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                          {tenant.description}
+                          {companyClient.description}
                         </p>
                       )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <SiteCorpButton size="sm" variant="outline" onClick={() => openEditTenant(tenant)}>
+                      <SiteCorpButton size="sm" variant="outline" onClick={() => openEditCompanyClient(companyClient)}>
                         <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                       </SiteCorpButton>
-                      <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateRootEntity(tenant.id)}>
+                      <SiteCorpButton size="sm" variant="outline" onClick={() => openCreateRootEntity(companyClient.id)}>
                         <Plus className="mr-1 h-3.5 w-3.5" /> Grupo
                       </SiteCorpButton>
-                      {canDeleteTenants && (
-                        <SiteCorpButton size="sm" variant="outline" onClick={() => openDeleteTenant(tenant)}>
+                      {canDeleteCompanyClients && (
+                        <SiteCorpButton size="sm" variant="outline" onClick={() => openDeleteCompanyClient(companyClient)}>
                           <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
                         </SiteCorpButton>
                       )}
@@ -646,12 +659,12 @@ const Organizations = () => {
         )}
       </SiteCorpCard>
 
-      <Dialog open={tenantDialogOpen} onOpenChange={setTenantDialogOpen}>
+      <Dialog open={companyClientDialogOpen} onOpenChange={setCompanyClientDialogOpen}>
         <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Landmark className="h-5 w-5 text-sitecorp-primary" />
-              {editingTenant ? `Editar ${editingTenant.name}` : "Crear cliente"}
+              {editingCompanyClient ? `Editar ${editingCompanyClient.name}` : "Crear cliente"}
             </DialogTitle>
             <DialogDescription>
               Un cliente es un árbol organizativo aislado técnicamente y agrupa sus grupos
@@ -659,19 +672,19 @@ const Organizations = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {tenantError && (
+          {companyClientError && (
             <SiteCorpAlert type="danger" title="Error">
-              {tenantError}
+              {companyClientError}
             </SiteCorpAlert>
           )}
 
-          <form onSubmit={submitTenant} className="space-y-4">
+          <form onSubmit={submitCompanyClient} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-ink">Nombre</label>
               <SiteCorpInput
-                value={tenantForm.name}
+                value={companyClientForm.name}
                 onChange={(event) =>
-                  setTenantForm((current) => ({ ...current, name: event.target.value }))
+                  setCompanyClientForm((current) => ({ ...current, name: event.target.value }))
                 }
                 placeholder="Ej.: Grupo Empresarial Mayabeque"
                 required
@@ -679,10 +692,10 @@ const Organizations = () => {
             </div>
 
             {/* El código no se introduce: se genera automáticamente en el servidor. */}
-            {editingTenant ? (
+            {editingCompanyClient ? (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-ink">Código</label>
-                <SiteCorpInput value={editingTenant.code} disabled />
+                <SiteCorpInput value={editingCompanyClient.code} disabled />
                 <p className="text-xs text-muted-foreground">
                   Identificador estable generado automáticamente. No cambia al renombrar el
                   cliente.
@@ -699,18 +712,18 @@ const Organizations = () => {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-ink">Descripción</label>
               <SiteCorpInput
-                value={tenantForm.description}
+                value={companyClientForm.description}
                 onChange={(event) =>
-                  setTenantForm((current) => ({ ...current, description: event.target.value }))
+                  setCompanyClientForm((current) => ({ ...current, description: event.target.value }))
                 }
               />
             </div>
 
             <label className="flex items-center gap-2 text-sm font-medium text-ink">
               <Checkbox
-                checked={tenantForm.is_active}
+                checked={companyClientForm.is_active}
                 onCheckedChange={(checked) =>
-                  setTenantForm((current) => ({ ...current, is_active: checked === true }))
+                  setCompanyClientForm((current) => ({ ...current, is_active: checked === true }))
                 }
               />
               Cliente activo
@@ -720,14 +733,14 @@ const Organizations = () => {
               <SiteCorpButton
                 type="button"
                 variant="outline"
-                onClick={() => setTenantDialogOpen(false)}
-                disabled={tenantSaving}
+                onClick={() => setCompanyClientDialogOpen(false)}
+                disabled={companyClientSaving}
               >
                 Cancelar
               </SiteCorpButton>
-              <SiteCorpButton type="submit" disabled={tenantSaving}>
+              <SiteCorpButton type="submit" disabled={companyClientSaving}>
                 <Save className="mr-2 h-4 w-4" />
-                {tenantSaving ? "Guardando..." : editingTenant ? "Guardar cambios" : "Crear cliente"}
+                {companyClientSaving ? "Guardando..." : editingCompanyClient ? "Guardar cambios" : "Crear cliente"}
               </SiteCorpButton>
             </div>
           </form>
@@ -738,7 +751,7 @@ const Organizations = () => {
         open={entityDialogOpen}
         onOpenChange={setEntityDialogOpen}
         onSaved={loadData}
-        tenantId={entityDefaultTenant}
+        companyClientId={entityDefaultCompanyClient}
         entities={entities}
         editingEntity={editingEntity}
         defaultEntityType={entityDefaultType}
@@ -785,7 +798,7 @@ const Organizations = () => {
               </DialogContent>
             </Dialog>
 
-            <Dialog open={Boolean(deleteTenant)} onOpenChange={(open) => !open && closeDeleteTenant()}>
+            <Dialog open={Boolean(deletingCompanyClient)} onOpenChange={(open) => !open && closeDeleteCompanyClient()}>
                           <DialogContent className="max-w-lg rounded-2xl">
                             <DialogHeader>
                               <DialogTitle className="flex items-center gap-2 text-xl">
@@ -796,7 +809,7 @@ const Organizations = () => {
                                 <div className="space-y-3 pt-1 text-sm text-muted-foreground">
                                   <p>
                                     Esta acción eliminará permanentemente el cliente{" "}
-                                    <strong className="text-ink">{deleteTenant?.name}</strong> y los datos
+                                    <strong className="text-ink">{deletingCompanyClient?.name}</strong> y los datos
                                     pertenecientes a sus entidades: grupos empresariales, empresas, UEB,
                                     áreas, cargos, puestos, candidatos, plantilla, trabajadores,
                                     contratos, anexos, documentos y plantillas documentales, además de
@@ -840,16 +853,16 @@ const Organizations = () => {
 
                             <div className="space-y-2">
                               <label
-                                htmlFor="delete-workspace-confirmation"
+                                htmlFor="delete-company-client-confirmation"
                                 className="text-sm font-medium text-ink"
                               >
-                                Escribe «{deleteTenant?.name}» para confirmar:
+                                Escribe «{deletingCompanyClient?.name}» para confirmar:
                               </label>
                               <SiteCorpInput
-                                id="delete-workspace-confirmation"
+                                id="delete-company-client-confirmation"
                                 value={deleteConfirmation}
                                 onChange={(event) => setDeleteConfirmation(event.target.value)}
-                                placeholder={deleteTenant?.name ?? ""}
+                                placeholder={deletingCompanyClient?.name ?? ""}
                                 disabled={deleting || Boolean(deleteError && !deleteSummary)}
                                 autoComplete="off"
                               />
@@ -865,7 +878,7 @@ const Organizations = () => {
                               <SiteCorpButton
                                 type="button"
                                 variant="outline"
-                                onClick={closeDeleteTenant}
+                                onClick={closeDeleteCompanyClient}
                                 disabled={deleting}
                               >
                                 Cancelar
@@ -873,12 +886,12 @@ const Organizations = () => {
                               <SiteCorpButton
                                 type="button"
                                 variant="destructive"
-                                onClick={() => deleteTenant && deleteWorkspaceTenant(deleteTenant)}
+                                onClick={() => deletingCompanyClient && confirmDeleteCompanyClient(deletingCompanyClient)}
                                 disabled={
                                   deleting ||
                                   deleteSummaryLoading ||
-                                  !deleteTenant ||
-                                  deleteConfirmation.trim() !== deleteTenant.name
+                                  !deletingCompanyClient ||
+                                  deleteConfirmation.trim() !== deletingCompanyClient.name
                                 }
                               >
                                 {deleting ? "Eliminando cliente..." : "Eliminar definitivamente"}

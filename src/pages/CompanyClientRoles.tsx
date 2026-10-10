@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpAlert } from "@/components/ui/sitecorp-alert"
@@ -32,11 +32,11 @@ const typeIcon = (type: OrganizationEntity["entity_type"]) => {
   return <Factory className="h-4 w-4 text-sitecorp-primary" />
 }
 
-const TenantRoles = () => {
-  const { currentTenant } = useCurrentTenant()
+const CompanyClientRoles = () => {
+  const { currentCompanyClient } = useCurrentCompanyClient()
 
-  // Primitiva estable del tenant: evita depender del objeto completo en el efecto.
-  const currentTenantId = currentTenant?.id
+  // Primitiva estable del cliente: evita depender del objeto completo en el efecto.
+  const currentCompanyClientId = currentCompanyClient?.id
 
   const [entities, setEntities] = React.useState<OrganizationEntity[]>([])
   const [selectedEntityId, setSelectedEntityId] = React.useState<string>("")
@@ -44,17 +44,18 @@ const TenantRoles = () => {
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    if (!currentTenantId) return
+    if (!currentCompanyClientId) return
 
     const loadEntities = async () => {
       try {
         setError(null)
         setLoading(true)
 
+        // `tenant_id` es la columna FÍSICA de Supabase (contrato legacy intacto).
         const { data, error: entitiesError } = await supabase
           .from("organization_entities")
           .select("id, name, code, entity_type, is_active")
-          .eq("tenant_id", currentTenantId)
+          .eq("tenant_id", currentCompanyClientId)
           .order("name")
 
         if (entitiesError) throw entitiesError
@@ -70,7 +71,7 @@ const TenantRoles = () => {
     }
 
     loadEntities()
-  }, [currentTenantId])
+  }, [currentCompanyClientId])
 
   const selectedEntity = entities.find((entity) => entity.id === selectedEntityId)
 
@@ -78,10 +79,10 @@ const TenantRoles = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Roles y permisos"
-        description={`Roles de organización para ${currentTenant?.name || "el cliente actual"}`}
+        description={`Roles de organización para ${currentCompanyClient?.name || "el cliente actual"}`}
       />
 
-      {!currentTenant ? (
+      {!currentCompanyClient ? (
         <SiteCorpAlert type="warning" title="Cliente requerido">
           Selecciona un cliente para gestionar sus roles.
         </SiteCorpAlert>
@@ -137,7 +138,7 @@ const TenantRoles = () => {
           {selectedEntityId && (
             <RolesManager
               scope="organization"
-              tenantId={currentTenant.id}
+              companyClientId={currentCompanyClient.id}
               organizationEntityId={selectedEntityId}
             />
           )}
@@ -147,4 +148,4 @@ const TenantRoles = () => {
   )
 }
 
-export default TenantRoles
+export default CompanyClientRoles

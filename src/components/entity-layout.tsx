@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { cn } from "@/lib/utils"
 import { SiteCorpBrand } from "@/components/sitecorp-brand"
@@ -59,13 +59,13 @@ const EntityLayout = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   const { isPlatformUser } = useAuth()
-  const { clearCurrentTenant } = useCurrentTenant()
+  const { clearCurrentCompanyClient } = useCurrentCompanyClient()
   const { currentEntity, clearCurrentEntity } = useCurrentEntity()
   const navigate = useNavigate()
   const location = useLocation()
 
   const handleReturnToAdmin = () => {
-    clearCurrentTenant()
+    clearCurrentCompanyClient()
     clearCurrentEntity()
     navigate("/admin")
   }

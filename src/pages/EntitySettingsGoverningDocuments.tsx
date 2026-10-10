@@ -57,7 +57,8 @@ const EntitySettingsGoverningDocuments = () => {
 
   const [documents, setDocuments] = React.useState<GoverningDocument[]>([])
   const [entityName, setEntityName] = React.useState("")
-  const [tenantId, setTenantId] = React.useState<string | null>(null)
+  // Cliente propietario de la entidad. Se lee de la columna FÍSICA `tenant_id`.
+  const [companyClientId, setCompanyClientId] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [busyId, setBusyId] = React.useState<string | null>(null)
@@ -91,7 +92,7 @@ const EntitySettingsGoverningDocuments = () => {
 
       const entity = entityRes.data as { name: string; tenant_id: string | null } | null
       setEntityName(entity?.name || "")
-      setTenantId(entity?.tenant_id ?? null)
+      setCompanyClientId(entity?.tenant_id ?? null)
       setDocuments((documentsRes.data as GoverningDocument[]) || [])
     } catch (err) {
       console.error("Error loading governing documents:", err)
@@ -154,9 +155,10 @@ const EntitySettingsGoverningDocuments = () => {
         .upload(storagePath, selectedFile, { cacheControl: "3600", upsert: false })
       if (storageError) throw storageError
 
+      // `tenant_id` es la columna FÍSICA de Supabase (contrato legacy intacto).
       const { error: dbError } = await supabase.from("governing_documents").insert({
         id: documentId,
-        tenant_id: tenantId,
+        tenant_id: companyClientId,
         organization_entity_id: entityId,
         name: documentName.trim(),
         file_name: selectedFile.name,

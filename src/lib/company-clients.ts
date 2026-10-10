@@ -1,14 +1,24 @@
 import { supabase } from "@/lib/supabase"
 
 /**
- * Workspaces (tenant de organización).
+ * Company Client — Adaptador de ESCRITURA y operaciones administrativas.
  *
- * El código del workspace es un identificador estable generado en el servidor:
+ * Este módulo es la frontera de compatibilidad con el backend LEGACY, que
+ * todavía NO está migrado: la tabla física es `tenants`, las RPC son
+ * `create_workspace`, `workspace_deletion_summary` y `delete_workspace`, y la
+ * Edge Function es `delete-workspace`. Esos nombres físicos se envían
+ * EXACTAMENTE como están (no se traducen aquí).
+ *
+ * La API pública de este módulo sí usa la nomenclatura de dominio
+ * (`companyClientId`, `CompanyClient*`), porque es lo que consume la interfaz.
+ * La correspondencia es la IDENTIDAD: `companyClientId === tenants.id`.
+ *
+ * El código del cliente es un identificador estable generado en el servidor:
  * nombre normalizado + sufijo alfanumérico único. Nunca se introduce a mano y
- * nunca se regenera al renombrar el workspace.
+ * nunca se regenera al renombrar el cliente.
  */
 
-export interface Workspace {
+export interface CompanyClientRecord {
   id: string
   name: string
   code: string
@@ -17,13 +27,13 @@ export interface Workspace {
   created_at?: string
 }
 
-export interface WorkspaceInput {
+export interface CompanyClientInput {
   name: string
   description?: string | null
   isActive?: boolean
 }
 
-export const workspaceNameError = (err: unknown): string => {
+export const companyClientNameError = (err: unknown): string => {
   const message = err instanceof Error ? err.message : String(err ?? "")
   if (message.toLowerCase().includes("row-level security")) {
     return "No tienes permiso para crear o editar clientes."
@@ -34,23 +44,30 @@ export const workspaceNameError = (err: unknown): string => {
   return message || "No se pudo guardar el cliente."
 }
 
-/** Crea un workspace; el código lo genera la base de datos de forma automática. */
-export async function createWorkspace(input: WorkspaceInput): Promise<Workspace> {
+/** Crea un cliente; el código lo genera la base de datos de forma automática. */
+export async function createCompanyClient(
+  input: CompanyClientInput,
+): Promise<CompanyClientRecord> {
+  // Contrato físico: RPC `create_workspace` (nombre legacy intacto).
   const { data, error } = await supabase.rpc("create_workspace", {
     p_name: input.name.trim(),
     p_description: input.description?.trim() || null,
     p_is_active: input.isActive ?? true,
   })
 
-  if (error) throw new Error(workspaceNameError(error))
-  return data as Workspace
+  if (error) throw new Error(companyClientNameError(error))
+  return data as CompanyClientRecord
 }
 
 /**
- * Actualiza los datos editables del workspace. El código no se envía nunca:
+ * Actualiza los datos editables del cliente. El código no se envía nunca:
  * es inmutable y la base de datos rechaza cualquier cambio.
  */
-export async function updateWorkspace(id: string, input: WorkspaceInput): Promise<void> {
+export async function updateCompanyClient(
+  companyClientId: string,
+  input: CompanyClientInput,
+): Promise<void> {
+  // Tabla física: `tenants` (nombre legacy intacto).
   const { error } = await supabase
     .from("tenants")
     .update({
@@ -58,13 +75,16 @@ export async function updateWorkspace(id: string, input: WorkspaceInput): Promis
       description: input.description?.trim() || null,
       is_active: input.isActive ?? true,
     })
-    .eq("id", id)
+    .eq("id", companyClientId)
 
-  if (error) throw new Error(workspaceNameError(error))
+  if (error) throw new Error(companyClientNameError(error))
 }
 
-/** Datos propios del workspace que se eliminan definitivamente. */
-export interface WorkspaceDeletionSummary {
+/**
+ * Datos propios del cliente que se eliminan definitivamente.
+ * Las claves `tenant_id` / `tenant_name` son el contrato de la RPC legacy.
+ */
+export interface CompanyClientDeletionSummary {
   tenant_id: string
   tenant_name: string
   entities: number
@@ -81,11 +101,11 @@ export interface WorkspaceDeletionSummary {
   invitations: number
 }
 
-export interface WorkspaceDeletionResult {
+export interface CompanyClientDeletionResult {
   status: "DELETED"
   tenant_id: string
   tenant_name: string | null
-  summary: WorkspaceDeletionSummary | null
+  summary: CompanyClientDeletionSummary | null
   storage: { removed: number; failed: number; failures?: string[] }
 }
 
@@ -101,38 +121,40 @@ const deletionError = (err: unknown): string => {
  * Resumen real (solo lectura) de lo que se eliminaría. Lo calcula el backend con
  * el permiso de plataforma `tenants.delete`; nunca se inventan cifras en la UI.
  */
-export async function getWorkspaceDeletionSummary(
-  tenantId: string,
-): Promise<WorkspaceDeletionSummary> {
+export async function getCompanyClientDeletionSummary(
+  companyClientId: string,
+): Promise<CompanyClientDeletionSummary> {
+  // Contrato físico: RPC `workspace_deletion_summary` (nombre legacy intacto).
   const { data, error } = await supabase.rpc("workspace_deletion_summary", {
-    p_tenant_id: tenantId,
+    p_tenant_id: companyClientId,
   })
 
   if (error) {
-    console.error("No se pudo obtener el resumen de eliminación del workspace.", {
-      tenantId,
+    console.error("No se pudo obtener el resumen de eliminación del cliente.", {
+      companyClientId,
       error,
     })
     throw new Error(deletionError(error))
   }
 
-  return data as WorkspaceDeletionSummary
+  return data as CompanyClientDeletionSummary
 }
 
 /**
- * Elimina definitivamente el workspace.
+ * Elimina definitivamente el cliente.
  *
  * La autorización, la confirmación por nombre y el borrado en base de datos se
  * ejecutan en una única transacción dentro de `delete_workspace`; la función
  * backend además limpia del Storage privado exclusivamente los objetos del
- * workspace eliminado y reporta cualquier fallo parcial.
+ * cliente eliminado y reporta cualquier fallo parcial.
  */
-export async function deleteWorkspace(
-  tenantId: string,
+export async function deleteCompanyClient(
+  companyClientId: string,
   confirmationName: string,
-): Promise<WorkspaceDeletionResult> {
+): Promise<CompanyClientDeletionResult> {
+  // Contrato físico: Edge Function `delete-workspace` con cuerpo legacy.
   const { data, error } = await supabase.functions.invoke("delete-workspace", {
-    body: { tenant_id: tenantId, confirmation_name: confirmationName },
+    body: { tenant_id: companyClientId, confirmation_name: confirmationName },
   })
 
   if (error) {
@@ -149,10 +171,14 @@ export async function deleteWorkspace(
 
     // Diagnóstico técnico completo: el mensaje final del backend puede ser
     // traducido, pero el error original nunca se descarta.
-    console.error("Fallo al eliminar el workspace.", { tenantId, backendMessage, error })
+    console.error("Fallo al eliminar el cliente.", {
+      companyClientId,
+      backendMessage,
+      error,
+    })
 
     throw new Error(backendMessage || deletionError(error))
   }
 
-  return data as WorkspaceDeletionResult
+  return data as CompanyClientDeletionResult
 }

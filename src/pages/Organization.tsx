@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -13,11 +13,6 @@ import { SiteCorpInput } from "@/components/ui/sitecorp-input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Building2, ChevronDown, ChevronRight, Factory, Layers, Pencil, Plus, Search, Trash2, Users } from "lucide-react"
 
-interface Tenant {
-  id: string
-  name: string
-  [key: string]: unknown
-}
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { OrganizationEntityDialog } from "@/components/organization-entity-dialog"
 
@@ -54,12 +49,12 @@ const typeIcon = (type: OrganizationEntity["entity_type"]) => {
 }
 
 const Organization = () => {
-  const { currentTenant } = useCurrentTenant()
+  const { currentCompanyClient } = useCurrentCompanyClient()
   const { isPlatformSuperAdmin } = useAuth()
   const navigate = useNavigate()
 
-  // Primitiva estable del tenant: evita depender del objeto completo en los callbacks.
-  const currentTenantId = currentTenant?.id
+  // Primitiva estable del cliente: evita depender del objeto completo en los callbacks.
+  const currentCompanyClientId = currentCompanyClient?.id
 
   const [entities, setEntities] = React.useState<OrganizationEntity[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -72,16 +67,17 @@ const Organization = () => {
   const [canDeleteEntities, setCanDeleteEntities] = React.useState(false)
   
   const loadEntities = React.useCallback(async () => {
-    if (!currentTenantId) return
+    if (!currentCompanyClientId) return
     
     try {
       setError(null)
       setLoading(true)
       
+      // `tenant_id` es la columna FÍSICA de Supabase (contrato legacy intacto).
       const entitiesResult = await supabase
         .from("organization_entities")
         .select("*")
-        .eq("tenant_id", currentTenantId)
+        .eq("tenant_id", currentCompanyClientId)
         .order("name")
       
       if (entitiesResult.error) throw entitiesResult.error
@@ -92,18 +88,22 @@ const Organization = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentTenantId])
+  }, [currentCompanyClientId])
   
   React.useEffect(() => {
     loadEntities()
   }, [loadEntities])
   
   const checkDeletePermissions = React.useCallback(async () => {
-    if (!currentTenantId) return
+    if (!currentCompanyClientId) return
     
     try {
+      // HALLAZGO PENDIENTE (documentado, NO corregido aquí): `can_access_entity`
+      // espera el id de una entidad organizativa (`organization_entities.id`), no
+      // el id del cliente propietario. La migración conserva el comportamiento
+      // actual sin cambios; su corrección corresponde a un bloque propio.
       const { data } = await supabase.rpc("can_access_entity", {
-        target_entity_id: currentTenantId,
+        target_entity_id: currentCompanyClientId,
         permission_code: "organization.manage"
       })
       
@@ -112,7 +112,7 @@ const Organization = () => {
       console.error("Error checking delete permissions:", err)
       setCanDeleteEntities(false)
     }
-  }, [currentTenantId])
+  }, [currentCompanyClientId])
   
   React.useEffect(() => {
     checkDeletePermissions()
@@ -285,7 +285,7 @@ const Organization = () => {
               open={entityDialogOpen}
               onOpenChange={setEntityDialogOpen}
               onSaved={loadEntities}
-              tenantId={currentTenant?.id || ""}
+              companyClientId={currentCompanyClient?.id || ""}
               entities={entities}
               editingEntity={editingEntity}
               defaultEntityType="company"

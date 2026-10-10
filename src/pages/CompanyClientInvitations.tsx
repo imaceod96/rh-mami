@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { supabase } from "@/lib/supabase"
 import { SiteCorpPageHeader } from "@/components/ui/sitecorp-page-header"
 import { SiteCorpCard } from "@/components/ui/sitecorp-card"
@@ -12,7 +12,7 @@ import { SiteCorpLoading } from "@/components/ui/sitecorp-loading"
 import { SiteCorpError } from "@/components/ui/sitecorp-error"
 import { Mail, RefreshCw, X } from "lucide-react"
 
-interface TenantInvitation {
+interface CompanyClientInvitation {
   id: string
   email: string
   role_name: string
@@ -35,10 +35,10 @@ const statusType: Record<string, "success" | "warning" | "danger" | "neutral"> =
   cancelled: "neutral",
 }
 
-const TenantInvitations = () => {
+const CompanyClientInvitations = () => {
   const { isPlatformSuperAdmin } = useAuth()
-  const { currentTenant } = useCurrentTenant()
-  const [invitations, setInvitations] = React.useState<TenantInvitation[]>([])
+  const { currentCompanyClient } = useCurrentCompanyClient()
+  const [invitations, setInvitations] = React.useState<CompanyClientInvitation[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [email, setEmail] = React.useState("")
@@ -49,12 +49,12 @@ const TenantInvitations = () => {
     try {
       setError(null)
       setLoading(true)
-      if (!currentTenant) return
+      if (!currentCompanyClient) return
 
       const { data, error: fetchError } = await supabase
         .from("tenant_invitations")
         .select("*, tenant_role:tenant_roles(name)")
-        .eq("tenant_id", currentTenant.id)
+        .eq("tenant_id", currentCompanyClient.id)
         .order("created_at", { ascending: false })
 
       if (fetchError) throw fetchError
@@ -82,7 +82,7 @@ const TenantInvitations = () => {
     } finally {
       setLoading(false)
     }
-  }, [currentTenant])
+  }, [currentCompanyClient])
 
   React.useEffect(() => {
     loadInvitations()
@@ -90,12 +90,13 @@ const TenantInvitations = () => {
 
   const handleSendInvitation = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !currentTenant) return
+    if (!email || !currentCompanyClient) return
 
     setSending(true)
     try {
+      // `tenant_id` es la columna FÍSICA de Supabase (contrato legacy intacto).
       const { error } = await supabase.from("tenant_invitations").insert({
-        tenant_id: currentTenant.id,
+        tenant_id: currentCompanyClient.id,
         email,
         tenant_role_id: selectedRole || null,
         invited_by: (await supabase.auth.getUser()).data.user?.id,
@@ -185,7 +186,7 @@ const TenantInvitations = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Invitaciones"
-        description={`Gestión de invitaciones para ${currentTenant?.name || "este cliente"}`}
+        description={`Gestión de invitaciones para ${currentCompanyClient?.name || "este cliente"}`}
       />
 
       {error && (
@@ -242,4 +243,4 @@ const TenantInvitations = () => {
   )
 }
 
-export default TenantInvitations
+export default CompanyClientInvitations

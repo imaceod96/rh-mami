@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
-import { useCurrentTenant } from "@/contexts/CurrentTenantContext"
+import { useCurrentCompanyClient } from "@/contexts/CurrentCompanyClientContext"
 import { useCurrentEntity } from "@/contexts/CurrentEntityContext"
 import { toCompanyClient } from "@/domains/company-client"
 import { cn } from "@/lib/utils"
@@ -23,27 +23,27 @@ const PlatformAdminLayout = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
-  const { currentTenant, clearCurrentTenant } = useCurrentTenant()
+  const { currentCompanyClient, clearCurrentCompanyClient } = useCurrentCompanyClient()
   const { clearCurrentEntity } = useCurrentEntity()
   const navigate = useNavigate()
   const location = useLocation()
 
   // Cliente activo expresado con el vocabulario de dominio. El mapper solo
   // proyecta el objeto que ya expone el contexto: no consulta, no genera
-  // identificadores y no concede permisos. `currentTenant` sigue siendo la
-  // única fuente de verdad del cliente activo.
-  const companyClient = currentTenant ? toCompanyClient(currentTenant) : null
+  // identificadores y no concede permisos. `currentCompanyClient` sigue siendo
+  // la única fuente de verdad del cliente activo.
+  const companyClient = currentCompanyClient ? toCompanyClient(currentCompanyClient) : null
 
   const handleReturnToAdmin = () => {
-    clearCurrentTenant()
+    clearCurrentCompanyClient()
     clearCurrentEntity()
     navigate("/admin")
   }
 
   const isEntityRoute = location.pathname.startsWith("/organization/")
   // Solo mostramos el regreso cuando el usuario está realmente dentro de un
-  // contexto inferior (tenant/entidad); si ya está en Administración Global, no.
-  const showGlobalAdminReturn = !!currentTenant || isEntityRoute
+  // contexto inferior (cliente/entidad); si ya está en Administración Global, no.
+  const showGlobalAdminReturn = !!currentCompanyClient || isEntityRoute
 
   const navItem = (to: string, icon: React.ReactNode, label: string, exact = false) => {
     const active = exact ? location.pathname === to : location.pathname.startsWith(to)

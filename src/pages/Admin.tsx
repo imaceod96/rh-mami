@@ -20,12 +20,15 @@ const Admin = () => {
   React.useEffect(() => {
     const loadMetrics = async () => {
       try {
-        const { data: tenants } = await supabase.from("tenants").select("*")
-        if (tenants) {
+        // `tenants` es el nombre FÍSICO de la tabla en Supabase (contrato legacy
+        // intacto). Es una lectura de LISTA para métricas: no se sustituye por
+        // lecturas unitarias.
+        const { data: companyClients } = await supabase.from("tenants").select("*")
+        if (companyClients) {
           setMetrics({
-            total: tenants.length,
-            active: tenants.filter((t: { is_active: boolean | null }) => t.is_active).length,
-            inactive: tenants.filter((t: { is_active: boolean | null }) => !t.is_active).length,
+            total: companyClients.length,
+            active: companyClients.filter((c: { is_active: boolean | null }) => c.is_active).length,
+            inactive: companyClients.filter((c: { is_active: boolean | null }) => !c.is_active).length,
           })
         }
       } catch (error) {
