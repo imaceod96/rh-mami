@@ -204,7 +204,7 @@ const TenantUsers = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Usuarios"
-        description={`Gestión de usuarios en ${currentTenant?.name || "este tenant"}`}
+        description={`Gestión de usuarios en ${currentTenant?.name || "este cliente"}`}
         actions={
           <SiteCorpButton onClick={startCreate}>
             <Plus className="h-4 w-4 mr-2" /> Invitar usuario
@@ -224,12 +224,12 @@ const TenantUsers = () => {
         </SiteCorpAlert>
       )}
 
-      <SiteCorpCard title="Usuarios del tenant">
+      <SiteCorpCard title="Usuarios del cliente">
         {loading ? (
           <SiteCorpLoading rows={5} />
         ) : users.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            No hay usuarios registrados en este tenant.
+            No hay usuarios registrados en este cliente.
           </div>
         ) : (
           <SiteCorpTable columns={columns} data={rows} />
@@ -242,7 +242,7 @@ const TenantUsers = () => {
           description={
             editingUser
               ? "Actualiza los datos del usuario"
-              : "Invita a un nuevo usuario al tenant"
+              : "Invita a un nuevo usuario al cliente"
           }
         >
           <form onSubmit={handleSubmit} className="space-y-4">

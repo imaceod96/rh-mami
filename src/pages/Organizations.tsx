@@ -91,9 +91,9 @@ const friendlyTenantError = (error: unknown) => {
   const normalized = message.toLowerCase()
 
   if (normalized.includes("row-level security")) {
-    return "No tienes permiso para crear o editar workspaces."
+    return "No tienes permiso para crear o editar clientes."
   }
-  return message || "No se pudo guardar el workspace."
+  return message || "No se pudo guardar el cliente."
 }
 
 const Organizations = () => {
@@ -332,7 +332,7 @@ const Organizations = () => {
         error: err,
       })
       setDeleteError(
-        err instanceof Error ? err.message : "No se pudo preparar la eliminación del workspace.",
+        err instanceof Error ? err.message : "No se pudo preparar la eliminación del cliente.",
       )
     } finally {
       setDeleteSummaryLoading(false)
@@ -351,7 +351,7 @@ const Organizations = () => {
     if (deleting) return
 
     if (deleteConfirmation.trim() !== tenant.name) {
-      setDeleteError("Escribe el nombre exacto del workspace para confirmar la eliminación.")
+      setDeleteError("Escribe el nombre exacto del cliente para confirmar la eliminación.")
       return
     }
 
@@ -381,14 +381,14 @@ const Organizations = () => {
 
       if (result.storage?.failed) {
         toast.warning(
-          `Workspace eliminado, pero ${result.storage.failed} archivo(s) privados no pudieron borrarse del almacenamiento.`,
+          `Cliente eliminado, pero ${result.storage.failed} archivo(s) privados no pudieron borrarse del almacenamiento.`,
         )
         console.error("Objetos de Storage no eliminados del workspace.", {
           tenantId: tenant.id,
           failures: result.storage.failures,
         })
       } else {
-        toast.success("Workspace eliminado correctamente.")
+        toast.success("Cliente eliminado correctamente.")
       }
 
       if (currentTenant?.id === tenant.id) {
@@ -396,7 +396,7 @@ const Organizations = () => {
       }
     } catch (err) {
       console.error("No se pudo eliminar el workspace.", { tenantId: tenant.id, error: err })
-      setDeleteError(err instanceof Error ? err.message : "No se pudo eliminar el workspace.")
+      setDeleteError(err instanceof Error ? err.message : "No se pudo eliminar el cliente.")
     } finally {
       setDeleting(false)
     }
@@ -520,10 +520,10 @@ const Organizations = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Clientes / Organizaciones"
-        description="Workspaces independientes con grupos empresariales, empresas y UEB. Cada nodo puede tener su propia cuenta SiteCorp."
+        description="Clientes independientes con grupos empresariales, empresas y UEB. Cada nodo puede tener su propia cuenta SiteCorp."
         actions={
           <SiteCorpButton onClick={openCreateTenant}>
-            <Plus className="mr-2 h-4 w-4" /> Crear workspace
+            <Plus className="mr-2 h-4 w-4" /> Crear cliente
           </SiteCorpButton>
         }
       />
@@ -535,12 +535,12 @@ const Organizations = () => {
         )}
       {!isPlatformSuperAdmin && (
         <SiteCorpAlert type="info" title="Vista autorizada">
-          Solo se muestran los workspaces y entidades a los que tu usuario tiene acceso.
+          Solo se muestran los clientes y entidades a los que tu usuario tiene acceso.
         </SiteCorpAlert>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SiteCorpCard title="Workspaces">
+        <SiteCorpCard title="Clientes">
           <div className="flex items-center justify-between">
             <p className="text-3xl font-bold text-ink">{tenants.length}</p>
             <Landmark className="h-8 w-8 text-sitecorp-primary" />
@@ -571,7 +571,7 @@ const Organizations = () => {
         <SiteCorpInput
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar workspace, grupo, empresa, UEB o código..."
+          placeholder="Buscar cliente, grupo, empresa, UEB o código..."
           className="pl-9"
         />
       </div>
@@ -584,7 +584,7 @@ const Organizations = () => {
           <SiteCorpLoading rows={6} />
         ) : tenants.filter(tenantMatchesSearch).length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            No se encontraron workspaces o entidades.
+            No se encontraron clientes o entidades.
           </div>
         ) : (
           <div className="space-y-5">
@@ -605,7 +605,7 @@ const Organizations = () => {
                         <h3 className="text-base font-semibold text-ink">{tenant.name}</h3>
                         <SiteCorpStatusBadge status="neutral">{tenant.code}</SiteCorpStatusBadge>
                         <SiteCorpStatusBadge status={tenant.is_active ? "success" : "warning"}>
-                          {tenant.is_active ? "Workspace activo" : "Workspace inactivo"}
+                          {tenant.is_active ? "Cliente activo" : "Cliente inactivo"}
                         </SiteCorpStatusBadge>
                       </div>
                       {tenant.description && (
@@ -633,7 +633,7 @@ const Organizations = () => {
                   <div className="mt-4 space-y-2">
                     {roots.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-border bg-white/70 p-5 text-sm text-muted-foreground">
-                        Este workspace aún no tiene grupos empresariales.
+                        Este cliente aún no tiene grupos empresariales.
                       </div>
                     ) : (
                       roots.map((root) => renderEntity(root, 0))
@@ -651,10 +651,10 @@ const Organizations = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Landmark className="h-5 w-5 text-sitecorp-primary" />
-              {editingTenant ? `Editar ${editingTenant.name}` : "Crear workspace"}
+              {editingTenant ? `Editar ${editingTenant.name}` : "Crear cliente"}
             </DialogTitle>
             <DialogDescription>
-              Un workspace es un árbol organizativo aislado técnicamente y agrupa sus grupos
+              Un cliente es un árbol organizativo aislado técnicamente y agrupa sus grupos
               empresariales, empresas y UEB. No sustituye a las cuentas SiteCorp de cada entidad.
             </DialogDescription>
           </DialogHeader>
@@ -685,12 +685,12 @@ const Organizations = () => {
                 <SiteCorpInput value={editingTenant.code} disabled />
                 <p className="text-xs text-muted-foreground">
                   Identificador estable generado automáticamente. No cambia al renombrar el
-                  workspace.
+                  cliente.
                 </p>
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                El código del workspace se genera automáticamente a partir del nombre (por ejemplo{" "}
+                El código del cliente se genera automáticamente a partir del nombre (por ejemplo{" "}
                 <span className="font-mono">GRUPO-EMPRESARIAL-MAYABEQUE-A7K4P2</span>) y no se
                 modifica al renombrarlo.
               </p>
@@ -713,7 +713,7 @@ const Organizations = () => {
                   setTenantForm((current) => ({ ...current, is_active: checked === true }))
                 }
               />
-              Workspace activo
+              Cliente activo
             </label>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -727,7 +727,7 @@ const Organizations = () => {
               </SiteCorpButton>
               <SiteCorpButton type="submit" disabled={tenantSaving}>
                 <Save className="mr-2 h-4 w-4" />
-                {tenantSaving ? "Guardando..." : editingTenant ? "Guardar cambios" : "Crear workspace"}
+                {tenantSaving ? "Guardando..." : editingTenant ? "Guardar cambios" : "Crear cliente"}
               </SiteCorpButton>
             </div>
           </form>
@@ -790,12 +790,12 @@ const Organizations = () => {
                             <DialogHeader>
                               <DialogTitle className="flex items-center gap-2 text-xl">
                                 <Trash2 className="h-5 w-5 text-destructive" />
-                                Eliminar Workspace
+                                Eliminar cliente
                               </DialogTitle>
                               <DialogDescription asChild>
                                 <div className="space-y-3 pt-1 text-sm text-muted-foreground">
                                   <p>
-                                    Esta acción eliminará permanentemente el Workspace{" "}
+                                    Esta acción eliminará permanentemente el cliente{" "}
                                     <strong className="text-ink">{deleteTenant?.name}</strong> y los datos
                                     pertenecientes a sus entidades: grupos empresariales, empresas, UEB,
                                     áreas, cargos, puestos, candidatos, plantilla, trabajadores,
@@ -804,7 +804,7 @@ const Organizations = () => {
                                   </p>
                                   <p>
                                     Se conservan intactos los usuarios, sus perfiles, sus accesos a
-                                    otros workspaces, los roles de plataforma y todos los catálogos
+                                    otros clientes, los roles de plataforma y todos los catálogos
                                     globales.
                                   </p>
                                   <p className="font-medium text-destructive">
@@ -820,7 +820,7 @@ const Organizations = () => {
 
                             {deleteSummary ? (
                               <div className="rounded-xl border border-sitecorp-border bg-sitecorp-background p-3 text-sm">
-                                <p className="font-medium text-ink">Contenido actual del Workspace</p>
+                                <p className="font-medium text-ink">Contenido actual del cliente</p>
                                 <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
                                   <li>Entidades: {deleteSummary.entities}</li>
                                   <li>Puestos: {deleteSummary.positions}</li>
@@ -856,7 +856,7 @@ const Organizations = () => {
                             </div>
 
                             {deleteError ? (
-                              <SiteCorpAlert type="danger" title="No se pudo eliminar el Workspace">
+                              <SiteCorpAlert type="danger" title="No se pudo eliminar el cliente">
                                 {deleteError}
                               </SiteCorpAlert>
                             ) : null}
@@ -881,7 +881,7 @@ const Organizations = () => {
                                   deleteConfirmation.trim() !== deleteTenant.name
                                 }
                               >
-                                {deleting ? "Eliminando Workspace..." : "Eliminar definitivamente"}
+                                {deleting ? "Eliminando cliente..." : "Eliminar definitivamente"}
                               </SiteCorpButton>
                             </div>
                           </DialogContent>

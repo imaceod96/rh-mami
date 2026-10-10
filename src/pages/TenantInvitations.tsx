@@ -185,7 +185,7 @@ const TenantInvitations = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Invitaciones"
-        description={`Gestión de invitaciones para ${currentTenant?.name || "este tenant"}`}
+        description={`Gestión de invitaciones para ${currentTenant?.name || "este cliente"}`}
       />
 
       {error && (

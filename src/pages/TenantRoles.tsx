@@ -78,12 +78,12 @@ const TenantRoles = () => {
     <div className="space-y-6 p-6">
       <SiteCorpPageHeader
         title="Roles y permisos"
-        description={`Roles de organización para ${currentTenant?.name || "el workspace actual"}`}
+        description={`Roles de organización para ${currentTenant?.name || "el cliente actual"}`}
       />
 
       {!currentTenant ? (
-        <SiteCorpAlert type="warning" title="Workspace requerido">
-          Selecciona un workspace de organización para gestionar sus roles.
+        <SiteCorpAlert type="warning" title="Cliente requerido">
+          Selecciona un cliente para gestionar sus roles.
         </SiteCorpAlert>
       ) : (
         <>
@@ -99,7 +99,7 @@ const TenantRoles = () => {
                 <SiteCorpLoading rows={3} />
               ) : entities.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                  No hay entidades en el workspace actual.
+                  No hay entidades en el cliente actual.
                 </div>
               ) : (
                 <div className="space-y-4">
