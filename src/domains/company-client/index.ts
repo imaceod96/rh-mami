@@ -45,3 +45,6 @@ export {
   companyClientIdToTenantId,
   toCompanyClient,
 } from "./infrastructure/company-client.mapper"
+
+/* Repositorio (lectura de la tabla legacy `tenants`) */
+export { getCompanyClientById } from "./infrastructure/company-client.repository"
