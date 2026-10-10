@@ -16,7 +16,7 @@ import { supabase } from "@/lib/supabase"
 
 /** Orden canónico de los grupos del gestor global (§7). */
 export const PLATFORM_CATEGORY_ORDER = [
-  "CLIENTES / WORKSPACES",
+  "CLIENTES",
   "ORGANIZACIONES",
   "USUARIOS",
   "ROLES Y PERMISOS",
@@ -39,13 +39,13 @@ export interface PlatformPermissionGroup {
 
 /** Etiquetas legibles del catálogo de plataforma (§7). */
 export const PLATFORM_PERMISSION_LABELS: Record<string, string> = {
-  "tenants.view": "Ver clientes / workspaces",
-  "tenants.create": "Crear clientes / workspaces",
-  "tenants.edit": "Editar clientes / workspaces",
-  "tenants.activate": "Activar clientes / workspaces",
-  "tenants.deactivate": "Desactivar clientes / workspaces",
-  "tenants.delete": "Eliminar clientes / workspaces",
-  "tenants.enter": "Abrir clientes / workspaces",
+  "tenants.view": "Ver clientes",
+  "tenants.create": "Crear clientes",
+  "tenants.edit": "Editar clientes",
+  "tenants.activate": "Activar clientes",
+  "tenants.deactivate": "Desactivar clientes",
+  "tenants.delete": "Eliminar clientes",
+  "tenants.enter": "Abrir clientes",
   "organizations.view_all": "Ver todas las organizaciones",
   "organizations.manage_all": "Gestionar todas las organizaciones",
   "organizations.delete": "Eliminar organizaciones",
